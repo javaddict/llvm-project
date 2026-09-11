@@ -1,0 +1,984 @@
+# RUN: split-file %s %t
+# REQUIRES: haydn-registered-target
+#
+# GR1.8 / GR2.8 freeze-only independent EncodedBytes layout wall.
+# One red-then-green family per GR2.8: final displacement (BEQZ + SET_HWLOOP),
+# internal alignment metadata, complete-tail/template identity, same-row NOP
+# + duplicate-control, vreg-FI. FI-role overlapping counter homes cannot be
+# a YAML MIR bind (HwLoopStackCounterByLatch is not serialized) — unit-tested
+# in HaydnBundleVerifyTest. Intermediate (no -haydn-freeze-verify) stays
+# silent on range. Product freeze is addPreEmitPass2; -run-pass probes use
+# -haydn-freeze-verify. Do not FileCheck MC range diags.
+#
+# Peer: AIE verifyInstruction has no range recompute
+# (AIEBaseInstrInfo.cpp:1440-1459 / :1616-1635). Overlay is freeze
+# EncodedBytes re-walk, not bundle elongation. Sole window is
+# RelocFieldInfo / computeRelocValue. 171 idle parcels is a mechanism pin
+# for simm12 (12+171*12=2064 > 2047), not a product family.
+
+# --- displacement BEQZ: intermediate silent, freeze fatal ---
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/beqz-oor.mir -o - | FileCheck %s --check-prefix=BEQZ-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/beqz-oor.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=BEQZ-OOR
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/beqz-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=BEQZ-OK
+
+# --- displacement SET_HWLOOP ---
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/set-oor.mir -o - | FileCheck %s --check-prefix=SET-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/set-oor.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=SET-OOR
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/set-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=SET-OK
+
+# --- internal alignment metadata ---
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/align-meta.mir -o - | FileCheck %s --check-prefix=ALIGN-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/align-meta.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=ALIGN-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/align-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=ALIGN-OK
+
+# --- complete-tail / template identity ---
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/tail-bad.mir -o - | FileCheck %s --check-prefix=TAIL-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/tail-bad.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=TAIL-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/tail-ok.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=TAIL-OK
+
+# --- same-row NOP + duplicate-control ---
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/dup-control.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=DUP-FIRE
+# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/same-row-nop.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=NOP-OK
+
+# --- vreg-FI ---
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
+# RUN:   %t/vreg.mir -o - | FileCheck %s --check-prefix=VREG-INT
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/vreg.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=VREG-FIRE
+# Descriptor census rejects FI vs register kind; freeze still owns the
+# unresolved-FI string because verifyFrozenLayout runs first.
+# RUN: not llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/fi.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=FI-FIRE
+
+# BEQZ-INT: name: beqz_oor
+# BEQZ-OOR: freeze layout: relocation offset out of range
+# BEQZ-OK: BEQZ_E2_E0_ALU0_I12
+# SET-INT: name: set_oor
+# SET-OOR: freeze layout: relocation offset out of range
+# SET-OK: SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR
+# ALIGN-INT: name: align_meta
+# ALIGN-FIRE: freeze layout: residual MBB alignment metadata
+# ALIGN-OK: JALR_E2_E0_ALU0_RI12
+# TAIL-INT: name: tail_bad
+# TAIL-FIRE: freeze layout: complete-tail/template identity
+# TAIL-OK: JALR_E2_E0_ALU0_RI12
+# DUP-FIRE: freeze layout: duplicate-control
+# NOP-OK: BEQZ_E2_E0_ALU0_I12
+# VREG-INT: name: vreg_escape
+# VREG-FIRE: freeze layout: virtual register operand
+# FI-FIRE: freeze layout: unresolved frame-index operand
+
+#--- beqz-oor.mir
+--- |
+  define void @beqz_oor() { ret void }
+...
+---
+name:            beqz_oor
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.1
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit $r0 {
+      BEQZ_E2_E0_ALU0_I12 $r0, %bb.2, implicit-def dead $sfr
+    }
+
+  bb.1:
+    successors: %bb.2
+    liveins: $r15
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+
+  bb.2:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- beqz-ok.mir
+--- |
+  define void @beqz_ok() { ret void }
+...
+---
+name:            beqz_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit $r0 {
+      BEQZ_E2_E0_ALU0_I12 $r0, %bb.1, implicit-def dead $sfr
+    }
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- set-oor.mir
+--- |
+  define void @set_oor() { ret void }
+...
+---
+name:            set_oor
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r2, $r15
+    BUNDLE 0, 0, implicit-def $sfr, implicit $r2 {
+      SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.1, %bb.1, killed $r2, implicit-def $sfr
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r15
+    BUNDLE 0, 0 {
+      NOP
+    }
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- set-ok.mir
+--- |
+  define void @set_ok() { ret void }
+...
+---
+name:            set_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r2, $r15
+    BUNDLE 0, 0, implicit-def $sfr, implicit $r2 {
+      SET_HWLOOP_F2_E2_E0_ALU0_HWLRIIR 0, %bb.1, %bb.1, killed $r2, implicit-def $sfr
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+    BUNDLE 0, 0 {
+      NOP
+    }
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r15
+    BUNDLE 0, 0 {
+      NOP
+    }
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- align-meta.mir
+--- |
+  define void @align_meta() { ret void }
+...
+---
+name:            align_meta
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r15
+    BUNDLE 0, 0 {
+      NOP
+    }
+
+  bb.1 (align 16):
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- align-ok.mir
+--- |
+  define void @align_ok() { ret void }
+...
+---
+name:            align_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- tail-bad.mir
+--- |
+  define void @tail_bad() { ret void }
+...
+---
+name:            tail_bad
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2
+    liveins: $r7, $r15
+    BUNDLE 0, 0, implicit-def $r7 {
+      $r7 = LUI_E2_E0_ALU0_I12 %bb.1
+    }
+    BUNDLE 0, 0, implicit-def $r7, implicit $r7 {
+      $r7 = ADDI32_E2_E0_ALU0_RI20 $r7, %bb.2
+    }
+    BUNDLE 0, 0, implicit-def $r7, implicit $r7 {
+      $r7 = JALR_E2_E0_ALU0_RI12 $r7, 0
+    }
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+
+  bb.2:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- tail-ok.mir
+--- |
+  define void @tail_ok() { ret void }
+...
+---
+name:            tail_ok
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r7, $r15
+    BUNDLE 0, 0, implicit-def $r7 {
+      $r7 = LUI_E2_E0_ALU0_I12 %bb.1
+    }
+    BUNDLE 0, 0, implicit-def $r7, implicit $r7 {
+      $r7 = ADDI32_E2_E0_ALU0_RI20 $r7, %bb.1
+    }
+    BUNDLE 0, 0, implicit-def $r7, implicit $r7 {
+      $r7 = JALR_E2_E0_ALU0_RI12 $r7, 0
+    }
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- dup-control.mir
+--- |
+  define void @dup_control() { ret void }
+...
+---
+name:            dup_control
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r1, $r15
+    BUNDLE 0, 0, implicit $r0, implicit $r1 {
+      BEQZ_E2_E0_ALU0_I12 $r0, %bb.1, implicit-def dead $sfr
+      BNEZ_E2_E0_ALU0_I12 $r1, %bb.1, implicit-def dead $sfr
+    }
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- same-row-nop.mir
+--- |
+  define void @same_row_nop() { ret void }
+...
+---
+name:            same_row_nop
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r0, $r15
+    BUNDLE 0, 0, implicit $r0 {
+      BEQZ_E2_E0_ALU0_I12 $r0, %bb.1, implicit-def dead $sfr
+      NOP
+    }
+
+  bb.1:
+    liveins: $r15
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- vreg.mir
+--- |
+  define void @vreg_escape() { ret void }
+...
+---
+name:            vreg_escape
+tracksRegLiveness: true
+noVRegs:         false
+registers:
+  - { id: 0, class: gpr32 }
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    BUNDLE 0, 0, implicit-def %0, implicit $r1, implicit $r2 {
+      %0:gpr32 = ADD32_E2_E0_ALU0_RR $r1, $r2
+    }
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...
+
+#--- fi.mir
+--- |
+  define void @fi_escape() { ret void }
+...
+---
+name:            fi_escape
+tracksRegLiveness: true
+noVRegs:         true
+stack:
+  - { id: 0, name: '', type: default, offset: 0, size: 4, alignment: 4 }
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    BUNDLE 0, 0, implicit $r1 {
+      S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r1, %stack.0, 0
+    }
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+...

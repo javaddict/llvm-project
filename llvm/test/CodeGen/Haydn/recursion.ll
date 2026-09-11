@@ -19,11 +19,12 @@
 define i32 @factorial(i32 %n) nounwind {
 ; CHECK-LABEL: factorial:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
-; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
-; CHECK-NEXT:    { nop; st32 r8, r2, 1 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r2, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; slt32 r3, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB0_2 }
@@ -31,18 +32,17 @@ define i32 @factorial(i32 %n) nounwind {
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:    { nop; beqz r0, .LBB0_3 }
 ; CHECK-NEXT:  .LBB0_2: // %recurse
-; 2026-08-21 latency P3: no stall parcel before the recurse block.
 ; CHECK-NEXT:    { move32 r8, r1; addi32 r2, r1, -1 }
-; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; jal lr, factorial }
-; CHECK-NEXT:    { nop; mull r1, r8, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; lui r3, factorial }
+; CHECK-NEXT:    { move32 r1, r2; addi32 r3, r3, factorial }
+; CHECK-NEXT:    { jalr lr, r3, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; mull r1, r8, r1 }
 ; CHECK-NEXT:  .LBB0_3: // %base
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3: no stall parcel before the recurse block.
 entry:
   %cmp = icmp sle i32 %n, 1
   br i1 %cmp, label %base, label %recurse
@@ -59,24 +59,24 @@ recurse:
 define i32 @sum_to_n(i32 %n, i32 %acc) nounwind {
 ; CHECK-LABEL: sum_to_n:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r3, r1, r3 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; beqz r3, .LBB1_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
+; CHECK-NEXT:    { nop; lui r3, sum_to_n }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r1 }
-; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
-; CHECK-NEXT:    { nop; jal lr, sum_to_n }
+; CHECK-NEXT:    { addi32 r3, r3, sum_to_n; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { jalr lr, r3, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz r0, .LBB1_3 }
 ; CHECK-NEXT:  .LBB1_2: // %done
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:  .LBB1_3: // %done
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -95,29 +95,31 @@ recurse:
 define i32 @fib(i32 %n) nounwind {
 ; CHECK-LABEL: fib:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r2, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r2, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r2, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
 ; CHECK-NEXT:    { nop; slt32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; beqz r2, .LBB2_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { addi32 r8, r1, -2; addi32 r2, r1, -1 }
-; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; jal lr, fib }
-; CHECK-NEXT:    { nop; move32 r9, r1 }
-; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; lui r10, fib }
+; CHECK-NEXT:    { move32 r1, r2; addi32 r10, r10, fib }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 r1, r8; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal lr, fib }
-; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r1, r9, r1 }
 ; CHECK-NEXT:  .LBB2_2: // %base
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { ld32 r9, sp, 4; ld32 r10, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -139,23 +141,23 @@ recurse:
 define i32 @is_even(i32 %n) nounwind {
 ; CHECK-LABEL: is_even:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; beqz r2, .LBB3_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
-; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
-; CHECK-NEXT:    { nop; jal lr, is_odd }
+; CHECK-NEXT:    { nop; lui r2, is_odd }
+; CHECK-NEXT:    { addi32 r2, r2, is_odd; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { jalr lr, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz r0, .LBB3_3 }
 ; CHECK-NEXT:  .LBB3_2: // %yes
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:  .LBB3_3: // %yes
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -172,23 +174,23 @@ recurse:
 define i32 @is_odd(i32 %n) nounwind {
 ; CHECK-LABEL: is_odd:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; seq32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
 ; CHECK-NEXT:    { nop; beqz r3, .LBB4_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
-; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
-; CHECK-NEXT:    { nop; jal lr, is_even }
+; CHECK-NEXT:    { nop; lui r2, is_even }
+; CHECK-NEXT:    { addi32 r2, r2, is_even; addi32 r1, r1, -1 }
+; CHECK-NEXT:    { jalr lr, r2, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; beqz r0, .LBB4_3 }
 ; CHECK-NEXT:  .LBB4_2: // %no
 ; CHECK-NEXT:    { nop; move32 r1, r2 }
 ; CHECK-NEXT:  .LBB4_3: // %no
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -206,29 +208,31 @@ recurse:
 define i32 @tree_sum(i32 %n) nounwind {
 ; CHECK-LABEL: tree_sum:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r2, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r2, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r2, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; slt32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; beqz r2, .LBB5_2 }
 ; CHECK-NEXT:  // %bb.1: // %recurse
 ; CHECK-NEXT:    { nop; srai32 r8, r1, 1 }
-; CHECK-NEXT:    { nop; move32 r1, r8 }
-; CHECK-NEXT:    { nop; jal lr, tree_sum }
-; CHECK-NEXT:    { nop; move32 r9, r1 }
-; CHECK-NEXT:    { nop; move32 r1, r8 }
+; CHECK-NEXT:    { nop; lui r10, tree_sum }
+; CHECK-NEXT:    { move32 r1, r8; addi32 r10, r10, tree_sum }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 r1, r8; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal lr, tree_sum }
-; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r1, r9, r1 }
 ; CHECK-NEXT:  .LBB5_2: // %base
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { ld32 r9, sp, 4; ld32 r10, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

@@ -75,16 +75,16 @@ include "HaydnIntrinsics.td"
 // Processor models
 //===----------------------------------------------------------------------===//
 
-// Generic processor - the default. FeatureHWLoop + FeatureAGU are ISA
-// baseline: post/pre-inc fuse (G_HAYDN_*INC_*) is the sole update-addr
-// path and is tested with the default triple. FeatureHWLoop does not
-// enable HardwareLoops formation; that product default stays OFF.
-// CircularBuffer / BitReversed / SIMD stay opt-in. Disable AGU densify
-// with -mattr=-agu. AIE model: R12 is a normal allocatable GPR (no
-// dedicated free MatInt AT).
-def : ProcessorModel<"generic", HaydnSchedModel, [FeatureHWLoop, FeatureAGU]>;
+// generic and haydn are the same full ISA. There is no product CPU that
+// turns features off: empty / -mcpu=generic / -mcpu=haydn all enable
+// agu + circular-buffer + bit-reversed + hwloop + simd.
+// FeatureHWLoop does not enable HardwareLoops formation (product default
+// is HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()).
+// -mtune selects HaydnSchedModel only (TuneImplies is empty).
+def : ProcessorModel<"generic", HaydnSchedModel, [FeatureAGU, FeatureCircularBuffer,
+                                              FeatureBitReversed, FeatureHWLoop,
+                                              FeatureSIMD]>;
 
-// Full Haydn processor with optional ISA features.
 def : ProcessorModel<"haydn", HaydnSchedModel, [FeatureAGU, FeatureCircularBuffer,
                                               FeatureBitReversed, FeatureHWLoop,
                                               FeatureSIMD]>;

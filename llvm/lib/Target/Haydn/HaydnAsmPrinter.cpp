@@ -74,20 +74,20 @@ bool HaydnAsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 }
 
 void HaydnAsmPrinter::emitFunctionEntryLabel() {
-  // W70.2: entry alignment is real committed bytes — HaydnMachineAlignment
-  // (addPostBBSections, after the closure Finalize+Verify) pads the
-  // committed extent with legal generated idle-parcel BUNDLEs, and those
-  // parcels are charged by the BR/HWLoop prefix budgets via
-  // getInstSizeInBytes. This label no longer grows: no emitAlignment, no
-  // MC fill in front of the entry symbol.
+  // W70.2r: function-entry alignment is pre-label MC fill
+  // (HasFunctionAlignment=true → AsmPrinter::emitAlignment →
+  // HaydnMCELFStreamer::emitCodeAlignment). Internal MBB alignment is
+  // padInternalMBBAlignment in stamped addPreEmit LBN
+  // (ClearMetadata=true after the closer). addPostBBSections is empty;
+  // the MachineAlignment pass class is gone. This override does not
+  // grow the committed stream: no emitAlignment, no MC fill in front
+  // of the entry symbol.
   //
   // Serialize-only residue (zero bytes): promote sh_addralign so LLD
   // honors the requirement where the section start already satisfies it —
   // under the product -ffunction-sections link every entry sits at section
   // offset 0, so the promoted section alignment IS the guarantee. User
-  // alignment (aligned(N)) stays a language guarantee, honored not capped;
-  // HasFunctionAlignment=false keeps the generic header out, so consult
-  // F.getAlign() here as before or aligned(N) never reaches the object.
+  // alignment (aligned(N)) stays a language guarantee, honored not capped.
   const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
   Align A = std::max(MF->getAlignment(), TLI->getMinFunctionAlignment());
   if (MaybeAlign FnAlign = MF->getFunction().getAlign())
@@ -248,6 +248,25 @@ void HaydnAsmPrinter::emitBasicBlockStart(const MachineBasicBlock &MBB) {
   AsmPrinter::emitBasicBlockStart(MBB);
 }
 
+void HaydnAsmPrinter::emitBasicBlockEnd(const MachineBasicBlock &MBB) {
+  // Terminator-only / empty latch: emitInstruction never saw LastReal.
+  // AIE unreachables "LoopEnd without last bundle" (AIEBaseAsmPrinter.cpp:64-70);
+  // Haydn overlay: flush the MCInstLower temps at the current address so the
+  // object does not fail with an undefined temporary symbol.
+  auto Flush = [&](DenseMap<const MachineBasicBlock *, SmallVector<MCSymbol *, 2>>
+                       &Pending) {
+    auto It = Pending.find(&MBB);
+    if (It == Pending.end() || It->second.empty())
+      return;
+    for (MCSymbol *Sym : It->second)
+      OutStreamer->emitLabel(Sym);
+    It->second.clear();
+  };
+  Flush(PendingHwloopEndLabels);
+  Flush(PendingHwloopStartLabels);
+  AsmPrinter::emitBasicBlockEnd(MBB);
+}
+
 void HaydnAsmPrinter::registerSymbolicOperands(const MCInst &Inst) const {
   // register every Expr operand (recursing into nested
   // sub-instructions, e.g. BUNDLE children) with the streamer so the
@@ -303,31 +322,34 @@ fatalResidualCyclePseudo(const MachineInstr *MI, const char *Why) {
   report_fatal_error(Twine(OS.str()), /*GenCrashDiag=*/false);
 }
 
-// Find the last "real" instruction of \p MBB — the last instruction that is
-// neither a terminator, nor meta, nor a debug/pseudo instruction that emits
-// no bytes. This is the instruction whose start address is the inclusive
-// HWLR_END target per the Haydn spec (HWLR_END = address of the LAST
-// instruction of the loop body). For short ZOL bodies, HaydnFixupHwLoops
-// Body trailing pads (if any) may leave this last real as
-// a pad — useful LD/MAC/ST then appear before the END label while still
-// executing inside the inclusive [BEGIN, END] window. Returns nullptr for an
-// empty/terminator-only block. Uses MachineBasicBlock::iterator (NOT
-// instr_iterator) so a VLIW BUNDLE is treated as a single unit (the BUNDLE
-// header is what AsmPrinter receives in emitInstruction).
+// Find the last size-bearing instruction of \p MBB whose start address is
+// the inclusive HWLR_END target (HWLR_END = address of the LAST instruction
+// of the loop body). Prefer a non-terminator real / BUNDLE header; a
+// terminator-only latch falls back to the last size-bearing terminator
+// (including a terminator-flagged BUNDLE) so the MCInstLower temp is
+// flushed. Empty/meta-only returns nullptr and emitBasicBlockEnd emits
+// the leftover temps. Uses MachineBasicBlock::iterator (NOT instr_iterator)
+// so a VLIW BUNDLE is one unit (the header AsmPrinter receives).
 static MachineInstr *getLastRealInstr(MachineBasicBlock *MBB) {
+  MachineInstr *LastTerm = nullptr;
   for (auto I = MBB->rbegin(), E = MBB->rend(); I != E; ++I) {
     MachineInstr &MI = *I;
-    if (MI.isTerminator() || MI.isMetaInstruction())
+    if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition())
       continue;
-    if (MI.isDebugInstr())
-      continue;
-    // BUNDLE header is the VLIW unit for inclusive END. Residual
-    // executable and unexpanded representation (B/RET/BR_JT/indirect-call)
-    // are fatal — printer does not emit bytes for them.
+    // Residual executable / unexpanded representation is fatal — printer
+    // does not emit bytes for them. Encode-peel overlays (B / JALR_CALL /
+    // JAL_TCO / JALR_TCO) emit catalog bits and are terminator fallbacks.
     if (!MI.isBundle() && MI.isPseudo()) {
-      if (haydn::bundle::isResidualCycleFormingPseudo(MI.getOpcode()) ||
+      const unsigned Opc = MI.getOpcode();
+      if (Opc == Haydn::B || Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+          Opc == Haydn::JALR_TCO) {
+        if (!LastTerm)
+          LastTerm = &MI;
+        continue;
+      }
+      if (haydn::bundle::isResidualCycleFormingPseudo(Opc) ||
           haydn::bundle::isResidualExecutablePseudo(MI) ||
-          haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode())) {
+          haydn::bundle::isRepresentationExpandPseudo(Opc)) {
         fatalResidualCyclePseudo(
             &MI, "getLastRealInstr: residual executable or unexpanded "
                  "representation (must be exact-committed before layout; "
@@ -335,9 +357,17 @@ static MachineInstr *getLastRealInstr(MachineBasicBlock *MBB) {
       }
       continue;
     }
+    // Skip terminator packets (including BUNDLE-of-B: isTerminator is
+    // AnyInBundle) so inclusive END stays on the last body cycle, not the
+    // software backedge. Terminator-only latches fall through to LastTerm.
+    if (MI.isTerminator()) {
+      if (!LastTerm)
+        LastTerm = &MI;
+      continue;
+    }
     return &MI;
   }
-  return nullptr;
+  return LastTerm;
 }
 
 static const MachineInstr *getLastRealInstr(const MachineBasicBlock *MBB) {
@@ -406,7 +436,8 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   // Haydn overlay: membership order is e0, e1, (e2). E2 vs E3 is the
   // stamped BUNDLE-root row only — never a child-count override or
   // missing-row E2 default. Do not re-run canAdd / PacketFormats, peel
-  // _S*, expand B/RET/BR_JT, or bind public logicals to members.
+  // _S*, or bind public logicals to members. Encoder peels B / JALR_CALL
+  // / JAL_TCO / JALR_TCO (same Format E member pick as the D1.74 table).
   // Residual LOADI32/LOAD_ADDR/SETCBR/Loop* fail closed — no multi-cycle repair.
   if (MI->isBundle()) {
     // Fail closed on residual cycle-forming children (was multi-parcel expand).
@@ -477,15 +508,22 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       if (VerboseSpillComments)
         emitSpillReloadComments(&*I, CommentOS);
 
-      if (haydn::bundle::isRepresentationExpandPseudo(I->getOpcode()))
-        fatalResidualCyclePseudo(
-            &*I, "bundled residual unexpanded representation "
-                 "(B/RET/BR_JT/PseudoCALLIndirect)");
-
       // Allocate via MCContext so the child MCInst has stable lifetime.
       MCInst *ChildInst = OutContext.createMCInst();
       unsigned ChildOpc = I->getOpcode();
-      if (isPadNop(ChildOpc)) {
+      const bool EncodePeel = ChildOpc == Haydn::B ||
+                              ChildOpc == Haydn::JALR_CALL ||
+                              ChildOpc == Haydn::JAL_TCO ||
+                              ChildOpc == Haydn::JALR_TCO;
+      if (EncodePeel) {
+        // Wrap-only Finalize keeps B as a bundle child. Encoder peels
+        // B → BEQZ rs=R0, JALR_CALL / JALR_TCO → JALR, JAL_TCO → JAL.
+        MCInstLowering.Lower(&*I, *ChildInst);
+      } else if (haydn::bundle::isRepresentationExpandPseudo(ChildOpc)) {
+        fatalResidualCyclePseudo(
+            &*I, "bundled residual unexpanded representation "
+                 "(RET/BR_JT/PseudoCALLIndirect)");
+      } else if (isPadNop(ChildOpc)) {
         // Architectural NOP (logical / generated member) is the
         // idle/pad opcode. TableGen may mark the logical as isPseudo; still
         // lower it. Unused windows and pad-only idle encode as zero-entry NOP.
@@ -507,22 +545,20 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
       if (!isPadNop(ChildInst->getOpcode()) &&
           !haydnFindFormatEMemberByOpcode(ChildInst->getOpcode())) {
         const StringRef ChildName = MII.getName(ChildInst->getOpcode());
-        // Compiler `_MSP` clones serialize Desc-as-is; the encoder peels
-        // `_MSP` onto the catalog member (same as standalone JALR_MSP).
-        if (!ChildName.ends_with("_MSP")) {
-          if (haydnIsResidualFieldSlotName(ChildName) ||
-              haydnIsGeneratedMemberName(ChildName))
-            report_fatal_error(
-                Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
-                    "' is not a public logical — refuse FieldSlot / member-name "
-                    "peel",
-                /*GenCrashDiag=*/false);
+        // Encoder peels B / JALR_CALL / JAL_TCO / JALR_TCO onto generated members
+        // before this check. Residual non-member children are fatal.
+        if (haydnIsResidualFieldSlotName(ChildName) ||
+            haydnIsGeneratedMemberName(ChildName))
           report_fatal_error(
               Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
-                  "' is not a generated Format E member — refuse skip-Finalize "
-                  "DFS / bag-sort",
+                  "' is not a public logical — refuse FieldSlot / member-name "
+                  "peel",
               /*GenCrashDiag=*/false);
-        }
+        report_fatal_error(
+            Twine("HaydnAsmPrinter: compiler BUNDLE child '") + ChildName +
+                "' is not a generated Format E member — refuse skip-Finalize "
+                "DFS / bag-sort",
+            /*GenCrashDiag=*/false);
       }
       if (const haydn::format_e::FormatEMemberRec *Bound =
               haydnFindFormatEMemberByOpcode(ChildInst->getOpcode())) {
@@ -645,22 +681,21 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   default:
     break;
   case Haydn::PseudoCALLIndirect:
-    // The fnptr call expands to JALR_MSP in HaydnExpandPseudos
+    // The fnptr call expands to JALR_CALL in HaydnExpandPseudos
     // (pre-S1, pre-layout) so every byte-counting pass sees real parcels.
     // Reaching the printer unexpanded is an escape — fail closed.
     fatalResidualCyclePseudo(
         MI, "residual unexpanded representation "
-            "(B/RET/BR_JT/PseudoCALLIndirect)");
+            "(RET/BR_JT/PseudoCALLIndirect)");
     return;
-  case Haydn::B:
   case Haydn::RET:
   case Haydn::BR_JT:
     // MIR CFG API (insertBranch / expandPostRAPseudo). Printer is
-    // serialize-only — residual unexpanded representation is fatal
-    // (AIEBaseAsmPrinter.cpp:155-166 lowers as-is; no BEQZ_W/JALR_W rewrite).
+    // serialize-only — residual unexpanded representation is fatal.
+    // B peels at MCInstLower (BEQZ rs=R0); it is not this wall.
     fatalResidualCyclePseudo(
         MI, "residual unexpanded representation "
-            "(B/RET/BR_JT/PseudoCALLIndirect)");
+            "(RET/BR_JT/PseudoCALLIndirect)");
     return;
   case Haydn::LOADI32:
  // : multi-cycle materializer. Imm form expands in expandPostRAPseudo;
@@ -738,9 +773,24 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
             "in ExpandPseudos before PostRA pack");
   }
 
+  // Encoder peels B / JALR_CALL / JAL_TCO / JALR_TCO to catalog members.
+  // Wrap-only Finalize keeps B in MIR; JALR_CALL is the standalone
+  // returning call. JALR_TCO wraps like JAL_TCO.
+  switch (MI->getOpcode()) {
+  case Haydn::B:
+  case Haydn::JALR_CALL:
+  case Haydn::JAL_TCO:
+  case Haydn::JALR_TCO:
+    MCInstLowering.Lower(MI, TmpInst);
+    emitWrappedInst(TmpInst);
+    return;
+  default:
+    break;
+  }
+
   // Shared residual law must not silently no-op if a printer case drifts
   // from isResidualCycleFormingPseudo (VerifyBundles peer). Unexpanded
-  // representation (B/RET/BR_JT/PseudoCALLIndirect) is fatal above.
+  // representation (RET/BR_JT/PseudoCALLIndirect) is fatal above.
   if (haydn::bundle::isResidualCycleFormingPseudo(MI->getOpcode()))
     fatalResidualCyclePseudo(
         MI, "must be exact-committed real MIs before AsmPrinter "
@@ -748,7 +798,7 @@ void HaydnAsmPrinter::emitInstruction(const MachineInstr *MI) {
   if (haydn::bundle::isRepresentationExpandPseudo(MI->getOpcode()))
     fatalResidualCyclePseudo(
         MI, "residual unexpanded representation "
-            "(B/RET/BR_JT/PseudoCALLIndirect)");
+            "(RET/BR_JT/PseudoCALLIndirect)");
 
   if (haydn::bundle::isResidualExecutablePseudo(*MI)) {
     std::string Msg;

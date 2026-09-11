@@ -91,9 +91,16 @@ public:
 
   void emitBasicBlockStart(const MachineBasicBlock &MBB) override;
 
+  // Flush leftover HWLR_BEGIN/END temps if the MBB had no real instruction
+  // (terminator-only or empty latch). AIE setPreInstrSymbol on the previous
+  // bundle (AIEBaseAsmPrinter.cpp:64-70) unreachables when Prev is null;
+  // Haydn overlay: never leave the MCInstLower temp undefined.
+  void emitBasicBlockEnd(const MachineBasicBlock &MBB) override;
+
   void emitFunctionBodyStart() override;
 
-  // Emit product-legal function alignment (see HasFunctionAlignment=false).
+  // Promote sh_addralign. Entry fill is HasFunctionAlignment=true, not a
+  // post-label MachineAlignment pass; addPostBBSections is empty.
   void emitFunctionEntryLabel() override;
 
   bool runOnMachineFunction(MachineFunction &MF) override;

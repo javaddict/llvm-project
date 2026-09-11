@@ -21,6 +21,10 @@
 // sequentializes as recovery only), and replays multi-member parcel seam
 // latency. Sequentialize is not a packing legality authority. No hard-root
 // freeze identity and no force-coissue. Post-RA never invents SMS stages.
+// GR1.2: leaveFunction (AIEMachineScheduler.cpp:831 leaveFunction;
+// AIE commitBlockSchedule is per-block at :861) folds dest-window stalls
+// and stamps PostCommitCfgSnapshot. Residual-shell sequentialize is S1
+// remat-glue recovery only (CFG stamp / Inv>=2 refuse-not-dissolve).
 //
 // D1.26: bundle-reconstruction pads beyond HaydnPostRAMaxInterZonePads are a
 // named fatal at the bumpCycleForBundles seat (NumReconstructPadCapFatals),
@@ -38,8 +42,10 @@
 #include "HaydnBundlePlan.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
+#include "HaydnFinalizeBundle.h"
 #include "HaydnHazardRecognizer.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnLatencyStalls.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
 #include "HaydnPackLegality.h"
@@ -47,6 +53,7 @@
 #include "HaydnPortModel.h"
 #include "HaydnPostRAScratch.h"
 #include "HaydnSchedMutations.h"
+#include "llvm/Support/CommandLine.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -99,6 +106,9 @@ STATISTIC(NumUnstampedMultiMemberSequentialized,
           "Number of multi-member shells recovered by schedule-order "
           "sequentialize after the product coissue probe rejected packing "
           "(recovery only; not an independent legality authority)");
+STATISTIC(NumPostStampSequentializeRefusals,
+          "Number of post-stamp residual-shell sequentialize refusals "
+          "(CFG stamp or Inv>=2; S1 remains the commit authority)");
 STATISTIC(NumProductCoissueProbeRejects,
           "Number of residual multi-member shells rejected by the product "
           "coissue probe (shared legality authority; sequentialize follows)");
@@ -137,6 +147,8 @@ STATISTIC(NumInterZonePadCaps,
 // silent clamp. Distinct counter/wall from NumInterZonePadCaps so the D1.7
 // handleRegionConflicts seam and this reconstruction seam are separately
 // diagnosable.
+STATISTIC(NumExitReadyPadCapFatals,
+          "Haydn PostRA: ExitReadyCycle pad cap named fatals (D1.165)");
 STATISTIC(NumReconstructPadCapFatals,
           "Number of reconstruction cycle-list pads that hit the occupancy "
           "horizon and would commit an under-stalled cycle (fatal; T4 cap "
@@ -188,24 +200,11 @@ static unsigned countMultiMemberHardRoots(MachineBasicBlock &MBB) {
 HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy() {
   // AIE leaveRegion clears AltDescs (AIEMachineScheduler.cpp:1081-1082).
   // Haydn freeze requires the same empty transients: drop the inter-block
-  // DDG after the last scheduler invocation. S1 keeps it for S2 Bot replay
-  // when -haydn-sms2 is on.
-  //
-  // GR2.4: forcePostRAScheduling() makes S1 run for optnone functions too.
-  // The LateConvergence driver (the only S2 seat) still skipFunctions
-  // optnone (HaydnLateConvergence.cpp:658), so invocations stays 1 and an
-  // optnone S1 would otherwise leave the inter-block DDG registry alive
-  // until the addPreEmitPass2 freeze fatal under -haydn-postra-interblock.
-  // hasOptNone mirrors the driver's dominant skip reason.
-  // Residual (accepted, debug-only): -opt-bisect-limit combined with
-  // -haydn-postra-interblock can still skip the driver and leak; the freeze
-  // fatal stays fail-closed visible rather than silently corrupting.
+  // DDG after the sole scheduler invocation. There is no S2 replay.
   if (!Ctx || !Ctx->MF)
     return;
   auto &MFI = *Ctx->MF->getInfo<HaydnMachineFunctionInfo>();
-  if (MFI.getPostRASchedInvocations() >= 2 || !haydnSMS2Enabled() ||
-      Ctx->MF->getFunction().hasOptNone())
-    MFI.clearInterBlockRegistry();
+  MFI.clearInterBlockRegistry();
 }
 
 HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
@@ -219,35 +218,22 @@ HaydnPostRASchedStrategy::HaydnPostRASchedStrategy(const MachineSchedContext *C)
   HII =
       static_cast<const HaydnInstrInfo *>(C->MF->getSubtarget().getInstrInfo());
 
-  // W68.2R S2 reopen (STATUS limit #1, contracts/pipeline.md S1/S2 repair
-  // law): the FIRST S2 invocation on this function (per-function MFI
-  // invocation counter == 2: S1 at addPreSched2 was 1) rebuilds from
-  // current bare MIs — never treats S1's committed BUNDLEs as immutable
-  // final choices. Every provisional BUNDLE whose real children all
-  // carry generated member->logical identity is dissolved and its
-  // children canonicalized back to logical opcodes; unrecoverable roots
-  // stay committed (S2 schedules around them).
+  // Committed packets are immutable after the S1 packet+stamp
+  // transaction. Residual-shell sequentialize
+  // (commitOrSequentializeUnstampedMultiMemberBundles) is S1 remat-glue
+  // recovery only: row stamp alone is not authority on S1 (Inv==1 and
+  // unstamped); CFG stamp / Inv>=2 must not dissolve.
   //
-  // ONLY the first S2 invocation reopens. Later convergence-loop
-  // iterations (invocation 3+) schedule the BUNDLEs their OWN previous
-  // S2 committed; reopening those would break the driver's fixed-point
-  // argument (a repack of a repack can oscillate — G003's bound relies
-  // on pre-existing multi-member roots pinning their cycles after the
-  // first repair pass). The strategy is constructed once per scheduler
-  // invocation (PostMachineSchedulerImpl::run ->
-  // createPostMachineScheduler), before any enterMBB/region.
+  // The strategy is constructed once per scheduler invocation
+  // (PostMachineSchedulerImpl::run -> createPostMachineScheduler),
+  // before any enterMBB/region.
   if (C && C->MF) {
     auto &MFI = *C->MF->getInfo<HaydnMachineFunctionInfo>();
-    if (MFI.bumpPostRASchedInvocation() == 2) {
-      // TargetInstrInfo IS-A MCInstrInfo (public inheritance) — the
-      // subtarget's instr info serves directly (AsmPrinter idiom).
-      const TargetInstrInfo &TII = *C->MF->getSubtarget().getInstrInfo();
-      unsigned Reopened = haydn::bundle::reopenProvisionalBundles(*C->MF, TII);
-      (void)Reopened;
-      LLVM_DEBUG(dbgs() << "HaydnPostRASched S2: reopened " << Reopened
-                        << " provisional BUNDLE root(s) in " << C->MF->getName()
-                        << "\n");
-    }
+    const unsigned Inv = MFI.bumpPostRASchedInvocation();
+    (void)Inv;
+    LLVM_DEBUG(if (Inv == 2) dbgs()
+               << "HaydnPostRASched S2: GR2.5 no reopen of committed roots in "
+               << C->MF->getName() << "\n");
   }
 }
 
@@ -995,17 +981,6 @@ static bool isBundleSkippable(const MachineInstr &MI) {
                                                            MI.isPseudo(), Fmts);
 }
 
-// Zone-head forward-cycle clamp for the SchedBoundary::bumpCycle
-// ExitReadyCycle pad in handleRegionConflicts — a different object from the
-// reconstruction cycle list; bumpCycleForBundles owns the reconstruction law.
-static unsigned clampForwardCycle(unsigned From, unsigned To) {
-  if (To <= From)
-    return From;
-  if (To - From > HaydnPostRAMaxInterZonePads)
-    return From + HaydnPostRAMaxInterZonePads;
-  return To;
-}
-
 void HaydnPostRASchedStrategy::bumpCycleForBundles(
     unsigned ToCycle, SmallVectorImpl<CycleBundle> &Bundles,
     CycleBundle &CurrBundle) {
@@ -1239,11 +1214,22 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
   // collection / exclusion rules) by seeding the list with CurrentMBB —
   // scheduled-depth gating does not apply (the block is being scheduled
   // now; its own leading cycles are the wrap demand by construction).
-  // (When an unscheduled real successor forced the wrap-only break above,
-  // CurrentMBB is already seeded — do not seed twice: a duplicated replay
-  // would double-book the wrap cycles into the same Bot scoreboard.)
-  if (SelfSucc && ReplaySuccs.empty())
+  // AIE initializeBotScoreBoard (AIEMachineScheduler.cpp:339-387) walks
+  // every PerSuccEdge, including a self-successor; Haydn overlay keeps
+  // unscheduled real successors at full latency (no static-depth fill)
+  // but still owes wrap occupancy. D1.163: seed wrap whenever SelfSucc,
+  // even if ReplaySuccs already holds a scheduled real exit (bottom-up
+  // MBB order schedules the exit first). Gating on empty() dropped wrap
+  // demand and under-constrained multi-cycle occupancy. Dedup the
+  // wrap-only unscheduled-successor arm (already pushed CurrentMBB) —
+  // a duplicated replay would double-book wrap cycles into BotHR.
+  if (SelfSucc && !llvm::is_contained(ReplaySuccs, CurrentMBB)) {
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: Bot scoreboard wrap replay bb."
+                      << CurrentMBB->getNumber()
+                      << (ReplaySuccs.empty() ? " (wrap-only)\n"
+                                              : " (with scheduled exit)\n"));
     ReplaySuccs.push_back(CurrentMBB);
+  }
   for (MachineBasicBlock *Succ : ReplaySuccs) {
     // First successor seeds BotHR (occupancy + dest remaining). Later
     // exclusive successors replay into ScratchHR and max-merge: per-cycle
@@ -1272,16 +1258,24 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
     //     list is a different object and is not a replay-walk precedent.
     // Pin: gr27-d139-replay-copy-nonparcel.mir (COPY interleaved between
     // parcels; pattern must equal the COPY-free expectation).
-    // Residual adjacent gap (NOT isCopy, filed as its own row): INLINE_ASM
-    // heads are not in this skip list, so an opaque boundary head DOES
-    // consume a replay cycle without being a Format E parcel — misaligning
-    // successor demand in the same under-constraint direction.
+    // D1.56 law (INLINEASM term): an opaque INLINEASM/INLINEASM_BR head is
+    // the same class of non-parcel — never a Format E member (isBundleSkippable
+    // membership walls; spliceSkippablesForCycle refuses to cross it;
+    // FinalizeBundle leaves it standalone), and it emits through the asm
+    // path, not a generated row. It is dropped BEFORE ++Cycle so parcel
+    // indices stay aligned with the successor's actual issue order: letting
+    // it consume a cycle would land every later parcel's demand one cycle
+    // later (under-constraining the seam) and book occupancy for a cycle
+    // that never issues. Covers both real-successor replay and the D1.16
+    // wrap replay (this same walk, seeded with CurrentMBB).
+    // Pin: gr27-d156-replay-inlineasm-nonparcel.mir (INLINEASM before the
+    // replayed parcel; pattern must equal the INLINEASM-free expectation).
     for (MachineInstr &MI : *Succ) {
       if (MI.isBundledWithPred())
         continue;
       if (MI.isDebugInstr() || MI.isPosition() || MI.isCFIInstruction() ||
           MI.isKill() || MI.isImplicitDef() || MI.isCopy() || MI.isPHI() ||
-          MI.isLifetimeMarker())
+          MI.isLifetimeMarker() || MI.isInlineAsm())
         continue;
       if (Cycle >= Depth)
         break;
@@ -1310,6 +1304,51 @@ void HaydnPostRASchedStrategy::initializeBotScoreBoard() {
   BotHR->recedeScoreboard(Depth + 1);
 }
 
+void HaydnPostRASchedStrategy::leaveFunction() {
+  // GR1.2: every leaveMBB of this S1 invocation has installed complete
+  // packets. Finish leftover RET expand + one dest-window stall net
+  // (logical itinerary, then one bare identity bake) + bundled leftover-
+  // logical inverse bake (JALR_W membership) + wrap remaining bares
+  // Overlay JALR_CALL / JAL*_TCO stay standalone (encoder peels).
+  // Adjacent leftover bares pack through commitOneProductCycle before
+  // wrap-only of residual singles. CallRelax rewrites JALR→JAL only and
+  // keeps LUI+ADDI so the address temp stays live.
+  // then arm the CFG/inventory stamp in the same owner so
+  // PostMachineScheduler returns with both visible. Write-once: S2 must
+  // not restamp. One stall net before the wall (D1.33/D1.35); EncodedBytes
+  // wrap/exit cap is fail-closed (named fatal, not silent under-pad).
+  // AIE Finalize is wrap-only at AIE2TargetMachine.cpp:252-254 /
+  // AIEFinalizeBundle.cpp:40-59.
+  // Peer: AIE leaveFunction after the last nextBlock
+  // (AIEMachineScheduler.cpp:831; commitBlockSchedule is per-block at
+  // :861). Haydn's stronger overlay is the function-wide stamp here.
+  if (Ctx && Ctx->MF) {
+    auto &MFI = *Ctx->MF->getInfo<HaydnMachineFunctionInfo>();
+    if (MFI.getPostRASchedInvocations() == 1) {
+      // Isolated -run-pass slices are not product S1: keep RET as the
+      // incoming leftover, do not stamp (Fixup in the slice must still
+      // demote). Product S1 and -stop-after=postmisched take the overlay.
+      bool RunPassSlice = false;
+      if (auto *Opt = cl::getRegisteredOptions().lookup("run-pass"))
+        RunPassSlice = Opt->getNumOccurrences() > 0;
+      if (!RunPassSlice) {
+        haydnExpandLeftoverRetJtCall(*Ctx->MF);
+        // Pack leftover bares before the stall net so dest-window
+        // seams see the coissued cycles (not wrap-then-pack).
+        haydn::bundle::packAdjacentLeftoverBares(*Ctx->MF, Ctx->AA);
+        haydnInsertExposedPipelineStalls(*Ctx->MF);
+        haydnBakeLeftoverLogicalBundles(*Ctx->MF, Ctx->AA,
+                                        /*PreserveStampedRow=*/false);
+        haydnWrapBareAndStamp(*Ctx->MF);
+        MFI.stampPostCommitCfgSnapshot(*Ctx->MF);
+        LLVM_DEBUG(dbgs() << "HaydnPostRASched S1: stamped PostCommitCfgSnapshot in "
+                          << Ctx->MF->getName() << "\n");
+      }
+    }
+  }
+  PostGenericScheduler::leaveFunction();
+}
+
 void HaydnPostRASchedStrategy::leaveMBB() {
   // Materialize the bundles accumulated across all regions of this MBB into
   // actual BUNDLE MIs (standalone NOPs for idle cycles), in MBB order.
@@ -1324,10 +1363,11 @@ void HaydnPostRASchedStrategy::leaveMBB() {
   // is short.
   //
   // Product multi-MI: free scheduled packs only via commitOneProductCycle,
-  // then residual unstamped multi-member shells through the same site.
-  // Sequentialize is recovery after the product coissue probe rejects —
-  // not a second packing authority. Multi-member seam latency replay is
-  // not a hard-root freeze path.
+  // then residual unstamped multi-member shells through the same site on
+  // S1 (Inv==1 and unstamped). Sequentialize is S1 remat-glue recovery
+  // after the product coissue probe rejects — not a second packing
+  // authority and not a post-stamp reopen. Multi-member seam latency
+  // replay is not a hard-root freeze path.
   if (CurrentMBB) {
     // Snapshot multi-member children present before free pack. Seam latency
     // replay applies only to residual shells (and their ordinary multi-MI
@@ -1370,13 +1410,14 @@ void HaydnPostRASchedStrategy::leaveMBB() {
       replayMultiMemberSeamHazards(*CurrentMBB, PreExistingMultiMembers);
     // Skipped single-MI regions never enter leaveRegion materialize
     // (MachineScheduler.cpp:862-866). Remaining bare MIs stay LOGICAL here:
-    // LatencyStalls charges dest windows from the logical Desc's published
-    // itinerary (ST32_POST Slot1_LD [2]); baking the singleton member here
-    // (S_SW_POST_IMM_E2_* Slot0_LS_WbLat [1]) would erase the exposed-
-    // pipeline stall parcel before the stall authority runs. Identity bake
-    // for bare singles happens at the END of LatencyStalls and at Finalize
-    // wrap (exactSolveLateSingleton, CB-152b E2 resettle) — construction
-    // stays member-committed without a second latency authority.
+    // the S1-exit stall net charges dest windows from the logical Desc's
+    // published itinerary (ST32_POST Slot1_LD [2]); baking the singleton
+    // member here (S_SW_POST_IMM_E2_* Slot0_LS_WbLat [1]) would erase the
+    // exposed-pipeline stall parcel before that net runs. Identity bake
+    // for bare singles happens at the end of haydnInsertExposedPipelineStalls;
+    // bundled leftover-logical inverse bake (JALR_W) follows in
+    // leaveFunction before stamp — construction stays member-committed
+    // without a second latency authority.
     HaydnAlternateDescriptors &AltDescs =
         CurrentMBB->getParent()
             ->getInfo<HaydnMachineFunctionInfo>()
@@ -1858,7 +1899,14 @@ void HaydnPostRASchedStrategy::handleRegionConflicts(
                     << " BotCurr=" << Bot.getCurrCycle() << "\n");
   if (ExitReadyCycle > TopFinalCycle) {
     const unsigned Want = ExitReadyCycle - Bot.getCurrCycle();
-    Top.bumpCycle(clampForwardCycle(Top.getCurrCycle(), Want));
+    const unsigned From = Top.getCurrCycle();
+    if (Want > From && Want - From > HaydnPostRAMaxInterZonePads) {
+      ++NumExitReadyPadCapFatals;
+      report_fatal_error(
+          "Haydn: ExitReadyCycle pad cap would commit an under-stalled cycle",
+          /*GenCrashDiag=*/false);
+    }
+    Top.bumpCycle(Want);
   }
 
   // Pad NOPs between Top and Bot until scoreboards do not overlap and all
@@ -1986,7 +2034,7 @@ static void sequentializeMultiMemberRoot(MachineInstr &Root,
 
 void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
     MachineBasicBlock &MBB) {
-  // Residual multi-member shells at leaveMBB:
+  // Residual multi-member shells at leaveMBB (S1 remat-glue recovery):
   //   * jointly legal → ordinary multi-MI commit (unstamped) or keep (stamped)
   //   * illegal (true RAW / SET trip-Off conflict / field-order fail) →
   //     sequentialize in schedule order and clear InternalRead
@@ -1994,10 +2042,32 @@ void HaydnPostRASchedStrategy::commitOrSequentializeUnstampedMultiMemberBundles(
   // The product coissue probe is the only legality authority (HR getHazardType
   // consults the same predicate so scheduled cycles are not packed then
   // sequentialized). Sequentialize is residual-shell recovery after that
-  // probe rejects — it must not invent a pack. Stamped Format-E multi-member
-  // is re-probed: remat glue / free pack can stamp a cycle product law
-  // refuses (snapshot no-forwarding SET trip). Do not trust the stamp
-  // alone. Not a hard-root freeze path.
+  // probe rejects — it must not invent a pack. Row stamp alone is not
+  // authority on S1: remat glue / free pack can stamp a cycle product law
+  // refuses (snapshot no-forwarding SET trip). CFG stamp /
+  // getPostRASchedInvocations()>=2 must not dissolve (AIE applyBundles
+  // does not unbundle committed roots; AIEHazardRecognizer.cpp:326-352).
+  // Isolated Finalize+LateConvergence is Inv==1 with the CFG stamp armed
+  // — hasPostCommitBlockBudget() covers that walk. Not a hard-root freeze
+  // path.
+  MachineFunction *MF = MBB.getParent();
+  if (!MF)
+    return;
+  auto &MFI = *MF->getInfo<HaydnMachineFunctionInfo>();
+  if (MFI.getPostRASchedInvocations() >= 2 || MFI.hasPostCommitBlockBudget()) {
+    unsigned Refused = 0;
+    for (MachineInstr &MI : MBB) {
+      if (!MI.isBundle() || MI.isBundledWithPred())
+        continue;
+      if (haydn::bundle::members(MI).size() >= 2)
+        ++Refused;
+    }
+    NumPostStampSequentializeRefusals += Refused;
+    LLVM_DEBUG(dbgs() << "HaydnPostRASched: skip residual-shell sequentialize "
+                         "after CFG stamp in "
+                      << MF->getName() << "\n");
+    return;
+  }
   SmallVector<MachineInstr *, 4> Roots;
   for (MachineInstr &MI : MBB) {
     if (!MI.isBundle() || MI.isBundledWithPred())

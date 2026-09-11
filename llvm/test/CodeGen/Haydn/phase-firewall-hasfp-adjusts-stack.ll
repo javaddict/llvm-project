@@ -22,7 +22,9 @@ define void @reg_only_call() {
 ; CHECK-LABEL: reg_only_call:
 ; CHECK-NOT:   addi32{{.*}}fp
 ; CHECK-NOT:   .cfi_def_cfa {{fp|r14}}
-; CHECK:       jal{{.*}}callee
+; CHECK:       lui{{.*}}callee
+; CHECK:       addi32{{.*}}callee
+; CHECK:       jalr
 ; CHECK:       jalr
   call void @callee()
   ret void
@@ -34,7 +36,9 @@ define void @reg_only_call() {
 define void @outgoing_stack_args() {
 ; CHECK-LABEL: outgoing_stack_args:
 ; CHECK-NOT:   .cfi_def_cfa {{fp|r14}}
-; CHECK:       jal{{.*}}many
+; CHECK:       lui{{.*}}many
+; CHECK:       addi32{{.*}}many
+; CHECK:       jalr
 ; CHECK:       jalr
   call void @many(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9)
   ret void

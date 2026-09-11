@@ -1,0 +1,62 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFinalizeBundle.cpp --check-prefix=ORDER
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ONCE
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=TWICE
+# REQUIRES: haydn-registered-target
+#
+# D1.164: unstamped Finalize (PostRASchedInvocations==0) must leftover-bake
+# already-bundled FieldSlots before wrap, wrap remaining bares, stamp the
+# CFG wall, then leftover-bake newly wrapped members with
+# PreserveStampedRow=true. Baking after wrap with PreserveStampedRow=false
+# restamped newly wrapped rows (selectProductRowForOpcodes) before/around
+# the CFG stamp. AIEFinalizeBundle.cpp:40-59 is wrap-only and has no leftover
+# bake; Haydn overlay inverse-bakes leftover logicals then keeps wrap
+# identity after the wall. Compiler-side CallRelax triple splice is gone;
+# LLD HaydnCallRelax is the matcher.
+#
+# ORDER: if (!AlreadyStamped && MFI->getPostRASchedInvocations() == 0)
+# ORDER: haydnInsertExposedPipelineStalls(MF)
+# ORDER: bakeLeftoverLogicalBundles(MF, AA, /*PreserveStampedRow=*/false)
+# ORDER: haydnWrapBareAndStamp(MF)
+# ORDER: stampPostCommitCfgSnapshot(MF)
+# ORDER: bakeLeftoverLogicalBundles(MF, AA, /*PreserveStampedRow=*/true)
+# ORDER-NOT: PreserveStampedRow=*/AlreadyStamped
+
+---
+name:            unstamped_wrap_identity
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r0, $r1, $r2, $r15
+    ; ONCE-LABEL: name: unstamped_wrap_identity
+    ; ONCE: BUNDLE 0, 0
+    ; ONCE: $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+    ; ONCE: BUNDLE
+    ; ONCE: $r5 = XOR32_E{{[23]}}_
+    ; ONCE: $r6 = ADD32_E{{[23]}}_
+    ; ONCE: BUNDLE 0, 0
+    ; ONCE: $r3 = XOR32_E2_E0_ALU0_RR $r0, $r1
+    ; ONCE-NOT: {{= XOR32 }}
+    ; ONCE-NOT: {{= ADD32 }}
+    ; TWICE-LABEL: name: unstamped_wrap_identity
+    ; TWICE: BUNDLE 0, 0
+    ; TWICE: $r4 = ADD32_E2_E0_ALU0_RR $r0, $r1
+    ; TWICE: BUNDLE
+    ; TWICE: $r5 = XOR32_E{{[23]}}_
+    ; TWICE: $r6 = ADD32_E{{[23]}}_
+    ; TWICE: BUNDLE 0, 0
+    ; TWICE: $r3 = XOR32_E2_E0_ALU0_RR $r0, $r1
+    ; TWICE-NOT: ADD32_E3_
+    BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r0, implicit $r1 {
+      $r4 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    BUNDLE 0, 0, implicit-def $r5, implicit-def $r6, implicit $r0, implicit $r1, implicit $r2, implicit $r4 {
+      $r5 = XOR32 $r4, $r2, implicit-def dead $sfr
+      $r6 = ADD32 $r0, $r1, implicit-def dead $sfr
+    }
+    $r3 = XOR32 $r0, $r1, implicit-def dead $sfr
+    RET implicit $r15
+...

@@ -12,12 +12,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnBundleMaterialize.h"
+#include "Haydn.h"
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnPackLegality.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/MC/MCInstrDesc.h"
 #include <algorithm>
 
 namespace llvm {
@@ -93,12 +96,50 @@ static bool cycleHasUnprovenStoreLoad(ArrayRef<MachineInstr *> Instrs,
   return pack::cycleHasMayAliasStoreLoad(ConstInstrs, AA);
 }
 
+/// D1.53: golden unit injectivity of the SELECTED generated members (units ≠
+/// encoded entry identity; the seven shared units are injective within one
+/// packet). This is the pre-mutation law at the commit seat, not the
+/// existence-only `opcodesHaveFormatEUnitCover` (which asks whether SOME
+/// member assignment is injective after a solve): the as-is arm receives
+/// already-baked private members whose encoded entry bits are fixed, so the
+/// entry-resident records — not the logical cover — decide. Two members at
+/// distinct entries can still share one unit (MOVE32_E3_E1_ALU0_R beside
+/// MOVE32_E3_E2_ALU0_R) while residual FieldSlots S1/S2 both look free and
+/// the peeled logical cover (MOVE32+MOVE32 → ALU0/1/2) is assignable; the
+/// old as-is path relied on the indirect MachineBundle::canAdd logical-cover
+/// overlay and never saw the chosen records at all. Same population stance
+/// as the freeze verifier's inverse unit pre-check and
+/// memberSymbolsHaveInjectiveUnits: pad NOPs are completion fill, not unit
+/// occupancy, and opcodes without a complete inverse member record are not
+/// this law's subject (the canAdd overlay and the freeze verifier own them)
+/// — among records that ARE selected members, one unit is used at most once.
+static bool selectedMembersHaveInjectiveUnits(ArrayRef<MachineInstr *> Instrs) {
+  uint32_t UsedUnits = 0;
+  for (MachineInstr *MI : Instrs) {
+    if (!MI)
+      return false;
+    const unsigned Opc = MI->getOpcode();
+    if (isPadNopOpcode(Opc))
+      continue;
+    const format_e::FormatEMemberRec *Rec = lookupPrivateFormatEMember(Opc);
+    if (!Rec || Rec->Unit >= 32)
+      continue;
+    const uint32_t Bit = 1u << Rec->Unit;
+    if ((UsedUnits & Bit) != 0)
+      return false;
+    UsedUnits |= Bit;
+  }
+  return true;
+}
+
 /// AIE applyBundles (AIEHazardRecognizer.cpp:326-352) packs already-setDesc
 /// members by getSlotKind. Probe only — no MIR mutation.
 static bool asIsGeneratedMembersFormLegalCycle(
     ArrayRef<MachineInstr *> Instrs, const TargetRegisterInfo *TRI,
     AAResults *AA) {
   if (!allGeneratedProductMembers(Instrs))
+    return false;
+  if (!selectedMembersHaveInjectiveUnits(Instrs))
     return false;
   if (cycleMembersHaveTrueRAW(Instrs, TRI) || cycleMembersHaveWAW(Instrs, TRI))
     return false;
@@ -232,6 +273,15 @@ bool canCoissueProductCycle(ArrayRef<MachineInstr *> Instrs, AAResults *AA) {
   // rematch shot; a still-mixed set here means the rematch failed to bind
   // the cycle onto a single row — fail closed to sequential parcels.
   if (cycleHasMixedFormatEModes(Instrs)) {
+    restoreDescs();
+    return false;
+  }
+
+  // D1.53 (probe mirror): the same selected-member unit law on the
+  // POST-rematch set. Per-slot representative picks can re-bind a duplicate
+  // unit (MOVE32 twins at ALU0) while the logical cover stays assignable;
+  // restoreDescs returns the probe's input identity unchanged.
+  if (!selectedMembersHaveInjectiveUnits(Instrs)) {
     restoreDescs();
     return false;
   }
@@ -408,6 +458,25 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
     }
   }
 
+  // bakeFormatEMemberDesc no-ops on a keep-map miss. A leftover FieldSlot
+  // next to an already-generated sibling is mixed MemberId+FieldSlot
+  // (cb_wua_cbr FLAR beside ADD32_E3). All-leftover dual-load SMS roots
+  // still commit as catalog logicals. Refuse only mixed.
+  bool AnyGen = false;
+  bool AnyLeft = false;
+  for (MachineInstr *MI : Instrs) {
+    if (!MI || isPadNopOpcode(MI->getOpcode()))
+      continue;
+    if (isGeneratedFormatEMemberName(TII.getName(MI->getOpcode())))
+      AnyGen = true;
+    else
+      AnyLeft = true;
+  }
+  if (AnyGen && AnyLeft) {
+    restoreTxn();
+    return false;
+  }
+
   // finalizeBundle only sets IsInternalRead; it never clears. Members that
   // were previously bundled (hard-root recommit, re-order) may carry stale
   // markers that would survive a field-order change. Drop them so the
@@ -423,6 +492,17 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
   // canCoissueProductCycle): an E2 member and an E3 member cannot share one
   // parcel. Rematch already ran above; a still-mixed set cannot commit.
   if (cycleHasMixedFormatEModes(Instrs)) {
+    restoreTxn();
+    return false;
+  }
+
+  // D1.53: the same selected-member unit law on the POST-bake set, BEFORE
+  // the irreversible applyFormatOrdering. The bake arms above choose member
+  // identities; the per-slot representative picks can bind a duplicate unit
+  // while the logical cover stays assignable (MOVE32 twins at ALU0). The
+  // transaction snapshot restores the pre-attempt identity — the refusal
+  // leaves no orphaned member bake and no committed BUNDLE.
+  if (!selectedMembersHaveInjectiveUnits(Instrs)) {
     restoreTxn();
     return false;
   }
@@ -507,6 +587,66 @@ bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs, AAResults *AA) {
   if (!canCoissueProductCycle(Instrs, AA))
     return false;
   return commitExactMultiMIProductCycle(Instrs, AA);
+}
+
+static bool isLeftoverPackableBare(const MachineInstr &MI) {
+  if (MI.isInsideBundle() || MI.isBundle())
+    return false;
+  if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition() ||
+      MI.isInlineAsm() || MI.isCFIInstruction() || MI.isKill() ||
+      MI.isImplicitDef())
+    return false;
+  if (MI.isBranch() || MI.isReturn() || MI.isCall() || MI.isTerminator())
+    return false;
+  const unsigned Opc = MI.getOpcode();
+  if (Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+      Opc == Haydn::JALR_TCO || Opc == Haydn::B)
+    return false;
+  return true;
+}
+
+bool packAdjacentLeftoverBares(MachineFunction &MF, AAResults *AA) {
+  bool Changed = false;
+  for (MachineBasicBlock &MBB : MF) {
+    SmallVector<MachineInstr *, 8> Run;
+    auto flush = [&]() {
+      unsigned I = 0;
+      while (I + 1 < Run.size()) {
+        const unsigned Remain = Run.size() - I;
+        bool Packed = false;
+        if (Remain >= 3) {
+          MachineInstr *G[3] = {Run[I], Run[I + 1], Run[I + 2]};
+          if (commitOneProductCycle(G, AA)) {
+            Changed = true;
+            I += 3;
+            Packed = true;
+          }
+        }
+        if (!Packed && Remain >= 2) {
+          MachineInstr *G[2] = {Run[I], Run[I + 1]};
+          if (commitOneProductCycle(G, AA)) {
+            Changed = true;
+            I += 2;
+            Packed = true;
+          }
+        }
+        if (!Packed)
+          ++I;
+      }
+      Run.clear();
+    };
+    for (MachineInstr &MI : MBB.instrs()) {
+      if (MI.isInsideBundle())
+        continue;
+      if (MI.isBundle() || !isLeftoverPackableBare(MI)) {
+        flush();
+        continue;
+      }
+      Run.push_back(&MI);
+    }
+    flush();
+  }
+  return Changed;
 }
 
 bool commitExactHardRootProductCycle(MachineInstr &BundleRoot,
@@ -657,6 +797,69 @@ resolveMixedMemberCycleOnce(ArrayRef<MachineInstr *> Instrs,
     }
   }
   return std::nullopt;
+}
+
+/// Occupancy regs a member actually writes/reads. Jump/RET JALR: explicit
+/// operands only so leftover catalog caller-saved Defs never occupy the
+/// root (HaydnInstrInfo.td:1513-1528 JALR_W Defs; FPL/LBN dest-window).
+/// JALR_CALL / JAL*_TCO: explicit plus Desc implicits (ABI clobbers).
+/// Every other member: explicit, Desc implicits, and leftover physical
+/// implicits (anonymous $sfr on generated members whose Desc dropped
+/// Uses/Defs=[SFR]; HaydnPortModel.h:1118-1152 CB-161).
+static void collectMemberOccupancyRegs(const MachineInstr &K,
+                                       SmallSet<Register, 16> &Regs) {
+  const unsigned Opc = K.getOpcode();
+  const unsigned Logical = format_e::logicalOpcodeOrSelf(Opc);
+  const MCInstrDesc &D = K.getDesc();
+  const unsigned N = D.getNumOperands();
+  for (unsigned I = 0; I != N && I < K.getNumOperands(); ++I) {
+    const MachineOperand &MO = K.getOperand(I);
+    if (MO.isReg() && MO.getReg())
+      Regs.insert(MO.getReg());
+  }
+  // Returning-call overlay: ABI clobbers are real. Jump/RET JALR is not.
+  // Check overlays before the JALR logical peel so a future bake of
+  // JALR_CALL cannot drop clobbers (applyFinalDirectCompatibleOpcode
+  // already refuses that bake).
+  if (Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+      Opc == Haydn::JALR_TCO) {
+    for (MCPhysReg R : D.implicit_defs())
+      Regs.insert(R);
+    for (MCPhysReg R : D.implicit_uses())
+      Regs.insert(R);
+    return;
+  }
+  if (Opc == Haydn::JALR_W || Opc == Haydn::JALR || Logical == Haydn::JALR ||
+      Logical == Haydn::JALR_W)
+    return;
+  for (MCPhysReg R : D.implicit_defs())
+    Regs.insert(R);
+  for (MCPhysReg R : D.implicit_uses())
+    Regs.insert(R);
+  for (unsigned I = N; I < K.getNumOperands(); ++I) {
+    const MachineOperand &MO = K.getOperand(I);
+    if (MO.isReg() && MO.getReg())
+      Regs.insert(MO.getReg());
+  }
+}
+
+void dropBundleImplicitRegsAbsentFromMembers(MachineInstr &Root) {
+  if (!Root.isBundle())
+    return;
+  SmallSet<Register, 16> MemberRegs;
+  for (MachineInstr *K : members(Root)) {
+    if (!K)
+      continue;
+    collectMemberOccupancyRegs(*K, MemberRegs);
+  }
+  for (unsigned I = Root.getNumOperands(); I > 0; --I) {
+    MachineOperand &MO = Root.getOperand(I - 1);
+    if (!MO.isReg() || !MO.isImplicit() || !MO.getReg())
+      continue;
+    if (MemberRegs.count(MO.getReg()))
+      continue;
+    Root.removeOperand(I - 1);
+  }
 }
 
 } // namespace bundle

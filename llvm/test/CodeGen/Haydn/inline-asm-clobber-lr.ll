@@ -15,22 +15,22 @@
 
 define void @clobber_lr() {
 ; CHECK-LABEL: clobber_lr:
-; CHECK:       { nop; st32 lr, sp,
+; CHECK:       st32 lr, sp,
 ; CHECK:       {{//|#}}APP
 ; CHECK:       {{//|#}}NO_APP
-; CHECK:       { nop; ld32 lr, sp,
-; CHECK:       { nop; jalr r0, lr, 0 }
+; CHECK:       ld32 lr, sp,
+; CHECK:       jalr r0, lr, 0
   call void asm sideeffect "", "~{lr}"()
   ret void
 }
 
 define void @clobber_r15_alias() {
 ; CHECK-LABEL: clobber_r15_alias:
-; CHECK:       { nop; st32 lr, sp,
+; CHECK:       st32 lr, sp,
 ; CHECK:       {{//|#}}APP
 ; CHECK:       {{//|#}}NO_APP
-; CHECK:       { nop; ld32 lr, sp,
-; CHECK:       { nop; jalr r0, lr, 0 }
+; CHECK:       ld32 lr, sp,
+; CHECK:       jalr r0, lr, 0
   call void asm sideeffect "", "~{r15}"()
   ret void
 }

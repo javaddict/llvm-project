@@ -27,8 +27,7 @@
 define i32 @trunc_s64_2_to_i1() nounwind {
 ; CHECK-LABEL: trunc_s64_2_to_i1:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { addi32 r1, r0, 10; addi32 r2, r0, 20 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
@@ -42,8 +41,7 @@ define i32 @trunc_s64_2_to_i1() nounwind {
 define i32 @trunc_s64_3_to_i1() nounwind {
 ; CHECK-LABEL: trunc_s64_3_to_i1:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { addi32 r1, r0, 10; addi32 r2, r0, 20 }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, -1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
@@ -57,8 +55,7 @@ define i32 @trunc_s64_3_to_i1() nounwind {
 define i32 @trunc_s64_branch(i64 %v) nounwind {
 ; CHECK-LABEL: trunc_s64_branch:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; not32 r1, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }

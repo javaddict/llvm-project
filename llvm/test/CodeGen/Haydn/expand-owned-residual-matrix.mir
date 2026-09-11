@@ -159,7 +159,7 @@
 # SET_HWLOOP / SETCBR / LOOPCTL / LOAD_ADDR as BUNDLE children are fatal
 # (in-bundle expand is leftover *_POST_INC only). Top-level leftover
 # LOADI32/LOADI64 after ExpandPostRA is fatal before pack. Representation
-# expands RET/BR_JT→JALR_W r0 and PseudoCALLIndirect→JALR_MSP here
+# expands RET/BR_JT→JALR_W r0 and PseudoCALLIndirect→JALR_CALL here
 # (pre-S1). Top-level B stays the CFG uncond shell through BranchRelaxation;
 # leftover bundled B/RET/BR_JT/PseudoCALLIndirect is fatal.
 
@@ -560,7 +560,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; ABS64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; ABS64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = ABS64 $d0
     RET implicit $r15
 
@@ -576,7 +576,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NOT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NOT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = NOT64 $d0
     RET implicit $r15
 
@@ -592,7 +592,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NEG64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NEG64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = NEG64 $d0
     RET implicit $r15
 
@@ -608,7 +608,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; ABS64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; ABS64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = ABS64S $d0
     RET implicit $r15
 
@@ -624,7 +624,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2ABS32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2ABS32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2ABS32S $d0
     RET implicit $r15
 
@@ -640,7 +640,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2NEG32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2NEG32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2NEG32 $d0
     RET implicit $r15
 
@@ -656,7 +656,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X4ABS16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X4ABS16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X4ABS16 $d0
     RET implicit $r15
 
@@ -672,7 +672,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSA64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSA64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSA64 $d0
     RET implicit $r15
 
@@ -688,7 +688,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NEG64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NEG64SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = NEG64S $d0
     RET implicit $r15
 
@@ -704,7 +704,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2NEG32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2NEG32SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2NEG32S $d0
     RET implicit $r15
 
@@ -720,7 +720,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X4ABS16SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X4ABS16SBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X4ABS16S $d0
     RET implicit $r15
 
@@ -736,7 +736,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2ABS32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2ABS32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2ABS32 $d0
     RET implicit $r15
 
@@ -752,7 +752,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; MOVT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; MOVT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     ; M23 tied old-dest: operand 1 reads old $d0 (tied to def per Desc).
     $d0 = MOVT64 $d0, $d0, implicit $sfr
     RET implicit $r15
@@ -769,7 +769,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; LOG2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; LOG2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = LOG2 $r1
     RET implicit $r15
 
@@ -785,7 +785,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; POPCOUNT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; POPCOUNT64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = POPCOUNT64 $d0
     RET implicit $r15
 
@@ -801,7 +801,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; MOVF64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; MOVF64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     ; M23 tied old-dest: operand 1 reads old $d0 (tied to def per Desc).
     $d0 = MOVF64 $d0, $d0, implicit $sfr
     RET implicit $r15
@@ -818,7 +818,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSAZ64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSAZ64BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSAZ64 $d0
     RET implicit $r15
 
@@ -834,7 +834,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; EXP2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; EXP2BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = EXP2 $r1
     RET implicit $r15
 
@@ -850,7 +850,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; RECIPBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; RECIPBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = RECIP $r1
     RET implicit $r15
 
@@ -866,7 +866,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; SQRTBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; SQRTBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = SQRT $r1
     RET implicit $r15
 
@@ -882,7 +882,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2HMAX32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2HMAX32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = X2HMAX32 $d0
     RET implicit $r15
 
@@ -898,7 +898,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2HMIN32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2HMIN32BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = X2HMIN32 $d0
     RET implicit $r15
 
@@ -914,7 +914,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X4HMAX16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X4HMAX16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = X4HMAX16 $d0
     RET implicit $r15
 
@@ -930,7 +930,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X4HMIN16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X4HMIN16BAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = X4HMIN16 $d0
     RET implicit $r15
 
@@ -946,7 +946,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2NEG32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2NEG32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2NEG32_L $d0
     RET implicit $r15
 
@@ -962,7 +962,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; X2NEG32SLBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; X2NEG32SLBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $d0 = X2NEG32S_L $d0
     RET implicit $r15
 
@@ -978,7 +978,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSA32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSA32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSA32_L $d0
     RET implicit $r15
 
@@ -994,7 +994,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSAZ32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSAZ32LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSAZ32_L $d0
     RET implicit $r15
 
@@ -1010,7 +1010,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSA16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSA16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSA16_L $d0
     RET implicit $r15
 
@@ -1026,7 +1026,7 @@ tracksRegLiveness: true
 body:             |
   bb.0:
     liveins: $d0, $r15
-    ; NSAZ16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded}}
+    ; NSAZ16LBAN: {{residual executable pseudo|residual cycle-forming pseudo|unexpanded|abs64|abs64s|not64|neg64|neg64s|nsa64|nsaz64|x2abs32|x2abs32s|x2neg32|x2neg32s|x4abs16|x4abs16s|movt64|movf64|log2|exp2|recip|sqrt|popcount64|x2hmax32|x2hmin32|x4hmax16|x4hmin16|nsa32|nsaz32|nsa16|nsaz16}}
     $r1 = NSAZ16_L $d0
     RET implicit $r15
 
@@ -1356,7 +1356,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; CALLI: JALR_MSP
+    ; CALLI: JALR_CALL
     ; CALLI-NOT: PseudoCALLIndirect
     $r15 = PseudoCALLIndirect $r1
     RET implicit $r15
@@ -1373,8 +1373,8 @@ body:             |
   bb.0:
     liveins: $r15
     successors: %bb.1
-    ; W68.4: Bundled-B is EXEMPT at ExpandPseudos (closure Finalize
-    ; expandUncondBToBeqz owns B->BEQZ_W_MSP after the last BR); expand
+    ; W68.4: Bundled-B is EXEMPT at ExpandPseudos (wrap-only Finalize
+    ; keeps B; encoder peels BEQZ bits after the last BR); expand
     ; leaves the bundle serialized as-is and exits clean.
     ; BB: BUNDLE
     ; BB: B %bb.1

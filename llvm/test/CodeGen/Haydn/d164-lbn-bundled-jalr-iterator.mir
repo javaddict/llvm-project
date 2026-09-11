@@ -1,0 +1,256 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.64 HOLD memset-3 / gcc_layout extra_02: LongBranchNormalize both-far
+# overlay must insert before the JALR *cycle root*. trailingCfgJalr returns
+# the bundled JALR child; constructing MBB::iterator from that child asserts
+# MachineInstrBundleIterator (MachineInstrBundleIterator.h:132-136).
+# Skip remains LUI+ADDI+JALR only; JALR_CALL is not that form.
+# Peer: HaydnLatencyStalls.cpp:418-450 bundleRootOf before MBB::iterator;
+# HexagonInstrInfo.cpp:435-508 instr_iterator dest walk.
+#
+# Layout: 180 NOP parcels in bb.1 (~2160B) put both TBB and FBB past
+# WIDE_BranchSImm12 (buffer=4). Cond TBB is bb.2; already-long FBB is bb.3.
+
+--- |
+  define void @both_far_bundled_jalr(i32 %c) {
+  entry:
+    br i1 undef, label %tbb, label %fbb
+  pad:
+    ret void
+  tbb:
+    ret void
+  fbb:
+    ret void
+  }
+...
+---
+name:            both_far_bundled_jalr
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.3
+    liveins: $r1, $r6, $r15
+    ; CHECK-LABEL: name: both_far_bundled_jalr
+    ; CHECK: bb.0.entry
+    ; CHECK-NOT: BNEZ
+    ; CHECK: LUI
+    ; CHECK: ADDI32
+    ; CHECK: XOR32
+    ; CHECK: SEQ32
+    ; CHECK: MOVF32
+    ; CHECK: JALR
+    $r6 = LUI %bb.3
+    $r6 = ADDI32_W $r6, %bb.3
+    BNEZ_W $r1, %bb.2
+    BUNDLE implicit-def $r6, implicit $r6 {
+      $r6 = JALR_W $r6, 0
+    }
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.tbb:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.fbb:
+    liveins: $r15
+    RET implicit $r15

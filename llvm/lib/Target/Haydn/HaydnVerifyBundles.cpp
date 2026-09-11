@@ -11,7 +11,19 @@
 // in a complete pipeline is the addPreEmitPass2 freeze gate: one concrete
 // generated-member BUNDLE, no representation-expand carve-out, no leftover
 // alternate-map / DDG transients, and a dest-window seam walk
-// (verifyMBBDestWindowSeams; not verifyCommittedBundle).
+// (verifyMBBDestWindowSeams; not verifyCommittedBundle) plus an
+// independent EncodedBytes layout recompute (verifyFrozenLayout). Since D1.55 the
+// freeze seat also rejects TOP-LEVEL RET/BR_JT/PseudoCALLIndirect as
+// representation escapes (every Finalize seat already expanded them)
+// and TOP-LEVEL B as a wrap escape (wrap-only Finalize keeps B; encoder
+// peels B → BEQZ rs=R0). Standalone returning call is JALR_CALL.
+// The two intermediate seats (addPreSched2/addPreEmitPass,
+// IsFreezeSeat=false) keep the explicit
+// pre-expansion-residual carve-out. Every Verify
+// seat first runs the D1.54 member-shape wall inside the MI overload:
+// unconditional generated descriptor (arity/kind), tie, implicit, and
+// side-effect validation per member — before the inverse/resource
+// predicates and never via the optional MachineVerifier.
 //
 // AIE peers:
 //   AIEBaseInstrInfo.cpp:1616-1635 verifyInstruction fail-closed pattern
@@ -26,13 +38,13 @@
 #include "HaydnVerifyBundles.h"
 #include "Haydn.h"
 #include "HaydnBundleVerify.h"
+#include "HaydnHWLoopDemote.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
-#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/Support/CommandLine.h"
@@ -56,7 +68,8 @@ static cl::opt<bool> HaydnFreezeVerify(
     "haydn-freeze-verify", cl::Hidden,
     cl::desc("Force HaydnVerifyBundles freeze-gate checks (residual "
              "representation/logical/mixed children, surviving "
-             "alternate-map/DDG transients, and dest-window seams)"),
+             "alternate-map/DDG transients, dest-window seams, and "
+             "independent EncodedBytes layout/displacement)"),
     cl::init(false));
 
 namespace llvm {
@@ -84,8 +97,9 @@ bool isResidualCycleFormingPseudo(unsigned Opc) {
 }
 
 bool isRepresentationExpandPseudo(unsigned Opc) {
+  // D1.130: B is product gMIR uncond through encode (MC peels to BEQZ rs=R0).
+  // JALR_CALL / JAL_TCO are product gMIR calls, not printer-expand shells.
   switch (Opc) {
-  case Haydn::B:
   case Haydn::RET:
   case Haydn::BR_JT:
   case Haydn::PseudoCALLIndirect:
@@ -166,27 +180,42 @@ namespace {
 /// True when a top-level bare MI would be an uncommitted encode escape if it
 /// survived product Finalize. Meta/debug/CFI/KILL/inline-asm and late-noop
 /// pseudos are not encode cycles. Representation-expand shells (B/RET/
-/// BR_JT/PseudoCALLIndirect) are residual executable.
-bool isUncommittedBareEncodeEscape(const MachineInstr &MI) {
+/// BR_JT/PseudoCALLIndirect) are admitted as pre-expansion residual at the
+/// two intermediate Verify seats ONLY (D1.55 / GR1.7): Finalize runs
+/// expandLeftoverRetJtCall in the S1 owner (and unstamped Finalize) and
+/// wrap-only keeps B (the last wrap-only Finalize is addPreEmit after
+/// the LBN closer; addPostBBSections is empty and freeze is
+/// addPreEmitPass2), so a top-level RET/BR_JT/PseudoCALLIndirect or
+/// unwrapped B at freeze is an uncommitted escape. Standalone JALR_CALL
+/// is legal (encoder peels to JALR).
+bool isUncommittedBareEncodeEscape(const MachineInstr &MI, bool Freeze) {
   if (MI.isInsideBundle() || MI.isBundle())
     return false;
   if (MI.isMetaInstruction() || MI.isDebugInstr() || MI.isPosition() ||
       MI.isInlineAsm() || MI.isKill() || MI.isImplicitDef() ||
       MI.isCFIInstruction())
     return false;
-  // W67 non-tail fnptr call clone (JALR_MSP): legal standalone — golden
-  // JALR members are isTerminator=1, so the mid-block call never bundles;
-  // it serializes Desc-as-is (encoder peels `_MSP` -> identical member
-  // bytes). JAL_W direct calls bundle normally (member isTerminator=0).
-  if (MI.isCall() && !MI.isTerminator() && !MI.isPseudo()) {
-    if (const MachineFunction *PMF =
-            MI.getParent() ? MI.getParent()->getParent() : nullptr)
-      if (PMF->getSubtarget().getInstrInfo()->getName(MI.getOpcode())
-              .ends_with("_MSP"))
-        return false;
-  }
-  if (haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode()))
+  // Returning fnptr / musttail overlays: legal standalone. Golden JALR
+  // members are isTerminator=1, so a mid-block call never takes a member
+  // Desc; encoder peels JALR_CALL / JAL*_TCO onto the same JALR/JAL
+  // member as jump. JAL_W direct calls bundle normally (isTerminator=0).
+  const unsigned Opc = MI.getOpcode();
+  if (Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+      Opc == Haydn::JALR_TCO)
     return false;
+  if (haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode())) {
+    // D1.55 freeze-seat representation-escape law: ExpandPseudos ran
+    // before S1, S1 leftover-RET-expands before stamp, and stamped
+    // Finalize is wrap-only (AIEFinalizeBundle.cpp:40-59) plus inverse
+    // completion via complete packet templates. A surviving top-level
+    // RET/BR_JT/PseudoCALLIndirect at freeze is a representation escape and a
+    // surviving top-level B is a wrap escape — printer expansion is not
+    // a freeze carve-out. The two intermediate seats still admit the
+    // shell as pre-expansion residual (documented carve-out;
+    // BranchRelaxation/FixupHwLoops legally sit between them and the
+    // next Finalize).
+    return Freeze;
+  }
   if (haydn::bundle::isResidualExecutablePseudo(MI))
     return true;
   // Real non-pseudo encode ops (logical or private member) must be BUNDLE
@@ -214,8 +243,8 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // Freeze seat law (D1.13): freeze identity is bound by REGISTRATION,
   // never by instance order or count. The only instance constructed with
   // IsFreezeSeat=true is the one added at the addPreEmitPass2 seat
-  // (HaydnTargetMachine.cpp addPreEmitPass2); the three earlier Verify
-  // seats (addPreSched2, addPreEmitPass, addPostBBSections) pass explicit
+  // (HaydnTargetMachine.cpp addPreEmitPass2); the two earlier Verify
+  // seats (addPreSched2, addPreEmitPass) pass explicit
   // false and are invariant-only by construction. The legacy
   // default-constructed instance (-run-pass=haydn-verify-bundles) is
   // likewise invariant-only. -haydn-freeze-verify forces freeze on ANY
@@ -264,16 +293,18 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
   // GR2.7/D1.40 postcommit CFG identity wall (independent repeat of the
   // seat-level insertIndirectBranch refusal): after the first Finalize run
   // stamped the per-function CFG identity snapshot, the postcommit CFG is
-  // identity-frozen — live count (creation AND shrink), per-MBB identity
-  // tokens (equal-count erase+re-add / split-and-merge), and the block-ID
-  // numbering-slot slack (create-then-delete / erase+replace) never change.
-  // Generic BranchRelaxation is the only postcommit block creator
-  // (trampoline/RestoreBB/split arms); RenumberBlocks changes neither the
-  // token sequence (BasicBlock identity + BBID, never MBB numbers) nor the
-  // law set enforceable at this seat, so its entry renumber cannot mask or
-  // fake this wall. No stamp (limited-pipeline probes / MIR fixtures that
-  // never run Finalize) observes no wall. Fires at every Verify seat
-  // incl. freeze.
+  // identity-frozen — L1/L2 live count, L4 per-MBB identity tokens
+  // (CreationID folded in; null-BB/no-BBID replacement is L4, not a
+  // colliding NoBBIDSentinel), epoch-guarded L3 numbering slack, L5
+  // successor digest (no-exception edge wall), and L6 creation
+  // high-water. Generic BranchRelaxation is the only postcommit block
+  // creator (trampoline/RestoreBB/split arms). L3 stays epoch-guarded
+  // so BR entry RenumberBlocks remains legal; L6 is the un-launderable
+  // twin, so post-renumber create-then-delete cannot hide behind
+  // compacted numbering slots. Same postCommitCfgCreationViolation
+  // owner — no second predicate. No stamp (limited-pipeline probes /
+  // MIR fixtures that never run Finalize) observes no wall. Fires at
+  // every Verify seat incl. freeze.
   if (std::string CfgViolation =
           MF.getInfo<HaydnMachineFunctionInfo>()
               ->postCommitCfgCreationViolation(MF);
@@ -281,6 +312,51 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
     report_fatal_error(
         Twine("HaydnVerifyBundles: ") + MF.getName() + ": " + CfgViolation,
         /*GenCrashDiag=*/false);
+  }
+
+  // D1.36/GR2.8 counted software-latch order wall. Dual-seat with the
+  // demote producer (same shape as postCommitCfgCreationViolation above):
+  // every Verify instance including freeze, not freeze-only. Walk every
+  // MBB; nonempty haydn::hwloop::countedSoftwareLatchViolation is
+  // corruption-class — unconditional report_fatal_error. Discriminator
+  // (countdown vocabulary) lives in the shared predicate so ordinary
+  // branches do not false-fire. AIE peer: AIEBaseInstrInfo.cpp:1587-1635
+  // verifyControlFlowConstraints + verifyInstruction (TII verify is the
+  // independent fail-closed seat). Do not include HaydnBundle.h /
+  // HaydnBundleFormatSolver.h; do not grow a second latch-order machine.
+  for (const MachineBasicBlock &LatchMBB : MF) {
+    if (std::string LatchViolation =
+            haydn::hwloop::countedSoftwareLatchViolation(LatchMBB);
+        !LatchViolation.empty()) {
+      report_fatal_error(
+          Twine("HaydnVerifyBundles: ") + MF.getName() + ": " + LatchViolation,
+          /*GenCrashDiag=*/false);
+    }
+  }
+
+  // D1.150 dual-seat sibling of countedSoftwareLatchViolation: exact
+  // ST32/LD32 FixedStack pair on this latch's bound demote-save FI.
+  for (const MachineBasicBlock &LatchMBB : MF) {
+    if (std::string SaveViolation =
+            haydn::hwloop::demoteSaveHomePairViolation(LatchMBB);
+        !SaveViolation.empty()) {
+      report_fatal_error(
+          Twine("HaydnVerifyBundles: ") + MF.getName() + ": " + SaveViolation,
+          /*GenCrashDiag=*/false);
+    }
+  }
+
+  // GR1.8 / GR2.8 freeze-only independent layout wall. Intermediate
+  // Verify seats stay silent on range/align/complete-tail/vreg-FI so
+  // pre-pad probes remain legal. Runs before inverse so duplicate-control
+  // FileChecks this string rather than unit injectivity. Does not call
+  // TII.isBranchOffsetInRange.
+  if (Freeze) {
+    if (auto LayoutErr = haydn::bundle::verifyFrozenLayout(MF)) {
+      report_fatal_error(Twine("HaydnVerifyBundles: ") + MF.getName() + ": " +
+                             *LayoutErr,
+                         /*GenCrashDiag=*/false);
+    }
   }
 
   // Local registry wrapper (same type as haydnDefaultMCFormats in
@@ -333,12 +409,18 @@ bool HaydnVerifyBundles::runOnMachineFunction(MachineFunction &MF) {
       // Plain non-optnone verify-only MIR may still present all-bare MIs
       // before a separate Finalize run. Never change generic skipFunction.
       if ((Freeze || OptNone || HasCommittedCycle) &&
-          isUncommittedBareEncodeEscape(MI)) {
+          isUncommittedBareEncodeEscape(MI, Freeze)) {
+        const bool ReprEscape =
+            Freeze && haydn::bundle::isRepresentationExpandPseudo(MI.getOpcode());
         std::string Msg;
         raw_string_ostream OS(Msg);
         OS << "HaydnVerifyBundles: uncommitted bare encode MI in "
            << MF.getName() << " BB#" << MBB.getNumber();
-        if (OptNone)
+        if (ReprEscape)
+          OS << " (freeze representation-expand escape; every Finalize "
+                "seat already expanded B/RET/BR_JT/PseudoCALLIndirect; "
+                "printer expansion is not a verifier carve-out)";
+        else if (OptNone)
           OS << " (optnone is no-reorder Format E commit via FinalizeBundle; "
                 "refuse MC standalone escape)";
         else if (HasCommittedCycle)
@@ -528,9 +610,9 @@ INITIALIZE_PASS(HaydnVerifyBundles, DEBUG_TYPE, "Haydn Bundle Invariant Verifier
                 false, false)
 
 // Seat identity is bound at construction (D1.13): the addPreEmitPass2
-// adder passes IsFreezeSeat=true; every other seat and the legacy
-// -run-pass default construction pass false. No instance-count heuristic
-// and no cross-instance globals remain.
+// adder passes IsFreezeSeat=true; the addPreSched2 and addPreEmitPass
+// seats and the legacy -run-pass default construction pass false. No
+// instance-count heuristic and no cross-instance globals remain.
 HaydnVerifyBundles::HaydnVerifyBundles(bool IsFreezeSeat)
     : MachineFunctionPass(ID), FreezeSeat(IsFreezeSeat) {
   initializeHaydnVerifyBundlesPass(*PassRegistry::getPassRegistry());

@@ -30,14 +30,40 @@
 
 #include "HaydnBundle.h"
 #include "HaydnBundleMaterialize.h"
+#include "HaydnInstrInfo.h"
+#include "HaydnSubtarget.h"
+#include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
+#include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineInstrBundle.h"
+#include "llvm/CodeGen/MachineMemOperand.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 #include "gtest/gtest.h"
+
+#include <memory>
 
 // Opcode enums come via HaydnPortModel → HaydnMCTargetDesc (GET_INSTRINFO_ENUM).
 // Do not re-include the enum; a second include conflicts.
+
+extern "C" void LLVMInitializeHaydnTargetInfo();
+extern "C" void LLVMInitializeHaydnTarget();
+extern "C" void LLVMInitializeHaydnTargetMC();
 
 using namespace llvm;
 using namespace llvm::Haydn;
@@ -821,4 +847,364 @@ TEST(HaydnBundleMaterializeTest, ExactSolveDualMacTwinCoherentRow) {
     else
       EXPECT_TRUE(N.contains("_E2_")) << "E2 plan with E3 member " << N;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// D1.53: selected-member unit injectivity before as-is commit
+//===----------------------------------------------------------------------===//
+//
+// REGRESSION TEST GROUP (D1.53): the as-is arm of
+// commitExactMultiMIProductCycle (asIsGeneratedMembersFormLegalCycle) accepts
+// already-baked generated members and commits them with NO descriptor
+// mutation and NO explicit selected-member Format E unit-injectivity
+// validation. The explicit opcodesHaveFormatEUnitCover seats sit only AFTER
+// the mutation-prone bake arms; the as-is acceptance relied on the INDIRECT
+// MachineBundle::canAdd logical-cover overlay -- which asks whether SOME
+// member assignment is injective, never whether the CHOSEN entry-resident
+// records are.
+//
+// The corruption shape this leaves open: two members sharing ONE execution
+// unit while their LOGICAL cover is injective (MOVE32+MOVE32 -> ALU0/1/2
+// exist) and both residual FieldSlots are free. Slot occupancy and the
+// canAdd overlay both accept the pair; the as-is arm committed it into a
+// BUNDLE and the structural inverse verifier only fatalled LATE, after MIR
+// mutation. Law (D1.53): one reusable selected-member injectivity check over
+// the generated member records runs BEFORE any as-is private-member commit
+// mutates MIR. Rejection is pre-mutation refusal, not post-hoc detection.
+class HaydnBundleMaterializeMIFixture : public testing::Test {
+protected:
+  std::unique_ptr<HaydnTargetMachine> TM;
+  std::unique_ptr<LLVMContext> Ctx;
+  std::unique_ptr<Module> M;
+  std::unique_ptr<MachineModuleInfo> MMI;
+  std::unique_ptr<HaydnSubtarget> ST;
+  std::unique_ptr<MachineFunction> MF;
+  MachineBasicBlock *MBB = nullptr;
+
+  static void SetUpTestSuite() {
+    LLVMInitializeHaydnTargetInfo();
+    LLVMInitializeHaydnTarget();
+    LLVMInitializeHaydnTargetMC();
+  }
+
+  void SetUp() override {
+    std::string Error;
+    Triple TT("haydn-unknown-elf");
+    const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
+    ASSERT_NE(TheTarget, nullptr) << Error;
+
+    TargetOptions Options;
+    TM.reset(static_cast<HaydnTargetMachine *>(TheTarget->createTargetMachine(
+        TT, "generic", "", Options, std::nullopt, std::nullopt,
+        CodeGenOptLevel::Default)));
+    ASSERT_NE(TM, nullptr);
+
+    Ctx = std::make_unique<LLVMContext>();
+    M = std::make_unique<Module>("HaydnBundleMaterialize", *Ctx);
+    M->setDataLayout(TM->createDataLayout());
+    auto *FTy = FunctionType::get(Type::getVoidTy(*Ctx), false);
+    auto *F = Function::Create(FTy, GlobalValue::ExternalLinkage, "test", *M);
+
+    MMI = std::make_unique<MachineModuleInfo>(TM.get());
+    ST = std::make_unique<HaydnSubtarget>(TM->getTargetTriple(), "generic",
+                                          "generic", "", *TM);
+    MF = std::make_unique<MachineFunction>(*F, *TM, *ST, MMI->getContext(),
+                                           /*FunctionNum=*/0);
+    MBB = MF->CreateMachineBasicBlock();
+    MF->push_back(MBB);
+  }
+
+  const HaydnInstrInfo &TII() const { return *ST->getInstrInfo(); }
+  const TargetRegisterInfo *TRI() const { return ST->getRegisterInfo(); }
+
+  /// MOVE32 member (dest, src): identical unary shape at every entry/unit --
+  /// the twin-swap bake repair is shape-legal, so ONLY the selected-member
+  /// law distinguishes the duplicate-unit pair.
+  MachineInstr &move32Member(unsigned MemberOpc, Register Rd, Register Rs) {
+    return *BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(MemberOpc), Rd)
+                .addReg(Rs)
+                .getInstr();
+  }
+};
+
+// THE D1.53 duplicate-unit corruption probe named in GOALS: two
+// LOADSTORE0-only member stores (same unit, same encoded entry e0) cannot
+// coexist in one issue cycle (golden seven-unit injectivity; units !=
+// encoded entry identity). Shapes are identical and the same-base MMOs are
+// proven disjoint, so every OTHER same-cycle law passes and the only live
+// reject is the duplicate execution unit. Pre-fix, refusal came from the
+// INDIRECT MachineBundle::canAdd logical-cover overlay deep inside the as-is
+// walk -- an ordering accident, not a direct pre-mutation law; this probe
+// pins the refusal (and its pre-mutation fail-closed state) at the commit
+// seat itself, so the overlay can never be the only thing standing between
+// this corruption shape and a committed BUNDLE.
+TEST_F(HaydnBundleMaterializeMIFixture,
+       AsIsCommitRefusesDuplicateUnitMembersBeforeMutation) {
+  using namespace llvm::haydn::bundle;
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+
+  auto *GV = new GlobalVariable(*M, Type::getInt32Ty(*Ctx), /*isConstant=*/false,
+                                GlobalValue::ExternalLinkage, nullptr, "obj");
+  auto addMMO = [&](MachineInstr *MI, int64_t ByteOff) {
+    MI->addMemOperand(*MF, MF->getMachineMemOperand(
+                               MachinePointerInfo(GV, ByteOff),
+                               MachineMemOperand::MOStore, 4, Align(4)));
+  };
+
+  // S_SW_WITH_IMM member shape: (ins GPR32:$dest1_0, GPR32:$dest2_1,
+  // simm6:$imm_2) -- a pure store member used AS-IS at entry e0 unit
+  // LOADSTORE0 (no defs, no tie: the writeback tie lives only on the
+  // Slot0_LS_WbLat POST/WbLat family).
+  auto swMember = [&](Register Rbase, Register Rsrc, int64_t ByteOff) {
+    MachineInstr *MI =
+        BuildMI(*MBB, MBB->end(), DL,
+                II.get(Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6))
+            .addReg(Rbase)
+            .addReg(Rsrc)
+            .addImm(1)
+            .getInstr();
+    addMMO(MI, ByteOff);
+    return MI;
+  };
+
+  // Precondition: this IS the corruption shape -- the member record exists
+  // and is pinned to unit LOADSTORE0 (=4 in the generated Unit enum).
+  const haydn::format_e::FormatEMemberRec *Rec =
+      lookupPrivateFormatEMember(Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6);
+  ASSERT_NE(Rec, nullptr);
+  ASSERT_EQ(Rec->Unit, 4u) << "golden LOADSTORE0 unit id drifted";
+
+  // Proven-disjoint same-base MMOs (byte 0 vs 4, width 4): the store/load
+  // overlap law does NOT mask the unit law under null AA. GPR ports stay
+  // within 4R (2 bases + 2 srcs).
+  MachineInstr *St0 = swMember(Haydn::R4, Haydn::R6, /*ByteOff=*/0);
+  MachineInstr *St1 = swMember(Haydn::R5, Haydn::R7, /*ByteOff=*/4);
+
+  SmallVector<MachineInstr *, 2> DupUnit = {St0, St1};
+  // PRE-MUTATION refusal: both entry points reject the duplicate-unit
+  // selected-member set BEFORE any setDesc/bake, with no heal possible
+  // (LOADSTORE0 is the only unit either logical can take).
+  EXPECT_FALSE(canCoissueProductCycle(DupUnit))
+      << "probe must refuse two LOADSTORE0-only members sharing one unit";
+  EXPECT_FALSE(commitExactMultiMIProductCycle(DupUnit))
+      << "as-is commit must refuse duplicate-unit members before mutation";
+
+  // Fail-closed contract: the refusal is PRE-mutation. Opcode identity,
+  // operand count, parent, and bundle topology are unchanged -- the MIR
+  // holds the original member opcodes as bare MIs, never an orphaned
+  // partial bake and never a committed BUNDLE root.
+  EXPECT_EQ(St0->getOpcode(), Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6);
+  EXPECT_EQ(St1->getOpcode(), Haydn::S_SW_WITH_IMM_E3_E0_LOADSTORE0_RI6);
+  EXPECT_EQ(St0->getNumOperands(), 3u);
+  EXPECT_EQ(St1->getNumOperands(), 3u);
+  EXPECT_EQ(St0->getParent(), MBB);
+  EXPECT_EQ(St1->getParent(), MBB);
+  EXPECT_FALSE(St0->isBundled() || St0->isBundledWithPred() ||
+               St0->isBundledWithSucc());
+  EXPECT_FALSE(St1->isBundled() || St1->isBundledWithPred() ||
+               St1->isBundledWithSucc());
+  for (MachineBasicBlock::instr_iterator It = MBB->instr_begin();
+       It != MBB->instr_end(); ++It)
+    EXPECT_FALSE(It->isBundle()) << "refusal must not leave a BUNDLE root";
+
+  // Control (distinct units, same family): the law is unit-keyed, not a
+  // blanket member-pair reject. MOVE32 twins at distinct entries with
+  // DISTINCT units (ALU1 vs ALU2) must still commit through the as-is arm
+  // and stamp the E3 row.
+  MachineInstr *Mv1 =
+      &move32Member(Haydn::MOVE32_E3_E1_ALU1_R, Haydn::R2, Haydn::R8);
+  MachineInstr *Mv2 =
+      &move32Member(Haydn::MOVE32_E3_E2_ALU2_R, Haydn::R3, Haydn::R9);
+  SmallVector<MachineInstr *, 2> DistinctUnit = {Mv1, Mv2};
+  EXPECT_TRUE(canCoissueProductCycle(DistinctUnit))
+      << "distinct-unit member pair must stay as-is coissuable";
+  EXPECT_TRUE(commitExactMultiMIProductCycle(DistinctUnit))
+      << "distinct-unit member pair must stay as-is committable";
+  MachineBasicBlock::instr_iterator RootIt = getBundleStart(Mv1->getIterator());
+  ASSERT_TRUE(RootIt->isBundle()) << "control pair must have committed a root";
+  auto Row = getBundleRowID(*RootIt);
+  ASSERT_TRUE(Row.has_value());
+  EXPECT_TRUE(*Row == BundleFormatRowID::E96ThreeEntry)
+      << "E3-member as-is commit must stamp the E96ThreeEntry row";
+}
+
+// THE red-then-green regression: adjacent-entry same-unit members whose
+// LOGICAL cover is injective. Entries are distinct (e1 vs e2) and both
+// FieldSlots are free, and the peeled logical cover (MOVE32+MOVE32 ->
+// ALU0/1/2 exist) is assignable, so pre-fix NOTHING rejected this pair:
+// the indirect canAdd overlay passed, and the as-is arm committed the
+// duplicate-unit (ALU0 + ALU0) members verbatim into a BUNDLE -- the
+// structural inverse verifier only fatalled LATE, after MIR mutation.
+//
+// Post-fix law: the as-is selected set is refused BEFORE mutation, and the
+// SAME selected-member law re-runs on the POST-bake set before the
+// irreversible applyFormatOrdering (per-slot representative picks can
+// re-bind a duplicate unit while the logical cover stays assignable). The
+// pinned invariant is therefore total: the duplicate-unit INPUT identity is
+// never the committed set -- the commit is either refused outright (opcodes
+// unchanged, no bundle) or lands on a healed, unit-injective member set.
+// Pre-fix this test is RED (as-is commits the input identity verbatim);
+// post-fix GREEN on either arm.
+TEST_F(HaydnBundleMaterializeMIFixture,
+       AsIsCommitNeverCommitsAdjacentEntrySameUnitIdentity) {
+  using namespace llvm::haydn::bundle;
+  MachineInstr *MvE1 =
+      &move32Member(Haydn::MOVE32_E3_E1_ALU0_R, Haydn::R2, Haydn::R8);
+  MachineInstr *MvE2 =
+      &move32Member(Haydn::MOVE32_E3_E2_ALU0_R, Haydn::R3, Haydn::R9);
+  SmallVector<MachineInstr *, 2> SameUnit = {MvE1, MvE2};
+
+  const bool Committed = commitExactMultiMIProductCycle(SameUnit);
+  if (Committed) {
+    // Heal arm owned the commit: the committed selected set must be
+    // unit-injective and must NOT be the as-is duplicate-unit identity.
+    const haydn::format_e::FormatEMemberRec *R1 =
+        lookupPrivateFormatEMember(MvE1->getOpcode());
+    const haydn::format_e::FormatEMemberRec *R2 =
+        lookupPrivateFormatEMember(MvE2->getOpcode());
+    ASSERT_NE(R1, nullptr);
+    ASSERT_NE(R2, nullptr);
+    EXPECT_NE(R1->Unit, R2->Unit) << "committed members share one unit";
+    EXPECT_FALSE(MvE1->getOpcode() == Haydn::MOVE32_E3_E1_ALU0_R &&
+                 MvE2->getOpcode() == Haydn::MOVE32_E3_E2_ALU0_R)
+        << "as-is duplicate-unit identity must never be the committed set";
+    MachineBasicBlock::instr_iterator RootIt =
+        getBundleStart(MvE1->getIterator());
+    ASSERT_TRUE(RootIt->isBundle());
+  } else {
+    // Refused outright: pre-mutation state (opcodes unchanged, no bundle).
+    EXPECT_EQ(MvE1->getOpcode(), Haydn::MOVE32_E3_E1_ALU0_R);
+    EXPECT_EQ(MvE2->getOpcode(), Haydn::MOVE32_E3_E2_ALU0_R);
+    EXPECT_FALSE(MvE1->isBundled() || MvE1->isBundledWithPred() ||
+                 MvE1->isBundledWithSucc());
+    EXPECT_FALSE(MvE2->isBundled() || MvE2->isBundledWithPred() ||
+                 MvE2->isBundledWithSucc());
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Occupancy-drop of BUNDLE-header implicits (one helper)
+//===----------------------------------------------------------------------===//
+//
+// Generic finalizeBundle (MachineInstrBundle.cpp:184-220) copies member
+// all_defs/all_uses onto the header. After same-row NOP, prune in place —
+// do not re-run finalizeBundle. KEEP $sfr iff a remaining member occupies
+// SFR (Desc-named writer or leftover physical implicit-def $sfr). DROP on
+// tii5's surviving ADD32 (no Defs=[SFR], no SFR operand). Jump/RET JALR
+// does not occupy leftover catalog caller-saved GPRs; JALR_CALL ABI
+// clobbers stay.
+
+static bool hasImplicitDefOf(const MachineInstr &MI, Register R) {
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.isImplicit() && MO.isDef() && MO.getReg() == R)
+      return true;
+  return false;
+}
+
+TEST_F(HaydnBundleMaterializeMIFixture,
+       NeutralizeBeqzDropsRootSfrOnAdd32Survivor) {
+  MachineBasicBlock *Tgt = MF->CreateMachineBasicBlock();
+  MF->push_back(Tgt);
+  MBB->addSuccessor(Tgt);
+
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::ADD32), Haydn::R3)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R2)
+          .getInstr();
+  MachineInstr *Br =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::BEQZ_W))
+          .addReg(Haydn::R0)
+          .addMBB(Tgt)
+          .addReg(Haydn::SFR, RegState::ImplicitDefine | RegState::Dead)
+          .getInstr();
+
+  finalizeBundle(*MBB, Add->getIterator(), std::next(Br->getIterator()));
+  MachineInstr &Root = *getBundleStart(Add->getIterator());
+  ASSERT_TRUE(Root.isBundle());
+  ASSERT_TRUE(hasImplicitDefOf(Root, Haydn::SFR));
+
+  neutralizeSameRowNop(*Br, TII());
+  dropBundleImplicitRegsAbsentFromMembers(Root);
+
+  EXPECT_FALSE(hasImplicitDefOf(Root, Haydn::SFR))
+      << "tii5 ADD32 survivor does not occupy SFR";
+  EXPECT_EQ(Add->getOpcode(), Haydn::ADD32);
+  EXPECT_NE(Br->getOpcode(), Haydn::BEQZ_W);
+  EXPECT_EQ(Br->getNumOperands(), 0u);
+}
+
+TEST_F(HaydnBundleMaterializeMIFixture,
+       LeftoverPhysicalSfrOnSurvivorKeepsRootSfr) {
+  MachineBasicBlock *Tgt = MF->CreateMachineBasicBlock();
+  MF->push_back(Tgt);
+  MBB->addSuccessor(Tgt);
+
+  MachineInstr *Add =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::ADD32), Haydn::R3)
+          .addReg(Haydn::R1)
+          .addReg(Haydn::R2)
+          .addReg(Haydn::SFR, RegState::ImplicitDefine | RegState::Dead)
+          .getInstr();
+  MachineInstr *Br =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::BEQZ_W))
+          .addReg(Haydn::R0)
+          .addMBB(Tgt)
+          .addReg(Haydn::SFR, RegState::ImplicitDefine | RegState::Dead)
+          .getInstr();
+
+  finalizeBundle(*MBB, Add->getIterator(), std::next(Br->getIterator()));
+  MachineInstr &Root = *getBundleStart(Add->getIterator());
+  ASSERT_TRUE(Root.isBundle());
+  ASSERT_TRUE(hasImplicitDefOf(Root, Haydn::SFR));
+
+  neutralizeSameRowNop(*Br, TII());
+  dropBundleImplicitRegsAbsentFromMembers(Root);
+
+  EXPECT_TRUE(hasImplicitDefOf(Root, Haydn::SFR))
+      << "leftover physical $sfr on a surviving member occupies the root";
+  EXPECT_TRUE(hasImplicitDefOf(*Add, Haydn::SFR));
+}
+
+TEST_F(HaydnBundleMaterializeMIFixture,
+       CatalogJalrJumpDropsCallerSavedRootImplicits) {
+  MachineInstr *Jalr =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::JALR_W), Haydn::R15)
+          .addReg(Haydn::R9)
+          .addImm(0)
+          .getInstr();
+
+  finalizeBundle(*MBB, Jalr->getIterator(), std::next(Jalr->getIterator()));
+  MachineInstr &Root = *getBundleStart(Jalr->getIterator());
+  ASSERT_TRUE(Root.isBundle());
+  ASSERT_TRUE(hasImplicitDefOf(Root, Haydn::R1))
+      << "generic finalizeBundle copies catalog JALR_W caller-saved Defs";
+
+  dropBundleImplicitRegsAbsentFromMembers(Root);
+
+  EXPECT_FALSE(hasImplicitDefOf(Root, Haydn::R1))
+      << "JALR jump/RET does not occupy leftover catalog caller-saved GPRs";
+  EXPECT_TRUE(hasImplicitDefOf(Root, Haydn::R15))
+      << "explicit $rt occupancy stays on the root";
+}
+
+TEST_F(HaydnBundleMaterializeMIFixture, JalrCallKeepsAbiClobberRootImplicits) {
+  MachineInstr *Call =
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII().get(Haydn::JALR_CALL),
+              Haydn::R15)
+          .addReg(Haydn::R9)
+          .addImm(0)
+          .getInstr();
+
+  finalizeBundle(*MBB, Call->getIterator(), std::next(Call->getIterator()));
+  MachineInstr &Root = *getBundleStart(Call->getIterator());
+  ASSERT_TRUE(Root.isBundle());
+  ASSERT_TRUE(hasImplicitDefOf(Root, Haydn::R1));
+
+  dropBundleImplicitRegsAbsentFromMembers(Root);
+
+  EXPECT_TRUE(hasImplicitDefOf(Root, Haydn::R1))
+      << "JALR_CALL ABI clobbers occupy the root";
+  EXPECT_TRUE(hasImplicitDefOf(Root, Haydn::R15));
 }

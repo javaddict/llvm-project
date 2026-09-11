@@ -49,8 +49,7 @@
 define float @ret_float_2p5() {
 ; CHECK-LABEL: ret_float_2p5:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 1026 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
@@ -64,8 +63,7 @@ define float @ret_float_2p5() {
 define float @ret_float_1p0() {
 ; CHECK-LABEL: ret_float_1p0:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 1016 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
@@ -79,8 +77,7 @@ define float @ret_float_1p0() {
 define float @ret_float_0p0() {
 ; CHECK-LABEL: ret_float_0p0:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -93,8 +90,7 @@ define float @ret_float_0p0() {
 define float @ret_float_neg2p0() {
 ; CHECK-LABEL: ret_float_neg2p0:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 3072 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
@@ -110,8 +106,7 @@ define float @ret_float_neg2p0() {
 define double @ret_double_3p14() {
 ; CHECK-LABEL: ret_double_3p14:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; lui r1, 1311 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -293601 }
@@ -136,8 +131,7 @@ define double @ret_double_3p14() {
 define double @ret_double_1p0() {
 ; CHECK-LABEL: ret_double_1p0:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
@@ -162,16 +156,16 @@ define double @ret_double_1p0() {
 define float @const_plus_arg(float %a) {
 ; CHECK-LABEL: const_plus_arg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; lui r2, 1026 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, 0 }
-; CHECK-NEXT:    { nop; jal lr, __addsf3 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; lui r3, __addsf3 }
+; CHECK-NEXT:    { addi32 r3, r3, __addsf3; addi32 r2, r2, 0 }
+; CHECK-NEXT:    { jalr lr, r3, 0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

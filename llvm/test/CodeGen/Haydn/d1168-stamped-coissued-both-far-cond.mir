@@ -1,0 +1,515 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o %t.mir
+# RUN: FileCheck %s --input-file=%t.mir
+# RUN: llc -mtriple=haydn-unknown-elf -x mir -start-after=livedebugvalues \
+# RUN:   -filetype=obj %t.mir -o %t.o
+# RUN: llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s --check-prefix=MC
+# REQUIRES: haydn-registered-target
+#
+# D1.168 / GR1.4 B: stamped coissued both-far cond through
+# verifyCommittedBundle + MC. rewriteBothFarCondOntoJalr vacates the cond
+# child with neutralizeSameRowNop (HexagonConstPropagation.cpp:2508-2512
+# replaceWithNop); ADD32 stays on the committed root (no singleton-split,
+# no RestoreBB). RISC-V RestoreBB (RISCVInstrInfo.cpp:1433-1443) is unused;
+# AIE empty PreEmit (AIE2TargetMachine.cpp:88). ARM ImmBranch is MI+MaxDisp
+# only (ARMConstantIslandPass.cpp:188-197).
+#
+# already_long_jalr_no_repromote: Rank>=LongTemplate JALR is not stacked
+# (D1.173 LBN iterates LayoutSite; classify re-derives InBlockJalr).
+#
+# Layout: 180 NOP parcels in bb.1 put TBB %bb.2 and FBB %bb.3 past
+# WIDE_BranchSImm12 (buffer=4), same template as d198/d164-lbn.
+
+--- |
+  define void @stamped_coissued_both_far(i32 %c) {
+  entry:
+    br i1 undef, label %tbb, label %fbb
+  pad:
+    ret void
+  tbb:
+    ret void
+  fbb:
+    ret void
+  }
+  define void @already_long_jalr_no_repromote() {
+  entry:
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+...
+---
+name:            stamped_coissued_both_far
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.3
+    liveins: $r1, $r2, $r6, $r15
+    $r6 = LUI %bb.3
+    $r6 = ADDI32_W $r6, %bb.3
+    BUNDLE implicit-def $r3, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      BNEZ_W $r1, %bb.2, implicit-def dead $sfr
+    }
+    $r6 = JALR_W $r6, 0
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.tbb:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.fbb:
+    liveins: $r15
+    RET implicit $r15
+
+---
+name:            already_long_jalr_no_repromote
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r6, $r15
+    $r6 = LUI %bb.2
+    $r6 = ADDI32_W $r6, %bb.2
+    $r6 = JALR_W $r6, 0
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+# CHECK-LABEL: name:            stamped_coissued_both_far
+# CHECK: bb.0.entry
+# CHECK: BUNDLE 1, 0
+# CHECK: ADD32{{.*}}E3
+# CHECK-NEXT: NOP
+# CHECK-NOT: BNEZ
+# CHECK: LUI{{.*}}%bb.2
+# CHECK: ADDI32{{.*}}%bb.2
+# CHECK: XOR32
+# CHECK: SEQ32
+# CHECK: MOVF32
+# CHECK: JALR
+# CHECK-NOT: B %bb.
+# CHECK-NOT: bb.4
+# CHECK: bb.1.pad
+#
+# CHECK-LABEL: name:            already_long_jalr_no_repromote
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.2
+# CHECK: ADDI32{{.*}}%bb.2
+# CHECK: JALR
+# CHECK-NOT: XOR32
+# CHECK-NOT: SEQ32
+# CHECK-NOT: MOVF32
+# CHECK-NOT: MOVF
+# CHECK-NOT: B %bb.
+# CHECK-NOT: bb.3
+#
+# MC-LABEL: <stamped_coissued_both_far>:
+# MC: add32
+# MC-DAG: nop
+# MC: xor32
+# MC: seq32
+# MC: movf32
+# MC: jalr
+# MC-NOT: bnez

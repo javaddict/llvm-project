@@ -251,17 +251,14 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_LS_IMM;
 
   case Haydn::FIXUP_HAYDN_JALRSImm12:
-    // R_HAYDN_JALRSImm12 (ELF 22). Distinct from the RI12 branch row.
-    // Kind is selected by typed (row, entry, member) via
-    // findFixupFromFixupFields (RI12 opc 1); FieldLsb is E2 e0 @32 /
-    // E3 e0 @23 / E3 e1 @54. Call-indirect / JT dispatch (jalr rd, rs, 0)
-    // bake a zero imm and never reach this mapping. PIC/JT table entries
-    // are R_HAYDN_32_PCREL (FK_Data_4 + IsPCRel), not a second JALR kind.
-    // Local targets still resolve in the AsmBackend; unresolved externals
-    // emit ELF 22. Peer: AIE dense fixup->ELF map
-    // (AIEELFObjectWriter.cpp:60-63); Haydn cannot be dense because
-    // MC-only kinds sit after the shared ELF range.
-    return ELF::R_HAYDN_JALRSImm12;
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E0:
+  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
+    // ELF 22/32/33 stay as residual identity — do not remint. A missed
+    // assembler gate must not emit R_HAYDN_JALRSImm12* (ISA-69: no golden
+    // relocation base; refusing silent S+A-P). Call-indirect / JT
+    // (jalr rd, rs, 0) bake a zero imm and never reach this mapping.
+    reportError(Fixup.getLoc(), HaydnReloc::kUnsupportedSymbolicJalrDiag);
+    return ELF::R_HAYDN_NONE;
 
   case Haydn::FIXUP_HAYDN_LO20_E1:
     return ELF::R_HAYDN_LO20_E1;
@@ -279,10 +276,6 @@ unsigned HaydnELFObjectWriter::getRelocType(const MCFixup &Fixup,
     return ELF::R_HAYDN_WIDE_BranchSImm12_RI_E3E0;
   case Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1:
     return ELF::R_HAYDN_WIDE_BranchSImm12_RI_E3E1;
-  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E0:
-    return ELF::R_HAYDN_JALRSImm12_E3E0;
-  case Haydn::FIXUP_HAYDN_JALRSImm12_E3E1:
-    return ELF::R_HAYDN_JALRSImm12_E3E1;
   case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2:
     return ELF::R_HAYDN_HI12_E3E0_ALU2;
   case Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0:

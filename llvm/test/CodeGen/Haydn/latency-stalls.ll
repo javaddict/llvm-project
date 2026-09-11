@@ -2,8 +2,8 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=O2
 ;
 ; Haydn has an EXPOSED pipeline: no interlock. A Data_Latency = 2 def (loads,
-; CSRR, MAC) must not be read in the next bundle. HaydnLatencyStalls is the
-; addPreSched2 correctness net / auditor (before first Finalize):
+; CSRR, MAC) must not be read in the next bundle. The dest-window stall net
+; is folded into S1 PostMachineScheduler (GR1.2; before wrap-only Finalize):
 ;
 ;   * plain -O0 without optnone still runs postmisched + Finalize; since
 ;     GR2.4 optnone runs postmisched too (forcePostRAScheduling) and the

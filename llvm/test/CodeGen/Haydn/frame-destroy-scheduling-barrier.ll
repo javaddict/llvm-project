@@ -36,7 +36,9 @@ define void @varargs_use(i32 %n, ...) nounwind {
 ; frame-destroy SP restore is not co-issued with a store.
 ; CHECK: subi32 sp, sp, 72
 ; CHECK: st32 lr, sp,
-; CHECK: jal lr, sink
+; CHECK: lui{{.*}}sink
+; CHECK: addi32{{.*}}sink
+; CHECK: jalr{{.*}}lr
 ; CHECK: ld32 lr, sp,
 ; CHECK-NOT: { {{.*}}st32{{.*}}addi32{{(_w)?}}{{.*}}sp, sp
 ; CHECK-NOT: { {{.*}}addi32{{(_w)?}}{{.*}}sp, sp{{.*}}st32

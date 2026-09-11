@@ -35,7 +35,7 @@ define i64 @test_mulaa32s_fir_hh(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d2 }
 ; CHECK-NEXT:    { nop; srai32 r1, r2, 16 }
-; CHECK-NEXT:    { nop; {{(nop; )?}}sext32t64 d2, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; fmula32s.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -58,7 +58,7 @@ define i64 @test_mulaa32s_fir_hl(i64 %acc, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d2 }
 ; CHECK-NEXT:    { nop; srai32 r1, r2, 16 }
-; CHECK-NEXT:    { nop; {{(nop; )?}}sext32t64 d2, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; fmula32s.lh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -161,7 +161,7 @@ define i64 @test_fir_chain_hh_hl(i64 %acc0, i64 %a, i64 %b) {
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d2 }
 ; CHECK-NEXT:    { nop; srai32 r1, r2, 16 }
-; CHECK-NEXT:    { nop; {{(nop; )?}}sext32t64 d2, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d2, d2, 32 }
 ; CHECK-NEXT:    { nop; fmula32s.hh d0, d1, d2 }
 ; CHECK-NEXT:    { nop; nop }

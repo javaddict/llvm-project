@@ -9,6 +9,8 @@
 # 'dest-window wrap: destWindowWrapPadNeed='. Pads present → silent
 # (negative control). Mirrors the d17-freeze-seam-latency shape; this
 # closes the "freeze gate blind to the wrap" class (CB-167 lesson).
+# Terminals are committed JALR members (D1.55): freeze rejects top-level
+# RET. The representation-escape red path lives in d155.
 #
 # RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
 # RUN:   -run-pass=haydn-verify-bundles %t/wrap-violation.mir -o - 2>&1 \
@@ -58,7 +60,9 @@ body:             |
     BUNDLE 0, 0, implicit-def $r9, implicit killed $r2, implicit killed $r3 {
       $r9 = ADD32_E2_E0_ALU0_RR killed $r2, killed $r3
     }
-    RET implicit $r15, implicit $r9
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
 ...
 
 #--- wrap-padded.mir
@@ -101,7 +105,9 @@ body:             |
     BUNDLE 0, 0, implicit-def $r9, implicit killed $r2, implicit killed $r3 {
       $r9 = ADD32_E2_E0_ALU0_RR killed $r2, killed $r3
     }
-    RET implicit $r15, implicit $r9
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
 ...
 
 #--- no-self-edge.mir
@@ -124,5 +130,7 @@ body:             |
     BUNDLE 0, 0, implicit-def $r3, implicit $r2 {
       $r3 = ADD32_E2_E0_ALU0_RR $r2, $r2
     }
-    RET implicit $r15, implicit $r3
+    BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
 ...

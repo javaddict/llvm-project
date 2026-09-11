@@ -568,6 +568,57 @@ class ZOLSetupExitLatency : public ScheduleDAGMutation {
       }
       ExitSU.setDepthDirty();
       SU.setDepthDirty();
+
+      // Formation sinks SET to the end of the setup MBB so Off1 is the
+      // Following floor (matmult: 36B). PostRA otherwise places independent
+      // preheader work after SET (same kernel: 564B) and the closer fatals
+      // because GR1.4 cannot CFG-demote. Pin every same-MBB SU whose MI
+      // currently comes before SET so it cannot move into the Off1 window.
+      // Latency 0: order only; Format HR still decides coissue. Skip SUs
+      // already after SET (following pads) and skip a SET→Other edge that
+      // would cycle.
+      for (SUnit &Other : DAG->SUnits) {
+        if (&Other == &SU)
+          continue;
+        MachineInstr *OMI = Other.getInstr();
+        if (!OMI || OMI->getParent() != MI->getParent())
+          continue;
+        if (OMI->isTerminator() || OMI->isMetaInstruction())
+          continue;
+        bool OtherAfterSet = false;
+        for (MachineBasicBlock::instr_iterator I = std::next(MI->getIterator()),
+                                               E = MI->getParent()->instr_end();
+             I != E; ++I) {
+          if (&*I == OMI) {
+            OtherAfterSet = true;
+            break;
+          }
+        }
+        if (OtherAfterSet)
+          continue;
+        bool AlreadyPred = false;
+        for (const SDep &Pred : SU.Preds) {
+          if (Pred.getSUnit() == &Other) {
+            AlreadyPred = true;
+            break;
+          }
+        }
+        if (AlreadyPred)
+          continue;
+        bool WouldCycle = false;
+        for (const SDep &Succ : SU.Succs) {
+          if (Succ.getSUnit() == &Other) {
+            WouldCycle = true;
+            break;
+          }
+        }
+        if (WouldCycle)
+          continue;
+        SDep Dep(&Other, SDep::Artificial);
+        Dep.setLatency(0);
+        SU.addPred(Dep, /*Required=*/true);
+      }
+      SU.setDepthDirty();
     }
   }
 };

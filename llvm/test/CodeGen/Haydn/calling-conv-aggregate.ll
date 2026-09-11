@@ -39,7 +39,9 @@ entry:
 ; Call passes the aggregate as a plain pointer (no byval memcpy into CC slots).
 define i32 @call_take_big(ptr %p) nounwind {
 ; CHECK-LABEL: call_take_big:
-; CHECK: jal{{(\.s[012])?}} {{.*}}, take_big
+; CHECK: lui{{.*}}take_big
+; CHECK: addi32{{.*}}take_big
+; CHECK: jalr{{.*}}lr
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %r = call i32 @take_big(ptr %p)

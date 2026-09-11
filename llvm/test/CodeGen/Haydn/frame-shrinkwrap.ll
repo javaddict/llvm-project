@@ -17,7 +17,9 @@ define i32 @shrink_wrap_cfi_test(i32 %cond) {
 ; CHECK: .cfi_startproc
 ; CHECK: subi32{{.*}}sp
 ; CHECK: .cfi_def_cfa_offset
-; CHECK: jal{{.*}}getValue
+; CHECK: lui{{.*}}getValue
+; CHECK: addi32{{.*}}getValue
+; CHECK: jalr
 ; CHECK: jalr{{(\.s[012])?}}
 entry:
   %cmp = icmp eq i32 %cond, 0

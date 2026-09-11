@@ -13,8 +13,7 @@ declare i32 @llvm.haydn.log2(i32)
 define i32 @nsa64_emit(i64 %a) {
 ; CHECK-LABEL: nsa64_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; nsa64 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -28,8 +27,7 @@ entry:
 define i32 @nsa32_l_emit(i64 %a) {
 ; CHECK-LABEL: nsa32_l_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; nsa32_l r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -43,8 +41,7 @@ entry:
 define i32 @popcount64_emit(i64 %a) {
 ; CHECK-LABEL: popcount64_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; popcount64 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -58,8 +55,7 @@ entry:
 define i32 @log2_emit(i32 %a) {
 ; CHECK-LABEL: log2_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; log2 r1, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -78,8 +74,7 @@ declare i32 @llvm.haydn.x4hmin16(<4 x i16>)
 define i32 @x2hmax32_emit(<2 x i32> %a) {
 ; CHECK-LABEL: x2hmax32_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2hmax32 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -93,8 +88,7 @@ entry:
 define i32 @x2hmin32_emit(<2 x i32> %a) {
 ; CHECK-LABEL: x2hmin32_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2hmin32 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -108,8 +102,7 @@ entry:
 define i32 @x4hmax16_emit(<4 x i16> %a) {
 ; CHECK-LABEL: x4hmax16_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4hmax16 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -123,8 +116,7 @@ entry:
 define i32 @x4hmin16_emit(<4 x i16> %a) {
 ; CHECK-LABEL: x4hmin16_emit:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4hmin16 r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

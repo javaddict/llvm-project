@@ -19,7 +19,9 @@
 // Relocated owners (not this pass):
 //   VASTART / VACOPY / G_VAARG  — HaydnLegalizerInfo
 //   integer div/rem libcalls    — legalizer libcallFor
-//   direct calls                — CallLowering emits JAL_W + regmask
+//   direct calls                — CallLowering emits LOAD_ADDR + JAL_IND;
+//                                 short CallSImm20 JAL is LLD cycle-neutral
+//                                 encoding relax, not ISel
 //   ADJCALLSTACKDOWN/UP         — FrameLowering::eliminateCallFramePseudoInstr
 //
 //===----------------------------------------------------------------------===//

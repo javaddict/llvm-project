@@ -11,9 +11,12 @@
 
 ; ISEL-LABEL: name: sdiv_i32_legalizer
 ; ISEL-NOT: LIBCALL_
-; ISEL: JAL_W
+; ISEL: LOAD_ADDR
+; ISEL: JALR_CALL
 ; ASM-LABEL: sdiv_i32_legalizer:
-; ASM: jal{{.*}}__divsi3
+; ASM: lui{{.*}}__divsi3
+; ASM: addi32{{.*}}__divsi3
+; ASM: jalr
 define i32 @sdiv_i32_legalizer(i32 %a, i32 %b) {
   %r = sdiv i32 %a, %b
   ret i32 %r
@@ -21,9 +24,12 @@ define i32 @sdiv_i32_legalizer(i32 %a, i32 %b) {
 
 ; ISEL-LABEL: name: udiv_i32_legalizer
 ; ISEL-NOT: LIBCALL_
-; ISEL: JAL_W
+; ISEL: LOAD_ADDR
+; ISEL: JALR_CALL
 ; ASM-LABEL: udiv_i32_legalizer:
-; ASM: jal{{.*}}__udivsi3
+; ASM: lui{{.*}}__udivsi3
+; ASM: addi32{{.*}}__udivsi3
+; ASM: jalr
 define i32 @udiv_i32_legalizer(i32 %a, i32 %b) {
   %r = udiv i32 %a, %b
   ret i32 %r
@@ -32,7 +38,9 @@ define i32 @udiv_i32_legalizer(i32 %a, i32 %b) {
 ; ISEL-LABEL: name: srem_i32_legalizer
 ; ISEL-NOT: LIBCALL_
 ; ASM-LABEL: srem_i32_legalizer:
-; ASM: jal{{.*}}__modsi3
+; ASM: lui{{.*}}__modsi3
+; ASM: addi32{{.*}}__modsi3
+; ASM: jalr
 define i32 @srem_i32_legalizer(i32 %a, i32 %b) {
   %r = srem i32 %a, %b
   ret i32 %r
@@ -41,7 +49,9 @@ define i32 @srem_i32_legalizer(i32 %a, i32 %b) {
 ; ISEL-LABEL: name: urem_i32_legalizer
 ; ISEL-NOT: LIBCALL_
 ; ASM-LABEL: urem_i32_legalizer:
-; ASM: jal{{.*}}__umodsi3
+; ASM: lui{{.*}}__umodsi3
+; ASM: addi32{{.*}}__umodsi3
+; ASM: jalr
 define i32 @urem_i32_legalizer(i32 %a, i32 %b) {
   %r = urem i32 %a, %b
   ret i32 %r

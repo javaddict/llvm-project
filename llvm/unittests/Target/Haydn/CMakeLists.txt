@@ -27,6 +27,7 @@ add_llvm_target_unittest(HaydnTests
   HaydnBundleMaterializeTest.cpp
   HaydnBundlePlanTest.cpp
   HaydnBundleTest.cpp
+  HaydnCallRelaxTest.cpp
   HaydnBundleVerifyTest.cpp
   HaydnDR64PackLazyFITest.cpp
   HaydnEstimateCyclesTest.cpp
@@ -42,8 +43,9 @@ add_llvm_target_unittest(HaydnTests
   HaydnIssueWidthCycleTest.cpp
   HaydnIntraCycleWAWTest.cpp
   HaydnLaneStoreFoldTest.cpp
-  HaydnLateConvergenceBudgetTest.cpp
+  HaydnLayoutSiteTest.cpp
   HaydnLibcallNamesTest.cpp
+  HaydnMCCheckerTest.cpp
   HaydnMCFormatsTest.cpp
   HaydnMaterializeMultiOpcodeTest.cpp
   HaydnMemoryCycleTest.cpp

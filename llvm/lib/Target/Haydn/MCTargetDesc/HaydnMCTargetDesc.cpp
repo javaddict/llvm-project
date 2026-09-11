@@ -9,6 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnMCTargetDesc.h"
+#include "HaydnBaseInfo.h"
 #include "HaydnInstPrinter.h"
 #include "HaydnMCAsmInfo.h"
 #include "HaydnMCELFStreamer.h"
@@ -62,6 +63,13 @@ const MCInstrInfo &llvm::getHaydnSharedMCInstrInfo() {
   return Info;
 }
 
+const MCRegisterInfo &llvm::getHaydnSharedMCRegisterInfo() {
+  static MCRegisterInfo Info;
+  static std::once_flag Once;
+  std::call_once(Once, [] { InitHaydnMCRegisterInfo(&Info, Haydn::R15); });
+  return Info;
+}
+
 static MCInstPrinter *createHaydnMCInstPrinter(const Triple &T,
                                                 unsigned SyntaxVariant,
                                                 const MCAsmInfo &MAI,
@@ -80,8 +88,10 @@ static MCSubtargetInfo *createHaydnMCSubtargetInfo(const Triple &TT,
                                                     StringRef CPU, StringRef FS) {
   std::string CPUName = std::string(CPU);
   if (CPUName.empty())
-    CPUName = "generic";
-  return createHaydnMCSubtargetInfoImpl(TT, CPUName, /*TuneCPU=*/CPUName, FS);
+    CPUName = Haydn::kDefaultCPUName;
+  return createHaydnMCSubtargetInfoImpl(TT, CPUName,
+                                        /*TuneCPU=*/Haydn::kDefaultTuneCPUName,
+                                        FS);
 }
 
 namespace {

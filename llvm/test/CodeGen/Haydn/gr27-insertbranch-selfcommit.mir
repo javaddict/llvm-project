@@ -8,7 +8,7 @@
 # finalize stamp) SELF-COMMITS as a committed singleton BUNDLE root at
 # emission time — no bare real-encode MI is reachable between a postcommit
 # BR/Fixup invocation and the next Finalize (GR2.7 I3). Representation
-# shells (B) stay bare: Finalize expands B to BEQZ_W_MSP.
+# shells (B) stay B through MIR; encoder peels BEQZ bits.
 #
 # Product-ordered chain: finalize first (stamps the postcommit block
 # budget), then branch-relaxation with the safety buffer at 0 so the
@@ -57,12 +57,11 @@ body:             |
   bb.1.taken:
     successors: %bb.2
     liveins: $r15
-    ; Uncond representation shell stays a BUNDLE root wrapping B; Finalize
-    ; (already ran) expanded it to the MSP clone.
+    ; Uncond representation shell stays a BUNDLE root wrapping B.
     ; CHECK: bb.1.taken
     ; CHECK: BUNDLE
     BUNDLE 0 {
-      BEQZ_W_MSP $r0, %bb.2
+      B %bb.2
     }
 
   bb.2.exit:

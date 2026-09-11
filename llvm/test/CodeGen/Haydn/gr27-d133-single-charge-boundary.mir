@@ -1,11 +1,11 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=DEF
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -haydn-branch-relax-safety-buffer=0 \
+# RUN:   -run-pass=haydn-hwloops -haydn-branch-relax-safety-buffer=0 \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=BUF0
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -haydn-branch-relax-safety-buffer=100 \
+# RUN:   -run-pass=haydn-hwloops -haydn-branch-relax-safety-buffer=100 \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=BUF100
 # REQUIRES: haydn-registered-target
 #

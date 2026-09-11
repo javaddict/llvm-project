@@ -19,7 +19,7 @@ sibling is present. This file always owns:
     the committed checkout identity, and --self-test.
   * live ARTIFACT.product_ld null is fail-closed when ARTIFACT.json exists
   * post-wave rebind refuses llvm_src.git_commit=28700d57; the live
-    commit must be a repo-object ancestor (pin 98890c529be9)
+    commit must be a repo-object ancestor (pin 4b6677f8bf87)
 
 Usage:
   record_haydn_artifact_set.py --self-test
@@ -61,7 +61,7 @@ INSTALL_REL = Path("scripts/install_haydn_sysroot.sh")
 HYGIENE_SUFFIXES = (".bak", ".broken", ".broken-t5")
 HYGIENE_NAME_PARTS = (".bak", ".broken")
 STALE_FULL_GATE_COMMIT = "28700d57"
-REBIND_ANCESTOR = "98890c529be9"
+REBIND_ANCESTOR = "4b6677f8bf87"
 NATUREDSP_PIN = Path("/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/product_library_pin.sh")
 NATUREDSP_RESIDUAL = Path(
     "/ssd2/mhyang/haydn-plans/naturedsp-haydn/tools/residual-beyond-approved.txt"
@@ -728,7 +728,7 @@ def _self_test() -> int:
         # attach does not rewrite llvm_src; stale 28700d57 stays fail-closed.
         assert any("28700d57" in e for e in artifact_rebind_errors(sysroot, root))
         reloaded["llvm_src"] = {
-            "git_commit": "98890c529be92fa35b3a1bc39270bf919eee395e"
+            "git_commit": "4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f"
         }
         stamp.write_text(json.dumps(reloaded), encoding="utf-8")
         live_repo = monorepo_from_script()

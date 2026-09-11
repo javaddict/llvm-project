@@ -2215,6 +2215,55 @@ TEST_F(HaydnBundleBoundaryTest, WFIIsOneProductParcel) {
   EXPECT_EQ(TII().getInstSizeInBytes(WFI), FullBytes);
 }
 
+TEST_F(HaydnBundleBoundaryTest, CatalogLogicalMatchesBakedMemberSize) {
+  // AIE getSize is desc Size / Format->getSize, so MultiSlot logical →
+  // setDesc member is size-neutral. Haydn HaydnInst<0> shells have desc
+  // Size 0; getInstSizeInBytes must still charge the generated
+  // FormatEAltSpans singleton (AIE AlternateInsts analog) so the
+  // identity bake cannot surface unaccounted LateConvergence growth.
+  using namespace llvm::haydn::bundle;
+  const unsigned FullBytes = productParcelBytes().Value;
+  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
+  MF->push_back(MBB);
+  const HaydnInstrInfo &II = TII();
+  DebugLoc DL;
+
+  MachineInstr &BareCSRW =
+      *BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::CSRW))
+           .addImm(44)
+           .addReg(Haydn::R1);
+  MachineInstr &BakedCSRW =
+      *BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::CSRW_E2_E0_ALU0_I8))
+           .addImm(44)
+           .addReg(Haydn::R1);
+  EXPECT_EQ(II.getInstSizeInBytes(BareCSRW), FullBytes);
+  EXPECT_EQ(II.getInstSizeInBytes(BakedCSRW), FullBytes);
+  EXPECT_EQ(II.getInstSizeInBytes(BareCSRW), II.getInstSizeInBytes(BakedCSRW));
+
+  MachineInstr &CSRW_W =
+      *BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::CSRW_W))
+           .addImm(45)
+           .addReg(Haydn::R2);
+  EXPECT_EQ(II.getInstSizeInBytes(CSRW_W), FullBytes);
+
+  MachineInstr &CSRR =
+      *BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::CSRR))
+           .addDef(Haydn::R3)
+           .addImm(0);
+  EXPECT_EQ(II.getInstSizeInBytes(CSRR), FullBytes);
+
+  MachineInstr &Zero =
+      *BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ZERO_GPR), Haydn::R4);
+  EXPECT_EQ(II.getInstSizeInBytes(Zero), FullBytes);
+
+  MachineInstr &Adj = *BuildMI(*MBB, MBB->end(), DL,
+                               II.get(Haydn::ADJCALLSTACKDOWN))
+                           .addImm(0)
+                           .addImm(0);
+  EXPECT_EQ(II.getInstSizeInBytes(Adj), 0u)
+      << "true zero-size compiler pseudos stay 0";
+}
+
 TEST_F(HaydnBundleBoundaryTest, InsertRemoveBranchExactCommittedSize) {
   using namespace llvm::haydn::bundle;
   const HaydnInstrInfo &II = TII();
@@ -4214,6 +4263,24 @@ TEST_F(HaydnBundleBoundaryTest, InlineAsmExactTypedLayoutSize) {
   EXPECT_EQ(II.getInstSizeInBytes(Braced), FullBytes);
   EXPECT_EQ(ceilProductParcels(II.getInstSizeInBytes(Braced)), 1u);
 
+  // '#' additional line comments (AsmLexer LexToken start-of-statement gate,
+  // AllowAdditionalComments) are zero layout bytes at statement start — the
+  // llvm-libc setjmp/longjmp naked-body '# return ...' class. Mid-statement
+  // and in-brace '#' stay rejected (real-asm parity, fail-closed).
+  MachineInstr &HashStmt = makeAsm("nop\n# return 0\nnop");
+  EXPECT_EQ(II.getInstSizeInBytes(HashStmt), 2u * FullBytes);
+  MachineInstr &HashSemi = makeAsm("nop; # c\nnop");
+  EXPECT_EQ(II.getInstSizeInBytes(HashSemi), 2u * FullBytes);
+  MachineInstr &HashLabel = makeAsm("foo: # c\nnop");
+  EXPECT_EQ(II.getInstSizeInBytes(HashLabel), FullBytes);
+  MachineInstr &HashOnly = makeAsm("# comment-only metadata\n# second line");
+  EXPECT_EQ(II.getInstSizeInBytes(HashOnly), 0u);
+  // Rejected forms must stay fatal-to-parse (opaque), never silently sized:
+  // mid-statement '#' after an mnemonic, and any '#' inside a braced packet.
+  // getInstSizeInBytes would report_fatal_error on these, so the law is
+  // pinned by the llc-level tests instead (see
+  // inlineasm-hash-comment-admission.ll).
+
   // .space uses the explicit byte count (not MaxInstLength × 1).
   MachineInstr &Space = makeAsm(".space 32");
   EXPECT_EQ(II.getInstSizeInBytes(Space), 32u);
@@ -4663,123 +4730,6 @@ TEST_F(HaydnBundleBoundaryTest, CommitLateFailRestoresInternalReadMarkers) {
   EXPECT_TRUE(commitExactMultiMIProductCycle(Kids));
   (void)LdCopy;
   (void)AddCopy;
-}
-
-// D1.25: reopen dissolves committed parcels back to bare MIs and must
-// restore PRE-BUNDLE operand semantics. finalizeBundle only sets
-// IsInternalRead and never clears (MachineInstrBundle.cpp; the shared law
-// stated at the HaydnBundleMaterialize.cpp pre-pack clear). A committed
-// member whose use reads an in-parcel LocalDefs register carries that
-// marker out of the bundle — the one production producer of a LIVE
-// writer->reader pair inside one root is the remat glue
-// (HaydnPostRAScratch.cpp bundleWithPred + finalizeBundle, no RAW
-// re-check; the product commit refuses true-RAW packs, so this idiom is
-// how the state is built) — and the reopen unbind loop restored
-// BundledPred/BundledSucc but left the marker on the operand. Because
-// MachineOperand::readsReg() returns false for internal reads, the stale
-// flag blinded the ONE shared no-forwarding seat
-// (haydnHasIntraCycleRAW, HaydnIntraCycleRAW.h) that the incremental HR
-// walk (HaydnHazardRecognizer::hasSameBundleRAW) and SMS placement use:
-// a same-cycle true RAW on that register was invisible. Every other
-// dissolve/recommit site clears the flag (sequentializeMultiMemberRoot,
-// unstamped dissolve, HaydnFixupHwLoops, pre-pack recommit clear) —
-// reopen must clear it too. Red before the reopen-side clear, green
-// after.
-TEST_F(HaydnBundleBoundaryTest, ReopenClearsStaleInternalRead) {
-  using namespace llvm::haydn::bundle;
-  const HaydnInstrInfo &II = TII();
-  DebugLoc DL;
-  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
-  MF->push_back(MBB);
-
-  // Remat-glue shape: live writer (ADD32 defs R5) then same-parcel reader
-  // (XOR32 reads R5). bundleWithPred + finalizeBundle is exactly the
-  // in-tree construction; finalizeBundle marks the reader's R5 use
-  // IsInternalRead (live in-parcel LocalDefs def).
-  MachineInstr *Def =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R5)
-          .addReg(Haydn::R0)
-          .addReg(Haydn::R1)
-          .getInstr();
-  MachineInstr *Reader =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::XOR32), Haydn::R8)
-          .addReg(Haydn::R5)
-          .addReg(Haydn::R6)
-          .getInstr();
-  Reader->bundleWithPred();
-  finalizeBundle(*MBB, Def->getIterator());
-
-  MachineOperand *ReaderUse =
-      Reader->findRegisterUseOperand(Haydn::R5, TRI());
-  ASSERT_NE(ReaderUse, nullptr);
-  EXPECT_TRUE(ReaderUse->isInternalRead());
-  EXPECT_FALSE(ReaderUse->readsReg()); // the blindness, pre-reopen
-
-  // The reopened bare MI must re-enter scheduling with pre-bundle operand
-  // semantics: root erased, kids bare, no reg operand still internal.
-  EXPECT_GE(reopenProvisionalBundles(*MF, II), 1u);
-  EXPECT_FALSE(Def->isBundled());
-  EXPECT_FALSE(Reader->isBundled());
-  for (MachineInstr &MI : *MBB) {
-    EXPECT_FALSE(MI.isBundle());
-    for (MachineOperand &MO : MI.operands()) {
-      if (MO.isReg())
-        EXPECT_FALSE(MO.isInternalRead());
-    }
-  }
-
-  // Behavior witness (the restored seat): with the writer's live def
-  // accumulated first — the incremental writer-first walk HR uses — the
-  // reader must now report the same-cycle true RAW. With the stale flag
-  // this returned false: the filed MISCOMP-class hole.
-  SmallSet<Register, 8> LiveDefs;
-  haydnAppendLiveDefs(*Def, LiveDefs);
-  EXPECT_TRUE(haydnHasIntraCycleRAW(*Reader, LiveDefs, TRI()));
-}
-
-// Negative control: a non-recoverable root (keep-map class — the member
-// operand kind sequence differs from the logical's, so a desc-only
-// inverse cannot restore it) stays committed and is untouched by reopen.
-TEST_F(HaydnBundleBoundaryTest, ReopenKeepsNonRecoverableRootCommitted) {
-  using namespace llvm::haydn::bundle;
-  const HaydnInstrInfo &II = TII();
-  DebugLoc DL;
-  MachineBasicBlock *MBB = MF->CreateMachineBasicBlock();
-  MF->push_back(MBB);
-
-  // D_LDW_CB_IMM member: (outs DR64, GPR32) (ins uimm1, GPR32, simm8) vs
-  // logical D_LDW_CB_IMM: (outs DR64, GPR32) (ins GPR32, i32imm, simm8) —
-  // operand 2 is imm on the member, reg on the logical, so
-  // memberShapesDirectEqual fails and reopen must leave the root alone.
-  MachineInstr *Ld =
-      BuildMI(*MBB, MBB->end(), DL,
-              II.get(Haydn::D_LDW_CB_IMM_E2_E0_LOADSTORE0_CBRI), Haydn::D0)
-          .addReg(Haydn::R2, RegState::Define)
-          .addImm(0)
-          .addReg(Haydn::R2)
-          .addImm(4)
-          .getInstr();
-  MachineInstr *Other =
-      BuildMI(*MBB, MBB->end(), DL, II.get(Haydn::ADD32), Haydn::R9)
-          .addReg(Haydn::R3)
-          .addReg(Haydn::R4)
-          .getInstr();
-  Other->bundleWithPred();
-  finalizeBundle(*MBB, Ld->getIterator());
-
-  MachineInstr *Root = nullptr;
-  for (MachineInstr &MI : *MBB)
-    if (MI.isBundle() && !MI.isBundledWithPred())
-      Root = &MI;
-  ASSERT_NE(Root, nullptr);
-
-  EXPECT_EQ(reopenProvisionalBundles(*MF, II), 0u);
-  // Root survived untouched: still a committed BUNDLE, both members still
-  // inside it.
-  EXPECT_TRUE(Root->getParent() != nullptr);
-  EXPECT_TRUE(Root->isBundle());
-  EXPECT_TRUE(Ld->isBundled() && Other->isBundled());
-  EXPECT_EQ(members(*Root).size(), 2u);
 }
 
 // Late-fail arm: keep-map rewrite with tied operands. MOVT32 has

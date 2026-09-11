@@ -114,9 +114,10 @@ body:             |
     liveins: $r0, $r1, $r2, $r15
     ; CHECK-LABEL: name: coissue_branch_sibling_survives
     ; CHECK: bb.0.entry
-    ; ALU sibling survives any BR rewrite of the coissued branch.
-    ; SHORT-DAG: ADD32
-    ; LATE-DAG: ADD32
+    ; ALU sibling survives any BR rewrite of the coissued branch
+    ; (eraseSelectedBranch restamp; removeBranch walk unchanged).
+    ; SHORT-DAG: $r3 = ADD32
+    ; LATE-DAG: $r3 = ADD32
     ; SHORT-NOT: INTERNAL
     ; LATE: BUNDLE
     BUNDLE 0 {

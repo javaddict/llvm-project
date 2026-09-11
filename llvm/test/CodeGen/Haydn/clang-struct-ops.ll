@@ -16,8 +16,7 @@
 define i32 @test_small_struct_by_val(%struct.small %s) {
 ; CHECK-LABEL: test_small_struct_by_val:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -31,8 +30,7 @@ entry:
 define i32 @test_struct_ptr(ptr %s) {
 ; CHECK-LABEL: test_struct_ptr:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -49,10 +47,9 @@ entry:
 define i32 @test_struct_field_access(ptr %p) {
 ; CHECK-LABEL: test_struct_field_access:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; s_lw_post_imm r2, r1, 1 }
+; CHECK-NEXT:    { nop; nop; s_lw_post_imm r2, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -72,12 +69,11 @@ entry:
 define i32 @test_struct_array(ptr %arr, i32 %i) {
 ; CHECK-LABEL: test_struct_array:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 3 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
-; CHECK-NEXT:    { nop; s_lw_post_imm r2, r1, 1 }
+; CHECK-NEXT:    { nop; nop; s_lw_post_imm r2, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -101,12 +97,12 @@ entry:
 define i32 @test_nested_struct(ptr %o) {
 ; CHECK-LABEL: test_nested_struct:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r2, r1, 0; ld32 r3, r1, 1 }
-; CHECK-NEXT:    { nop; ld32 r1, r1, 2 }
-; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
+; CHECK-NEXT:    { ld32 r3, r1, 1; ld32 r2, r1, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { add32 r2, r2, r3; ld32 r1, r1, 2 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -127,8 +123,7 @@ entry:
 define void @test_struct_copy(ptr %dst, ptr %src) {
 ; CHECK-LABEL: test_struct_copy:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r2, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -146,8 +141,7 @@ entry:
 define void @test_struct_init(ptr %p, i32 %a, i32 %b) {
 ; CHECK-LABEL: test_struct_init:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
@@ -166,8 +160,7 @@ entry:
 define %struct.small @test_return_struct(i32 %x) {
 ; CHECK-LABEL: test_return_struct:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -181,8 +174,7 @@ entry:
 define %struct.pair @test_return_pair(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_return_pair:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -197,8 +189,7 @@ entry:
 define i32 @test_packed_fields(i32 %packed) {
 ; CHECK-LABEL: test_packed_fields:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { srli32 r1, r1, 16; andi32 r2, r1, 65535 }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
@@ -218,8 +209,7 @@ entry:
 define i32 @test_struct_array_member(ptr %s, i32 %i) {
 ; CHECK-LABEL: test_struct_array_member:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -238,8 +228,7 @@ entry:
 define ptr @test_struct_ptr_arith(ptr %arr, i32 %i) {
 ; CHECK-LABEL: test_struct_ptr_arith:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 3 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -257,14 +246,12 @@ entry:
 define i32 @test_struct_compare(ptr %a, ptr %b) {
 ; CHECK-LABEL: test_struct_compare:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
-; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
-; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
-; CHECK-NEXT:    { nop; xori32 r2, r2, 1 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { seq32 r2, r1, r2; addi32 r3, r0, 1 }
+; CHECK-NEXT:    { addi32 r1, r0, 0; xori32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -281,8 +268,7 @@ entry:
 define void @test_struct_zero(ptr %p) {
 ; CHECK-LABEL: test_struct_zero:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 0 }
 ; CHECK-NEXT:    { nop; s_sw_post_imm r2, r1, 1 }
@@ -308,8 +294,7 @@ define i32 @test_global_struct(i32 %i) {
 ; ahead of the address materialization, so check them as a DAG.
 ; CHECK-LABEL: test_global_struct:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, global_structs }
 ; CHECK-NEXT:    { slli32 r1, r1, 3; addi32 r2, r2, global_structs }

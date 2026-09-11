@@ -8,30 +8,13 @@
 ; REGRESSION TEST: Soft-float libcall symbol preservation end-to-end.
 ;
 ; Bug (scope m6-softfloat-scope.md BUG B): `clang -target haydn-unknown-elf -c`
-; was reported to emit `jal_w lr, 0` with relocation
-; `R_HAYDN_CallSImm20 *ABS*` (value 0, no symbol) for soft-float libcalls.
+; was reported to emit a call to `0` with relocation `*ABS*` (no symbol)
+; for soft-float libcalls.
 ;
-; Status as of this test's XFAIL : the defensive fix in
-; (HaydnCallLowering::lowerCall adds the callee operand verbatim via
-; `MIB.add(Info.Callee)`, mirroring RISCVCallLowering) only fixed the
-; MachineInstr / asm-print stage. The ASM CHECKs below PASS; `llc` textual
-; asm correctly shows `jal_w lr, __addsf3`. The RELOC CHECKs FAILED because
-; the callee MCSymbol was dropped during MCInst lowering / object emission:
-; HaydnAsmPrinter wraps every instruction in a BUNDLE MCInst whose children
-; are MCOperand::createInst operands, and the default streamer path does not
-; recurse into those children to register referenced symbols.
-;
-; Fixed by : HaydnAsmPrinter gained registerSymbolicOperands
-; which walks an MCInst's operands (recursing into MCOperand::createInst
-; children) and calls OutStreamer->visitUsedExpr on every Expr operand before
-; the BUNDLE is emitted. This makes the extern/libcall MCSymbol land in
-; symtab and the R_HAYDN_CallSimm20 reloc reference it by name/index. The
-; XFAIL has been removed; all ASM and RELOC CHECKs now pass.
-;
-; Test design: each function performs a float operation that lowers to a
-; specific compiler-rt libcall. The ASM checks verify the JAL target is the
-; named libcall symbol (not `0`); the RELOC checks verify the relocation
-; references the symbol (not `*ABS*`).
+; ISel now emits the general call (LUI HI12 + ADDI32 LO20 + JALR). The ASM
+; checks require the named libcall on the address parcels (not `0`). The
+; RELOC checks require HI12/LO20 to name the symbol (not `*ABS*`). Short
+; CallSImm20 JAL is LLD cycle-neutral relax, not the compiler object form.
 ;
 ; Reference: -softfloat-gfconstant-and-libcall-symbol.md
 ; m8-extern-call-symbol-registration-in-asmprinter-bundle-path.md
@@ -41,7 +24,9 @@
 
 define float @fadd_f32(float %a, float %b) {
 ; ASM-LABEL: fadd_f32:
-; ASM:       jal lr, __addsf3
+; ASM:       lui{{.*}}__addsf3
+; ASM:       addi32{{.*}}__addsf3
+; ASM:       jalr{{.*}}lr
   %r = fadd float %a, %b
   ret float %r
 }
@@ -49,7 +34,9 @@ define float @fadd_f32(float %a, float %b) {
 ;fsub → __subsf3
 define float @fsub_f32(float %a, float %b) {
 ; ASM-LABEL: fsub_f32:
-; ASM:       jal lr, __subsf3
+; ASM:       lui{{.*}}__subsf3
+; ASM:       addi32{{.*}}__subsf3
+; ASM:       jalr{{.*}}lr
   %r = fsub float %a, %b
   ret float %r
 }
@@ -57,7 +44,9 @@ define float @fsub_f32(float %a, float %b) {
 ;fmul → __mulsf3
 define float @fmul_f32(float %a, float %b) {
 ; ASM-LABEL: fmul_f32:
-; ASM:       jal lr, __mulsf3
+; ASM:       lui{{.*}}__mulsf3
+; ASM:       addi32{{.*}}__mulsf3
+; ASM:       jalr{{.*}}lr
   %r = fmul float %a, %b
   ret float %r
 }
@@ -65,7 +54,9 @@ define float @fmul_f32(float %a, float %b) {
 ;fdiv → __divsf3
 define float @fdiv_f32(float %a, float %b) {
 ; ASM-LABEL: fdiv_f32:
-; ASM:       jal lr, __divsf3
+; ASM:       lui{{.*}}__divsf3
+; ASM:       addi32{{.*}}__divsf3
+; ASM:       jalr{{.*}}lr
   %r = fdiv float %a, %b
   ret float %r
 }
@@ -73,7 +64,9 @@ define float @fdiv_f32(float %a, float %b) {
 ;fptosi → __fixsfsi
 define i32 @fptosi_f32_i32(float %a) {
 ; ASM-LABEL: fptosi_f32_i32:
-; ASM:       jal lr, __fixsfsi
+; ASM:       lui{{.*}}__fixsfsi
+; ASM:       addi32{{.*}}__fixsfsi
+; ASM:       jalr{{.*}}lr
   %r = fptosi float %a to i32
   ret i32 %r
 }
@@ -81,7 +74,9 @@ define i32 @fptosi_f32_i32(float %a) {
 ;sitofp → __floatsisf
 define float @sitofp_i32_f32(i32 %a) {
 ; ASM-LABEL: sitofp_i32_f32:
-; ASM:       jal lr, __floatsisf
+; ASM:       lui{{.*}}__floatsisf
+; ASM:       addi32{{.*}}__floatsisf
+; ASM:       jalr{{.*}}lr
   %r = sitofp i32 %a to float
   ret float %r
 }
@@ -89,16 +84,22 @@ define float @sitofp_i32_f32(i32 %a) {
 ;fcmp olt → __ltsf2
 define i1 @fcmp_olt_f32(float %a, float %b) {
 ; ASM-LABEL: fcmp_olt_f32:
-; ASM:       jal lr, __ltsf2
+; ASM:       lui{{.*}}__ltsf2
+; ASM:       addi32{{.*}}__ltsf2
+; ASM:       jalr{{.*}}lr
   %r = fcmp olt float %a, %b
   ret i1 %r
 }
 
 ;Relocations reference the named symbols (not `*ABS*`).
 ; RELOC:      Relocations [
-; RELOC:        R_HAYDN_WIDE_CallSImm20 __addsf3
-; RELOC:        R_HAYDN_WIDE_CallSImm20 __subsf3
-; RELOC:        R_HAYDN_WIDE_CallSImm20 __mulsf3
-; RELOC:        R_HAYDN_WIDE_CallSImm20 __divsf3
-; RELOC-NOT:    R_HAYDN_WIDE_CallSImm20 *ABS*
+; RELOC-DAG:    R_HAYDN_HI12 __addsf3
+; RELOC-DAG:    R_HAYDN_LO20{{(_E1)?}} __addsf3
+; RELOC-DAG:    R_HAYDN_HI12 __subsf3
+; RELOC-DAG:    R_HAYDN_LO20{{(_E1)?}} __subsf3
+; RELOC-DAG:    R_HAYDN_HI12 __mulsf3
+; RELOC-DAG:    R_HAYDN_LO20{{(_E1)?}} __mulsf3
+; RELOC-DAG:    R_HAYDN_HI12 __divsf3
+; RELOC-DAG:    R_HAYDN_LO20{{(_E1)?}} __divsf3
+; RELOC-NOT:    *ABS*
 ; RELOC:      ]

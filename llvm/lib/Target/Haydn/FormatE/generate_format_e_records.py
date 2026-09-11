@@ -684,6 +684,17 @@ def emit_records_inc(
     lines.append("// Format indicator and header reserved are fixed by golden geometry.")
     lines.append("static constexpr unsigned FormatEIndicator = 0x7u; // bits[2:0]")
     lines.append("static constexpr unsigned FormatEHeaderReserved = 0x0u; // bits[5:4]")
+    dest_lsb, rs_lsb, gpr_bits = _callrelax_e2_e0_dest_rs_pins(cat)
+    lines.append(
+        "// E2 e0 ALU0 dest/rs GPR windows (parcel-absolute operand_fields)."
+    )
+    lines.append(
+        f"static constexpr unsigned FormatEE2E0DestLsb = {dest_lsb}u;"
+    )
+    lines.append(f"static constexpr unsigned FormatEE2E0RsLsb = {rs_lsb}u;")
+    lines.append(
+        f"static constexpr unsigned FormatEGPRFieldBits = {gpr_bits}u;"
+    )
     lines.append("#endif // GET_FORMAT_E_GOLDEN_PINS")
     lines.append("")
 
@@ -1215,6 +1226,88 @@ def _reloc_imm_lsb(lay: TypeLayout, width: int, role: Optional[str] = None) -> i
             f"{lay.type_name} width={width} role={role!r} hits={hits}"
         )
     return hits[0]
+
+
+def _operand_field_lsb_width(lay: TypeLayout, role: str) -> Tuple[int, int]:
+    """Parcel-absolute LSB and width of a unique operand_fields role.
+
+    Same walk as _reloc_imm_lsb: match role (or role prefix) exactly once.
+    """
+    hits: List[Tuple[int, int]] = []
+    want = role.lower()
+    for of in lay.operand_fields:
+        r = of.role.lower()
+        if r == want or r.startswith(want):
+            hits.append((of.bits.lo, of.bits.width))
+    if len(hits) != 1:
+        raise SystemExit(
+            f"operand field {lay.mode} e{lay.entry_idx} {lay.unit} "
+            f"{lay.type_name} role={role!r} hits={hits}"
+        )
+    return hits[0]
+
+
+def _e2_e0_alu0_layout(cat: Catalog, type_name: str) -> TypeLayout:
+    hits = [
+        lay
+        for lay in cat.layouts
+        if lay.mode == "E2"
+        and lay.entry_idx == 0
+        and lay.unit == "ALU0"
+        and lay.type_name == type_name
+    ]
+    if len(hits) != 1:
+        raise SystemExit(
+            f"CallRelax pin: E2 e0 ALU0 {type_name} layouts={len(hits)}"
+        )
+    return hits[0]
+
+
+def _callrelax_dest_lsb_width(lay: TypeLayout) -> Tuple[int, int]:
+    """Dest GPR window: role dest (I20/RI20) or unique reg (I12/RI12)."""
+    dest_hits = [
+        (of.bits.lo, of.bits.width)
+        for of in lay.operand_fields
+        if of.role.lower() == "dest" or of.role.lower().startswith("dest")
+    ]
+    if len(dest_hits) == 1:
+        return dest_hits[0]
+    return _operand_field_lsb_width(lay, "reg")
+
+
+def _callrelax_e2_e0_dest_rs_pins(cat: Catalog) -> Tuple[int, int, int]:
+    """E2 e0 ALU0 dest/rs parcel-absolute LSBs and GPR width.
+
+    Law: I12/I20/RI12/RI20 dest agree; RI12/RI20 src agree; dest width
+    equals src width; dest and src windows are distinct.
+    """
+    dest_hits = [
+        _callrelax_dest_lsb_width(_e2_e0_alu0_layout(cat, tname))
+        for tname in ("I12", "I20", "RI12", "RI20")
+    ]
+    if len(set(dest_hits)) != 1:
+        raise SystemExit(
+            f"CallRelax dest windows disagree on E2 e0 ALU0: {dest_hits}"
+        )
+    src_hits = [
+        _operand_field_lsb_width(_e2_e0_alu0_layout(cat, tname), "src")
+        for tname in ("RI12", "RI20")
+    ]
+    if len(set(src_hits)) != 1:
+        raise SystemExit(
+            f"CallRelax src windows disagree on E2 e0 ALU0: {src_hits}"
+        )
+    dest_lsb, dest_w = dest_hits[0]
+    src_lsb, src_w = src_hits[0]
+    if dest_w != src_w:
+        raise SystemExit(
+            f"CallRelax dest width {dest_w} != src width {src_w} on E2 e0 ALU0"
+        )
+    if dest_lsb == src_lsb:
+        raise SystemExit(
+            f"CallRelax dest/src LSB collide at {dest_lsb} on E2 e0 ALU0"
+        )
+    return dest_lsb, src_lsb, dest_w
 
 
 def _collect_reloc_field_lsb(
@@ -1895,6 +1988,12 @@ _SINGLETON_EXACT_PEELS: Dict[str, str] = {
     "MOVE_GPR_TO_DR64": "SEXT32T64",
     "ZEXT_GPR32_TO_DR64": "SEXT32T64",
     "RET": "JALR",
+    # gMIR roles (HaydnMspCloneFamily). Occupancy/name peel only; not MIR
+    # setDesc of a call onto terminator JALR. AIE splits encodings instead
+    # (AIE2InstrInfo.td:459-463 PseudoJ_TCO_jump_{imm,ind} -> J_jump_*).
+    "JALR_CALL": "JALR",
+    "JALR_TCO": "JALR",
+    "JAL_TCO": "JAL",
     "WFI": "WFI<TBD>",
 }
 # NOP is exempt from alt spans by construction (is_nop rows never enter

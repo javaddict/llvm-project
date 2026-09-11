@@ -8,8 +8,8 @@
 //
 // Unit seal for the GR2.7/D1.40 postcommit CFG identity wall pair on
 // HaydnMachineFunctionInfo (stampPostCommitCfgSnapshot +
-// postCommitCfgCreationViolation, the sole wall predicate consumed by the
-// LateConvergence immediate seat and the independent Verify seat):
+// postCommitCfgCreationViolation, the sole wall predicate consumed by
+// the independent Verify seats):
 //   * no stamp -> no violation (probes / MIR fixtures that never run
 //     Finalize stay legal — GR2.7 I4 seat-bound law)
 //   * stamp + identity-unchanged CFG -> empty violation
@@ -27,16 +27,17 @@
 //     epoch guard that tolerates BranchRelaxation's entry renumber)
 //   * L5: stamp + successor rewrite with unchanged block identity/token
 //     sequence (edge-only mutation) -> refused, names the offending edge
-//     source layout position
-//   * L5: the demote's recorded latch-successor rewrite (the single
-//     admitted-transition record from demoteHardwareLoopToSoftware) stays
-//     legal
-//   * L5: one record admits exactly ONE divergence of its source; a
-//     second unrecorded rewrite of the same source still fires
+//     source layout position. No admitted-transition exception (GR2.10).
+//   * L6: stamp + RenumberBlocks + create-then-delete (L3 retired by
+//     the epoch bump; live count and IR-bound tokens match) -> refused
+//     via the CreationID high-water
+//   * L4: equal-count null-BB/no-BBID replacement after RenumberBlocks
+//     -> refused via identity tokens (CreationID folded in; no shared
+//     NoBBIDSentinel)
 //   * stamp-once: a second stamp keeps the first snapshot (monotone
 //     ratchet — later Finalize seats never re-stamp)
 //   * clone(): the destination MFI carries no stamp and no inherited
-//     identity tokens; the source snapshot keeps firing
+//     identity tokens or L5 admission; the source snapshot keeps firing
 //
 //===----------------------------------------------------------------------===//
 
@@ -260,24 +261,14 @@ TEST_F(HaydnPostCommitBlockBudgetTest, RenumberAfterStampStaysLegal) {
 
 // clone()/reset: the destination MFI carries no stamp and no inherited
 // identity tokens (it stamps its own at its own first Finalize); the
-// source snapshot keeps firing on source mutation.
+// source snapshot keeps firing on source mutation. GR2.10: there is no
+// L5 admission API to inherit — dest edge rewrite is a hard freeze.
 TEST_F(HaydnPostCommitBlockBudgetTest, CloneResetsSnapshot) {
   MachineBasicBlock *Entry = &*Func().begin();
   MachineBasicBlock *Exit = &*std::next(Func().begin());
   Entry->addSuccessor(Exit);
   Info().stampPostCommitCfgSnapshot(Func());
   ASSERT_TRUE(Info().hasPostCommitBlockBudget());
-  // D1.46: the source holds one L5 admission record at clone time. Record
-  // it and spend it on a real edge rewrite (retarget entry's edge to
-  // itself) so the record's lifecycle is exercised before the clone — the
-  // clone must still start from ZERO admissions either way (an inherited
-  // record would silently admit one edge rewrite on a CFG the source never
-  // vetted).
-  Info().recordPostCommitAdmittedEdgeTransition(Func(), *Entry);
-  Entry->removeSuccessor(Exit);
-  Entry->addSuccessor(Entry);
-  EXPECT_TRUE(Info().postCommitCfgCreationViolation(Func()).empty())
-      << "the one recorded admission covers exactly this rewrite";
 
   // The clone signature takes an allocator, but the copy is allocated from
   // the DESTINATION MF's own allocator (cloneInfo), so Dest's destructor
@@ -306,20 +297,19 @@ TEST_F(HaydnPostCommitBlockBudgetTest, CloneResetsSnapshot) {
   EXPECT_TRUE(DestInfo->hasPostCommitBlockBudget());
   EXPECT_TRUE(DestInfo->postCommitCfgCreationViolation(Dest).empty());
 
-  // D1.46 (the copy/reset law): the destination inherited NO admission —
-  // an unrecorded edge rewrite on the destination fires, where an
-  // inherited source record would have silently admitted it.
+  // No inherited admission: dest edge rewrite fires (L5 is a no-exception
+  // wall; clone cannot launder a source edge permit that no longer exists).
   MachineBasicBlock *DestEntry = &*Dest.begin();
   DestEntry->addSuccessor(DestEntry);
   EXPECT_FALSE(DestInfo->postCommitCfgCreationViolation(Dest).empty())
-      << "clone must not inherit the source's admission records";
+      << "clone must not inherit a source L5 admission";
 }
 
-// L5 (D1.40 Phase 2): successor digest law. The fixture wires a real CFG
-// (entry -> exit) before stamping; an edge-only rewrite — removeSuccessor +
-// addSuccessor on the SAME block, block identity/token sequence unchanged —
-// is refused and the violation names the offending edge SOURCE layout
-// position. Nothing recorded an admitted transition.
+// L5 (D1.40 Phase 2 / GR2.10): successor digest law. The fixture wires a
+// real CFG (entry -> exit) before stamping; an edge-only rewrite —
+// removeSuccessor + addSuccessor on the SAME block, block identity/token
+// sequence unchanged — is refused and the violation names the offending
+// edge SOURCE layout position. No admitted-transition exception.
 TEST_F(HaydnPostCommitBlockBudgetTest, EdgeOnlyRewriteRefused) {
   MachineBasicBlock *Entry = &*Func().begin();
   MachineBasicBlock *Exit = &*std::next(Func().begin());
@@ -334,50 +324,57 @@ TEST_F(HaydnPostCommitBlockBudgetTest, EdgeOnlyRewriteRefused) {
   EXPECT_NE(V.find("position 0"), std::string::npos) << V;
 }
 
-// L5 admitted transition: the ONE recording site is the demote latch
-// rewrite (llvm::demoteHardwareLoopToSoftware records the latch's layout
-// position). A recorded latch-successor rewrite stays legal — the demote
-// at FixupHwLoops/addPreEmitPass legitimately rewrites latch successors
-// post-stamp; an unconditional edge freeze would false-fire on it.
-TEST_F(HaydnPostCommitBlockBudgetTest, RecordedDemoteLatchRewriteStaysLegal) {
-  MachineBasicBlock *Header = &*Func().begin();
-  MachineBasicBlock *Latch = &*std::next(Func().begin());
-  Latch->addSuccessor(Latch); // ZOL self-latch before the demote
+// L6: BR-entry RenumberBlocks is legal (epoch guard retires L3). A
+// subsequent create-then-delete restores live count and the IR-bound
+// token sequence, so L1/L2/L4/L3 are silent; the CreationID high-water
+// is the un-launderable twin of L3.
+TEST_F(HaydnPostCommitBlockBudgetTest,
+       RenumberThenCreateThenDeleteRefusedByL6) {
   Info().stampPostCommitCfgSnapshot(Func());
-  // The demote shape: drop every latch successor, then install the soft
-  // edges (Header backedge; Exit == Header case emits one edge only).
-  Info().recordPostCommitAdmittedEdgeTransition(Func(), *Latch);
-  while (!Latch->succ_empty())
-    Latch->removeSuccessor(Latch->succ_begin());
-  Latch->addSuccessor(Header);
-  EXPECT_TRUE(Info().postCommitCfgCreationViolation(Func()).empty());
+  const unsigned EpochAtStamp = Func().getBlockNumberEpoch();
+  const unsigned HighWaterAtStamp = Func().getMBBCreationHighWater();
+  Func().RenumberBlocks();
+  EXPECT_NE(Func().getBlockNumberEpoch(), EpochAtStamp);
+  ASSERT_TRUE(Info().postCommitCfgCreationViolation(Func()).empty())
+      << "RenumberBlocks after the stamp must stay legal";
+  MF->push_back(MF->CreateMachineBasicBlock());
+  eraseTail();
+  ASSERT_EQ(Func().size(), 2u);
+  ASSERT_GT(Func().getMBBCreationHighWater(), HighWaterAtStamp);
+  const std::string V = Info().postCommitCfgCreationViolation(Func());
+  EXPECT_NE(V.find("postcommit CFG high-water"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG numbering"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG identity"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG creation:"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG shrink"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG edges"), std::string::npos) << V;
 }
 
-// L5 admission is one-shot per record: a second, unrecorded rewrite of an
-// already-admitted source still fires (the record was consumed by the
-// first divergence; admissions can never become a standing edge-write
-// permit on the recorded block). Three blocks so the second rewrite lands
-// on a THIRD successor state — rewriting back to the stamped digest is
-// genuinely legal (the CFG then equals the stamp) and cannot pin the law.
-TEST_F(HaydnPostCommitBlockBudgetTest, AdmissionIsOneShotPerRewrite) {
-  MachineBasicBlock *Header = &*Func().begin();
-  MachineBasicBlock *Latch = &*std::next(Func().begin());
-  MachineBasicBlock *Third = MF->CreateMachineBasicBlock();
-  MF->push_back(Third); // before the stamp: no L1 growth
-  Latch->addSuccessor(Header);
+// L4: equal-count replacement among null-BB/no-BBID blocks after
+// RenumberBlocks. L3 is retired; CreationID in the existing token half
+// distinguishes the replacement that used to share NoBBIDSentinel.
+TEST_F(HaydnPostCommitBlockBudgetTest,
+       EqualCountNullBBReplacementAfterRenumberRefusedByL4) {
+  MachineBasicBlock *NullBB = MF->CreateMachineBasicBlock();
+  ASSERT_EQ(NullBB->getBasicBlock(), nullptr);
+  ASSERT_FALSE(NullBB->getBBID().has_value());
+  MF->push_back(NullBB);
   Info().stampPostCommitCfgSnapshot(Func());
-  Info().recordPostCommitAdmittedEdgeTransition(Func(), *Latch);
-  // First rewrite (the recorded demote shape): admitted.
-  while (!Latch->succ_empty())
-    Latch->removeSuccessor(Latch->succ_begin());
-  Latch->addSuccessor(Latch);
+  const unsigned EpochAtStamp = Func().getBlockNumberEpoch();
+  Func().RenumberBlocks();
+  EXPECT_NE(Func().getBlockNumberEpoch(), EpochAtStamp);
   ASSERT_TRUE(Info().postCommitCfgCreationViolation(Func()).empty());
-  // Second rewrite of the same source, no new record: refused.
-  Latch->removeSuccessor(Latch);
-  Latch->addSuccessor(Third);
+  eraseTail();
+  MachineBasicBlock *Replacement = MF->CreateMachineBasicBlock();
+  ASSERT_EQ(Replacement->getBasicBlock(), nullptr);
+  ASSERT_FALSE(Replacement->getBBID().has_value());
+  MF->push_back(Replacement);
+  ASSERT_EQ(Func().size(), 3u);
   const std::string V = Info().postCommitCfgCreationViolation(Func());
-  EXPECT_NE(V.find("postcommit CFG edges"), std::string::npos) << V;
-  EXPECT_NE(V.find("position 1"), std::string::npos) << V;
+  EXPECT_NE(V.find("postcommit CFG identity"), std::string::npos) << V;
+  EXPECT_NE(V.find("position 2"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG numbering"), std::string::npos) << V;
+  EXPECT_EQ(V.find("postcommit CFG high-water"), std::string::npos) << V;
 }
 
 } // namespace

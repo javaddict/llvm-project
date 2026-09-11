@@ -9,8 +9,9 @@
 // Post-RA expansion of Haydn pseudos that require physical registers:
 // LOAD_ADDR, SETCBR, leftover *_POST_INC (MIR-injected; product form is ISel),
 // leftover generic SET_HWLOOP{,_REG} rewrite, VAEND no-op, and representation
-// expansion of B / RET / BR_JT / PseudoCALLIndirect to real parcels before
-// S1 (this pass is after MBP, before PostMachineScheduler). Soft-zero R0
+// expansion of RET / BR_JT / PseudoCALLIndirect to real parcels before
+// S1 (this pass is after MBP, before PostMachineScheduler). B stays B through
+// MIR (encoder peels to BEQZ rs=R0). Soft-zero R0
 // restore after calls is HaydnPostRAScratch::insertSoftZeroR0AfterCalls
 // (this pass is the post-leftover call site). Product SET is SET_HWLOOP_F2_W
 // at HardwareLoops (HaydnHardwareLoops.cpp:701; AIE
@@ -23,8 +24,8 @@
 //
 // Generic ExpandPostRAPseudos still expands RET / LOADI32 / cross-bank copies
 // (TargetPassConfig.cpp:1192, before MBP). This pass expands leftover RET
-// (limited pipelines), B (kept through MBP so analyzeBranch stays a CFG
-// pseudo), and BR_JT. JALR_W rebuilds must not BuildMI: the catalog desc
+// (limited pipelines) and BR_JT. B is kept through MBP and encode so
+// analyzeBranch stays a CFG uncond. JALR_W rebuilds must not BuildMI: the catalog desc
 // Defs include D0 and would clobber an i64 return (RISCV expandPseudo_RET
 // rebuilds JALR x0, x1, 0 in RISCVInstrInfo.cpp).
 //
@@ -42,10 +43,12 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -53,6 +56,12 @@
 #define DEBUG_TYPE "haydn-expand-pseudos"
 
 using namespace llvm;
+
+/// Test-only GR2.8 hook: grow the frame after the post-PEI snapshot so
+/// HaydnVerifyBundles can fire frameFreezeViolation. Product default OFF.
+static cl::opt<bool> HaydnTestGrowFrameAfterSnapshot(
+    "haydn-test-grow-frame-after-snapshot", cl::Hidden, cl::init(false),
+    cl::desc("Test hook: create one spill after the post-PEI frame snapshot"));
 
 static void setMemRefs(MachineInstrBuilder &MIB,
                        ArrayRef<MachineMemOperand *> MMOs) {
@@ -267,6 +276,9 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   // earlier post-PEI seat is kept.
   MF.getInfo<HaydnMachineFunctionInfo>()->takeFrameFreezeSnapshot(
       MF.getFrameInfo());
+  if (HaydnTestGrowFrameAfterSnapshot)
+    MF.getFrameInfo().CreateStackObject(/*Size=*/4, Align(4),
+                                        /*isSpillSlot=*/true);
 
   bool Modified = false;
   for (MachineBasicBlock &MBB : MF)
@@ -294,9 +306,9 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
   // *_POST_INC (expandBundledPostIncLeftovers). Bare LoopDec/LoopJNZ/
   // LoopStart stay legal until Fixup / late Verify. Top-level leftover
   // LOADI32/LOADI64 after ExpandPostRA (TargetPassConfig.cpp:1192) is
-  // fail-closed here so it cannot reach pack/commit. B/RET/BR_JT/
+  // fail-closed here so it cannot reach pack/commit. RET/BR_JT/
   // PseudoCALLIndirect leftover (including BUNDLE children) is fatal:
-  // representation expansion is this pass, not the printer.
+  // representation expansion is this pass, not the printer. B is not expanded.
   for (MachineBasicBlock &MBB : MF) {
     for (MachineInstr &MI : MBB.instrs()) {
       if (MI.isBundle())
@@ -309,9 +321,8 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
       const bool LeftoverLoadI =
           !MI.isInsideBundle() &&
           (Opc == Haydn::LOADI32 || Opc == Haydn::LOADI64);
-      // B (bare or exact-committed bundled) stays the CFG shell through
-      // BranchRelaxation; the closure Finalize expandUncondBToBeqz owns
-      // B -> BEQZ_W_MSP after the last BR. HardwareLoops demote inserts
+      // B (bare or exact-committed bundled) stays the CFG uncond shell
+      // through BranchRelaxation and encode. HardwareLoops demote inserts
       // the exit as a bundled B (emitExactLate), so a bundled-B fatal
       // here would reject every demoted loop (nsichneu).
       const bool LeftoverRepr =
@@ -334,7 +345,7 @@ bool HaydnExpandPseudos::runOnMachineFunction(MachineFunction &MF) {
       } else if (LeftoverRepr) {
         OS << "HaydnExpandPseudos: residual representation-expand pseudo in "
            << MF.getName() << " BB#" << MBB.getNumber()
-           << " (B/RET/BR_JT/PseudoCALLIndirect must expand before pack):\n  MI: "
+           << " (RET/BR_JT/PseudoCALLIndirect must expand before pack):\n  MI: "
            << MI;
       } else {
         OS << "HaydnExpandPseudos: residual expand-owned semantic pseudo in "
@@ -370,15 +381,16 @@ bool HaydnExpandPseudos::expandMI(MachineBasicBlock &MBB, MachineInstr &MI) {
   // Representation expansion (pre-S1 seat): real parcels before layout
   // / range / Finalize. AIE AIEPseudoBranchExpansion.cpp:43-57 setDesc-
   // expands named branch pseudos before PostMachineScheduler. B is a CFG
-  // API through MBP (expandPostRAPseudo returns false); this pass is after
-  // MBP. RET leftover covers limited pipelines that skip ExpandPostRA.
-  // BR_JT rebuilds JALR_W without catalog caller-saved Defs. Residual of
-  // any of the four after this pass is fatal (including BUNDLE children).
+  // API through MBP and encode (expandPostRAPseudo returns false); this
+  // pass is after MBP. RET leftover covers limited pipelines that skip
+  // ExpandPostRA. BR_JT rebuilds JALR_W without catalog caller-saved Defs.
+  // Residual RET/BR_JT/PseudoCALLIndirect after this pass is fatal
+  // (including BUNDLE children). B is not expanded here.
   case Haydn::B:
-    // CFG uncond shell through BranchRelaxation (isBarrier). Expanding to
-    // catalog BEQZ_W before BR is isConditionalBranch and crashes last-block
-    // fixupConditionalBranch. Mid/closure Finalize emit BEQZ_W_MSP after
-    // the last BR.
+    // CFG uncond shell through BranchRelaxation and encode (isBarrier).
+    // Expanding to catalog BEQZ_W before BR is isConditionalBranch and
+    // crashes last-block fixupConditionalBranch. Encoder peels B to BEQZ
+    // rs=R0.
     return false;
   case Haydn::RET:
   case Haydn::BR_JT:

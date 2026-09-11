@@ -13,17 +13,16 @@ define i8 @smulh_s8(i8 %a, i8 %b) nounwind {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: smulh_s8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 24; slli32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; srai32 r2, r2, 24; srai32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 65535 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %aa = sext i8 %a to i16
   %bb = sext i8 %b to i16
   %m = mul i16 %aa, %bb
@@ -35,15 +34,14 @@ define i8 @smulh_s8(i8 %a, i8 %b) nounwind {
 define i8 @umulh_s8(i8 %a, i8 %b) nounwind {
 ; CHECK-LABEL: umulh_s8:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { andi32 r2, r2, 255; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %aa = zext i8 %a to i16
   %bb = zext i8 %b to i16
   %m = mul i16 %aa, %bb
@@ -55,16 +53,15 @@ define i8 @umulh_s8(i8 %a, i8 %b) nounwind {
 define i16 @smulh_s16(i16 %a, i16 %b) nounwind {
 ; CHECK-LABEL: smulh_s16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 16; slli32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; srai32 r2, r2, 16; srai32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %aa = sext i16 %a to i32
   %bb = sext i16 %b to i32
   %m = mul i32 %aa, %bb
@@ -76,15 +73,14 @@ define i16 @smulh_s16(i16 %a, i16 %b) nounwind {
 define i16 @umulh_s16(i16 %a, i16 %b) nounwind {
 ; CHECK-LABEL: umulh_s16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { andi32 r2, r2, 65535; andi32 r1, r1, 65535 }
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 16 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %aa = zext i16 %a to i32
   %bb = zext i16 %b to i32
   %m = mul i32 %aa, %bb
@@ -96,17 +92,16 @@ define i16 @umulh_s16(i16 %a, i16 %b) nounwind {
 define i8 @smulh_s8_neg(i8 %a, i8 %b) nounwind {
 ; CHECK-LABEL: smulh_s8_neg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 24; slli32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; srai32 r2, r2, 24; srai32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 65535 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %aa = sext i8 %a to i16
   %bb = sext i8 %b to i16
   %m = mul i16 %aa, %bb

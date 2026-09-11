@@ -11,6 +11,10 @@
 
 ; Role: harness — compiler to sysroot to consumer artifact identity.
 ;
+; Clang/llc hash drift is fail-closed unbound. Restamp is producer-only
+; (record_haydn_artifact_set.py --restamp). GOLDEN_INPUTS five-file pin
+; count is not a product fail.
+;
 ; Pins haydn-rt/haydn.ld as the product linker script, .bak/.broken refuse,
 ; ARTIFACT.product_ld attach (null is fail-closed), library pin (vec_dot16
 ; residual), memset-2/strlen-5/va-arg library seats, CODE_IMAGE_REJECT

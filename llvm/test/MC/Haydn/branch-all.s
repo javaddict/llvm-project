@@ -29,7 +29,7 @@
 # CHECK: {{.*}}f0: 07 0e 28 00 00 00 00 00 00 00 00 00{{.*}}jal
 # CHECK: {{.*}}fc: 07 0e 38 00 82 ff 07 00 00 00 00 00{{.*}}jal
 # CHECK: {{.*}}108: 07 0d 42 05 0c 00 00 00 00 00 00 00{{.*}}jalr
-# CHECK: {{.*}}114: 07 0d 62 07 ec 0e 00 00 00 00 00 00{{.*}}jalr
+# CHECK: {{.*}}114: 07 0d 62 07 00 00 00 00 00 00 00 00{{.*}}jalr
 # CHECK-NOT: <unknown>
 
 # Comprehensive branch instruction test.
@@ -106,10 +106,12 @@ JAL R2, target18
 
 JAL R3, target1
 
-JALR R4, R5, target19
+# ISA-69: symbolic JALR is fail-closed. Literals keep the object
+# roundtrip; imm12=12 is one parcel, imm12=0 is register-indirect.
+JALR R4, R5, 12
 
 target19:
-JALR R6, R7, target1
+JALR R6, R7, 0
 
 # NOTE: RET is a pseudo-instruction (HaydnPseudo), not a real MC instruction.
 # It expands to "jalr r0, lr, 0" during codegen. Cannot test in llvm-mc.

@@ -16,6 +16,7 @@
 #include "HaydnAlternateDescriptors.h"
 #include "HaydnSchedMutations.h"
 #include "MCTargetDesc/HaydnFormat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
@@ -26,6 +27,8 @@
 #include <utility>
 
 namespace llvm {
+
+class MachineBasicBlock;
 
 class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // Object-encoding profile for this function (copied from Subtarget at
@@ -102,13 +105,25 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // -1 when not reserved.
   int BranchRelaxationScratchFI = -1;
 
-  // Permanent 4-byte in-frame save slot for hwloop-demote value preservation
-  // (CB-162): when the demoted loop's trip register is live after the loop
-  // and no free GPR countdown exists, the trip value is stored here before
-  // the loop and reloaded at the exit. Kept DISJOINT from PostRAScratchFI
-  // (which holds the demote stack-counter) so the two never collide.
-  // Reserved lazily by HaydnHardwareLoops demote; -1 when not reserved.
-  int HwLoopDemoteSaveFI = -1;
+  // Dedicated pre-PEI stack-counter homes for hwloop demote (D1.88). One
+  // 4-byte FI per hardware-loop setup. Ephemeral scratch
+  // (PostRAScratchFI / BranchRelaxationScratchFI) and the demote-save
+  // pool must not alias these. Demote assigns from the pool; the verifier
+  // checks assignment, not membership in any scratch-home set.
+  SmallVector<int, 2> HwLoopStackCounterPool;
+  SmallVector<int, 2> HwLoopStackCounterAssigned;
+  DenseMap<const MachineBasicBlock *, int> HwLoopStackCounterByLatch;
+
+  // Dedicated pre-PEI CB-162 demote-save homes (D1.150 / D1.154). Twin
+  // of the stack-counter pool: one 4-byte FI per setup present at PEI,
+  // LoopStart included. Peek during preflight; take and bind to the
+  // latch only after the D1.51 barrier for an actual
+  // PreheaderSave/LatchEndSave. Formed-ZOL and refused demotes must not
+  // consume. Nested overlapping saves must not share one FI. Loop-free
+  // functions pay no slot. AIE has no stack save (reserved LC).
+  SmallVector<int, 2> HwLoopDemoteSavePool;
+  SmallVector<int, 2> HwLoopDemoteSaveAssigned;
+  DenseMap<const MachineBasicBlock *, int> HwLoopDemoteSaveByLatch;
 
   // Frame-freeze snapshot: first post-PEI Haydn pass (HardwareLoops then
   // ExpandPseudos; earliest wins). NumObjects+StackSize plus per-live-FI
@@ -158,8 +173,9 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   // GR2.7/D1.40 postcommit CFG identity wall. The first HaydnFinalizeBundle
   // run (the commit-normalization seat at addPreSched2) stamps a full CFG
   // identity snapshot exactly once; after the stamp the postcommit CFG is
-  // identity-frozen: live count, block-ID numbering slack, and per-MBB
-  // identity tokens never change. Four closed laws, one owner
+  // identity-frozen: live count, block-ID numbering slack, per-MBB
+  // identity tokens, and the MBB creation high-water never change. Six
+  // closed laws, one owner
   // (postCommitCfgCreationViolation, consumed verbatim by both seats):
   //   L1  live count grew     — the published growth law (BranchRelaxation
   //                             trampoline/RestoreBB/split arms are the
@@ -180,6 +196,15 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   //                             sparse bb.N holes already present at the
   //                             stamp are measured as slack deltas, not
   //                             absolute density.
+  //   L6  creation high-water advanced — L3 retires on the BR-entry epoch
+  //                             bump, so create-then-delete after
+  //                             RenumberBlocks would restore live count,
+  //                             tokens, and compacted numbering. The
+  //                             monotone MBB CreationID high-water (HC#0
+  //                             CreateMachineBasicBlock serial; never
+  //                             numbering slack) is the un-launderable
+  //                             twin: any post-stamp CreateMachineBasicBlock
+  //                             advances it, including create-then-delete.
   //   L5  successor sequence diverged (edge digest) — with block identity
   //                             proven unchanged by L1/L2/L4, every MBB's
   //                             successor sequence is digested as successor
@@ -187,33 +212,33 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   //                             order preserved) and compared against the
   //                             stamp. Edge-only mutation — a successor
   //                             rewrite with unchanged block identity/token
-  //                             sequence — is refused unless covered by the
-  //                             ONE admitted-transition record
-  //                             (recordPostCommitAdmittedEdgeTransition,
-  //                             called once per demote from
-  //                             llvm::demoteHardwareLoopToSoftware:
-  //                             FixupHwLoops at addPreEmitPass and the
-  //                             HaydnLateConvergence inner loop legitimately
-  //                             rewrite the latch successors post-stamp; an
-  //                             unconditional edge freeze would false-fire on
-  //                             every demote).
+  //                             sequence — is a hard freeze. Wave 4 H:
+  //                             stamped demoteHardwareLoopToSoftware
+  //                             returns false with SET/CFG untouched. GR2.10:
+  //                             no admitted-transition exception and no
+  //                             consume-and-advance; any digest mismatch
+  //                             is refused.
   // Tokens are renumber-stable and recycle-stable: (MBB.getBasicBlock(),
-  // BBID-or-sentinel); MBB numbers/pointers are NOT recorded, so a legal
-  // renumber keeps the stamp valid. Residual (documented on the D1.40 row):
-  // a create-then-delete with NO token change after a renumber launders L3
-  // (epoch already bumped) — closing it needs a monotone per-MF creation
-  // counter, an HC#0 common-MachineFunction seam, not a target edit; and
-  // replacement among null-BB/no-BBID synthetic blocks shares one token, so
-  // only L3 can catch it. Write-once monotone ratchet: later Finalize seats
-  // never re-stamp. No stamp (limited-pipeline probes and MIR fixtures that
-  // never run Finalize) observes no wall. Per-function MFI state — no
-  // process global, parallel-codegen safe (D1.13 law).
+  // BBID-or-CreationID-or-sentinel); MBB numbers/pointers are NOT recorded,
+  // so a legal renumber keeps the stamp valid. Null-BB/no-BBID blocks fold
+  // CreationID into the existing uint64 half so they no longer share
+  // NoBBIDSentinel (equal-count replacement is L4). Write-once monotone
+  // ratchet: later Finalize seats never re-stamp. No stamp (limited-pipeline
+  // probes and MIR fixtures that never run Finalize) observes no wall.
+  // Per-function MFI state — no process global, parallel-codegen safe
+  // (D1.13 law). Nested snapshot field only; clone() drops the stamp and
+  // the creation high-water. No Haydn token type, HaydnBBID map, or second
+  // wall predicate.
   struct PostCommitCfgSnapshot {
     unsigned LiveCount = 0;      // L0 = MF.size()
     unsigned BlockIDHighWater = 0; // H0 = MF.getNumBlockIDs()
     unsigned NumberingEpoch = 0; // E0 = MF.getBlockNumberEpoch()
+    // Exclusive CreationID high-water at stamp (C0 =
+    // MF.getMBBCreationHighWater()). L6 compares the live high-water
+    // against this; RenumberBlocks does not change it.
+    unsigned CreationHighWater = 0;
     // T0 = per-MBB identity tokens in layout order:
-    // (getBasicBlock(), BBID-or-sentinel).
+    // (getBasicBlock(), BBID-or-CreationID-or-sentinel).
     SmallVector<std::pair<const BasicBlock *, uint64_t>, 8> Tokens;
     // D0 = per-MBB successor-position digests in layout order (L5). Each
     // digest is the successor list encoded as LAYOUT POSITIONS, matching the
@@ -225,25 +250,24 @@ class HaydnMachineFunctionInfo : public MachineFunctionInfo {
   };
   PostCommitCfgSnapshot PostCommitCfg;
   bool PostCommitCfgStamped = false;
-  // L5 admitted-transition record (D1.40 Phase 2): layout positions of the
-  // SOURCE blocks whose successor rewrite is legitimately covered by the
-  // single recording site (llvm::demoteHardwareLoopToSoftware). Post-stamp
-  // demote latch rewrites are exactly the admitted class; every uncovered
-  // edge mutation stays refused by L5. Written ONLY while the wall is armed
-  // (the demote runs post-stamp; a pre-stamp record is dead state — the
-  // snapshot below is what the wall enforces). Monotone append; never
-  // consumed as an admission the stamp does not cover.
-  SmallVector<unsigned, 4> PostCommitAdmittedEdgeSources;
   // Sentinel token half for MBBs without a UniqueBBID (BB sections are off
   // for Haydn, so this is the common case). A present UniqueBBID encodes as
   // (BaseID << 32) | CloneID.
   static constexpr uint64_t NoBBIDSentinel = ~uint64_t(0);
   // The single token encoding shared by the stamp and every law check
-  // (renumber-stable and recycle-stable by construction).
+  // (renumber-stable and recycle-stable by construction). UniqueBBID, when
+  // present, stays the packed (BaseID, CloneID) encoding. Null-BB/no-BBID
+  // synthetic blocks fold CreationID in place of the shared sentinel so
+  // equal-count replacement is visible to L4. IR-bound no-BBID blocks keep
+  // the sentinel: L4 already distinguishes them via getBasicBlock(), and
+  // same-IR shrink-regrow must remain the L3 numbering trace.
   static uint64_t cfgIdentityToken(const MachineBasicBlock &MBB) {
     const std::optional<UniqueBBID> BBID = MBB.getBBID();
-    return BBID ? (uint64_t(BBID->BaseID) << 32) | BBID->CloneID
-                : NoBBIDSentinel;
+    if (BBID)
+      return (uint64_t(BBID->BaseID) << 32) | BBID->CloneID;
+    if (!MBB.getBasicBlock())
+      return uint64_t(MBB.getCreationID());
+    return NoBBIDSentinel;
   }
   // Layout position sentinel: the block is not a live block of this MF
   // (successor of a dead/foreign block; unrepresentable in the stamp).
@@ -346,10 +370,115 @@ public:
   void setBranchRelaxationScratchFI(int FI) { BranchRelaxationScratchFI = FI; }
   //@}
 
-  // \name Hwloop-demote live-trip save slot (CB-162).
+  // \name Dedicated hwloop stack-counter FI pool (D1.88).
   //@{
-  int getHwLoopDemoteSaveFI() const { return HwLoopDemoteSaveFI; }
-  void setHwLoopDemoteSaveFI(int FI) { HwLoopDemoteSaveFI = FI; }
+  ArrayRef<int> getHwLoopStackCounterPool() const {
+    return HwLoopStackCounterPool;
+  }
+  ArrayRef<int> getAssignedHwLoopStackCounterFIs() const {
+    return HwLoopStackCounterAssigned;
+  }
+  void addHwLoopStackCounterFI(int FI) {
+    if (FI >= 0)
+      HwLoopStackCounterPool.push_back(FI);
+  }
+  int peekHwLoopStackCounterFI() const {
+    for (int FI : HwLoopStackCounterPool) {
+      if (FI < 0)
+        continue;
+      bool Assigned = false;
+      for (int A : HwLoopStackCounterAssigned) {
+        if (A == FI) {
+          Assigned = true;
+          break;
+        }
+      }
+      if (!Assigned)
+        return FI;
+    }
+    return -1;
+  }
+  int takeHwLoopStackCounterFI() {
+    const int FI = peekHwLoopStackCounterFI();
+    if (FI >= 0)
+      HwLoopStackCounterAssigned.push_back(FI);
+    return FI;
+  }
+  bool isAssignedHwLoopStackCounterFI(int FI) const {
+    if (FI < 0)
+      return false;
+    for (int A : HwLoopStackCounterAssigned)
+      if (A == FI)
+        return true;
+    return false;
+  }
+  /// D1.102: bind this latch to the FI taken for its stack counter.
+  void bindHwLoopStackCounterFI(const MachineBasicBlock *Latch, int FI) {
+    if (Latch && FI >= 0)
+      HwLoopStackCounterByLatch[Latch] = FI;
+  }
+  int getHwLoopStackCounterFIForLatch(const MachineBasicBlock *Latch) const {
+    if (!Latch)
+      return -1;
+    auto It = HwLoopStackCounterByLatch.find(Latch);
+    return It == HwLoopStackCounterByLatch.end() ? -1 : It->second;
+  }
+  //@}
+
+  // \name Dedicated hwloop demote-save FI pool (D1.150 / D1.154).
+  // Twin of the D1.88/D1.102 counter pool: peek during preflight, take
+  // and bind after the D1.51 barrier for an actual PreheaderSave /
+  // LatchEndSave. PEI reserves one slot per LoopStart/SET; a refused or
+  // formed-ZOL setup must not consume.
+  //@{
+  ArrayRef<int> getHwLoopDemoteSavePool() const { return HwLoopDemoteSavePool; }
+  ArrayRef<int> getAssignedHwLoopDemoteSaveFIs() const {
+    return HwLoopDemoteSaveAssigned;
+  }
+  void addHwLoopDemoteSaveFI(int FI) {
+    if (FI >= 0)
+      HwLoopDemoteSavePool.push_back(FI);
+  }
+  int peekHwLoopDemoteSaveFI() const {
+    for (int FI : HwLoopDemoteSavePool) {
+      if (FI < 0)
+        continue;
+      bool Assigned = false;
+      for (int A : HwLoopDemoteSaveAssigned) {
+        if (A == FI) {
+          Assigned = true;
+          break;
+        }
+      }
+      if (!Assigned)
+        return FI;
+    }
+    return -1;
+  }
+  int takeHwLoopDemoteSaveFI() {
+    const int FI = peekHwLoopDemoteSaveFI();
+    if (FI >= 0)
+      HwLoopDemoteSaveAssigned.push_back(FI);
+    return FI;
+  }
+  bool isAssignedHwLoopDemoteSaveFI(int FI) const {
+    if (FI < 0)
+      return false;
+    for (int A : HwLoopDemoteSaveAssigned)
+      if (A == FI)
+        return true;
+    return false;
+  }
+  void bindHwLoopDemoteSaveFI(const MachineBasicBlock *Latch, int FI) {
+    if (Latch && FI >= 0)
+      HwLoopDemoteSaveByLatch[Latch] = FI;
+  }
+  int getHwLoopDemoteSaveFIForLatch(const MachineBasicBlock *Latch) const {
+    if (!Latch)
+      return -1;
+    auto It = HwLoopDemoteSaveByLatch.find(Latch);
+    return It == HwLoopDemoteSaveByLatch.end() ? -1 : It->second;
+  }
   //@}
 
   // \name Frame-freeze snapshot (frame-deadline law).
@@ -410,8 +539,8 @@ public:
   bool hasPostCommitBlockBudget() const { return PostCommitCfgStamped; }
   /// Stamp the snapshot write-once (first Finalize run = the
   /// commit-normalization seat). Records live count, block-ID high-water,
-  /// numbering epoch, per-MBB identity tokens, and per-MBB successor
-  /// digests in layout order. Later seats never re-stamp.
+  /// numbering epoch, CreationID high-water, per-MBB identity tokens, and
+  /// per-MBB successor digests in layout order. Later seats never re-stamp.
   void stampPostCommitCfgSnapshot(const MachineFunction &MF) {
     if (PostCommitCfgStamped)
       return;
@@ -419,6 +548,7 @@ public:
     PostCommitCfg.LiveCount = static_cast<unsigned>(MF.size());
     PostCommitCfg.BlockIDHighWater = MF.getNumBlockIDs();
     PostCommitCfg.NumberingEpoch = MF.getBlockNumberEpoch();
+    PostCommitCfg.CreationHighWater = MF.getMBBCreationHighWater();
     PostCommitCfg.Tokens.clear();
     PostCommitCfg.Tokens.reserve(MF.size());
     PostCommitCfg.SuccPositions.clear();
@@ -433,25 +563,12 @@ public:
         Succ.push_back(cfgLayoutPosition(MF, *S));
     }
   }
-  /// The ONE admitted-transition record for the L5 edge law (D1.40
-  /// Phase 2). Called exactly once per demote by
-  /// llvm::demoteHardwareLoopToSoftware after it rewrites the latch's
-  /// successor list: names the SOURCE block (by layout position) whose
-  /// successors were rewritten post-stamp. Append-only; the L5 check
-  /// admits an edge digest change ONLY on a recorded source position (and
-  /// never before its record). Dead code if the wall is not armed — the
-  /// demote also runs pre-stamp, where no snapshot exists to diverge from.
-  void recordPostCommitAdmittedEdgeTransition(const MachineFunction &MF,
-                                              const MachineBasicBlock &Src) {
-    PostCommitAdmittedEdgeSources.push_back(cfgLayoutPosition(MF, Src));
-  }
-  /// Postcommit CFG identity violation description (laws L1-L5 above), or
+  /// Postcommit CFG identity violation description (laws L1-L6 above), or
   /// empty when the CFG is identity-identical to the stamp (or no stamp was
   /// taken — probes and MIR fixtures that never run Finalize stay legal).
-  /// Non-const because the L5 check CONSUMES a spent admission (erases it
-  /// from the persistent record): one record admits exactly one divergence
-  /// across the whole post-stamp lifecycle.
-  std::string postCommitCfgCreationViolation(const MachineFunction &MF);
+  /// L5 is a no-exception edge wall: any successor-digest mismatch after
+  /// the stamp is refused (GR2.10 deleted the admitted-transition API).
+  std::string postCommitCfgCreationViolation(const MachineFunction &MF) const;
   //@}
 
   // \name W68.2R inter-block DDG registry (per-function lifetime).

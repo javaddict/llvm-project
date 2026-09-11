@@ -36,8 +36,7 @@ define i32 @const_0x12345678() {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: const_0x12345678:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 291 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 284280 }
@@ -51,8 +50,7 @@ define i32 @const_0x12345678() {
 define i32 @const_0x12348000() {
 ; CHECK-LABEL: const_0x12348000:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 291 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 294912 }
@@ -67,8 +65,7 @@ define i32 @const_0x12348000() {
 define i32 @const_0x123B8000() {
 ; CHECK-LABEL: const_0x123B8000:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 292 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -294912 }
@@ -82,8 +79,7 @@ define i32 @const_0x123B8000() {
 define i32 @const_0xDEADBEEF() {
 ; CHECK-LABEL: const_0xDEADBEEF:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 3563 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -147729 }
@@ -100,8 +96,7 @@ define i32 @const_0xDEADBEEF() {
 define i32 @regression_simm16() {
 ; CHECK-LABEL: regression_simm16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 32767 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -113,8 +108,7 @@ define i32 @regression_simm16() {
 define i32 @regression_uimm16() {
 ; CHECK-LABEL: regression_uimm16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 65535 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -126,8 +120,7 @@ define i32 @regression_uimm16() {
 define i32 @regression_lui_only() {
 ; CHECK-LABEL: regression_lui_only:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
@@ -141,8 +134,7 @@ define i32 @regression_lui_only() {
 define i32 @add_with_hole_const(i32 %x) {
 ; CHECK-LABEL: add_with_hole_const:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r2, 291 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 284280 }

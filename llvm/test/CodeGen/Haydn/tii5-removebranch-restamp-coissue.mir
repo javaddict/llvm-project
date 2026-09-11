@@ -2,21 +2,27 @@
 # RUN:   -run-pass=haydn-longbranch-normalize,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s
 
-# Role: MIR — T-TII5 PreEmit relaxation strips a coissued branch and the
-# surviving ALU must be re-stamped (or verify fail-closes).
+# Role: MIR — T-TII5 selected-member restamp. A coissued ALU sibling must
+# survive strip of the selected branch (HaydnInstrInfo::eraseSelectedBranch;
+# HaydnHWLoopDemote.cpp:742-773 eraseSetMemberAndRecommitSiblings peer).
+# Generic removeBranch still reverse-walks the trailing analyzable tail
+# (AIEBaseInstrInfo.cpp:237-266; HexagonInstrInfo.cpp:605-625;
+# RISCVInstrInfo.cpp:1361-1390) — do not narrow that walk.
 #
-# REGRESSION TEST: removeBranch on BUNDLE{ADD32, BEQZ_W} used to erase only
-# the branch child and leave the root's pre-strip FormatID/CompletionStateID.
-# HaydnFinalizeBundle skips already-bundled roots, so MC would serialize the
-# stale two-entry identity. Fix: removeBranch re-solves like
-# HaydnFixupHwLoops.cpp:338-388 recommitSurvivingCycleMembers
-# (AIEBaseInstrInfo.cpp:236-266 removeBranch BytesRemoved peer).
+# REGRESSION: stripping a BUNDLE{ADD32, branch} child used to leave the
+# root's pre-strip FormatID/CompletionStateID. Finalize skips already-
+# bundled roots, so MC serialized the stale two-entry identity. The helper
+# re-solves survivors like recommitSurvivingCycleMembers.
 #
-# Far ADD32-parcel pad (420 x 12B) forces BranchRelaxation to call
-# removeBranch (the prior `.space` INLINEASM pad is rejected by the
-# W68.4 inline-asm admission law). After
-# restamp + Finalize, ADD32 remains in a product-legal BUNDLE, BEQZ_W is
-# gone from the coissue, and haydn-verify-bundles must not fatal.
+# coissue_far_strip: far cond in BUNDLE{ADD32, BEQZ_W}. ALU survives; the
+# selected cond is gone from the coissue (invert/long-form, not leftover
+# short BEQZ). Far ADD32-parcel pad (420 x 12B) forces the rewrite (the
+# prior `.space` INLINEASM pad is rejected by the inline-asm admission
+# law).
+#
+# coissue_far_uncond_preceding: two preceding conds + BUNDLE{ADD32, B}.
+# Only the selected uncond member is replaced; ADD32 and both BEQZ
+# survive. Broad removeBranch would erase the preceding conds.
 
 --- |
   define void @coissue_far_strip(i1 %c) {
@@ -25,6 +31,14 @@
   pad:
     br label %exit
   exit:
+    ret void
+  }
+  define void @coissue_far_uncond_preceding(i1 %c) {
+  entry:
+    br i1 %c, label %near, label %far
+  near:
+    br label %far
+  far:
     ret void
   }
 ...
@@ -53,13 +67,19 @@ body:             |
     liveins: $r0, $r1, $r2, $r15
     ; CHECK-LABEL: name: coissue_far_strip
     ; CHECK: bb.0.entry
-    ; ALU sibling survives; branch child is stripped and the root restamped.
-    ; CHECK: BUNDLE
-    ; CHECK: ADD32
+    ; ALU sibling survives in bb.0 (not the pad ADD32); selected cond is
+    ; gone from the coissue; no leftover short uncond beside JALR.
+    ; Surviving ADD32 is not an SFR writer — header implicit-def dead $sfr
+    ; from the neutralized BEQZ is dropped.
+    ; CHECK-NOT: BUNDLE{{.*}}$sfr
+    ; CHECK: $r3 = ADD32
     ; CHECK-NOT: BEQZ_W
+    ; CHECK-NOT: B %bb.1
     ; CHECK: JALR
-    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r0, implicit $r1, implicit $r2 {
-      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    ; CHECK-NOT: B %bb.1
+    ; CHECK: bb.1.pad
+    BUNDLE 0, 0, implicit-def $r3, implicit $r0, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2
       BEQZ_W $r0, %bb.2, implicit-def dead $sfr
     }
     BUNDLE 0 {
@@ -497,6 +517,247 @@ body:             |
     liveins: $r15
     ; CHECK: bb.2.exit
     ; CHECK: JALR
+    BUNDLE 0, 0 {
+      $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
+    }
+
+...
+
+---
+name:            coissue_far_uncond_preceding
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r4, $r5, $r15
+    ; CHECK-LABEL: name: coissue_far_uncond_preceding
+    ; CHECK: bb.0.entry
+    ; Preceding conds and the coissued ALU survive; only the selected
+    ; uncond member is replaced (not broad removeBranch).
+    ; CHECK-DAG: $r3 = ADD32
+    ; CHECK-DAG: BEQZ{{.*}} $r4, %bb.1
+    ; CHECK-DAG: BEQZ{{.*}} $r5, %bb.1
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: JALR
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: bb.1.near
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r3, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.2.far:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    ; CHECK: bb.2.far
+    ; CHECK: JALR
+    ST32 $r4, $r4, 0, implicit-def dead $sfr :: (store (s32))
+    ST32 $r5, $r5, 0, implicit-def dead $sfr :: (store (s32))
     BUNDLE 0, 0 {
       $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0
     }

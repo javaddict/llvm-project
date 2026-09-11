@@ -19,8 +19,7 @@
 define i32 @gep_array(ptr %arr, i32 %idx) {
 ; CHECK-LABEL: gep_array:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
@@ -39,8 +38,7 @@ define i32 @gep_array(ptr %arr, i32 %idx) {
 define i32 @gep_struct_field(ptr %p) {
 ; CHECK-LABEL: gep_struct_field:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -54,8 +52,7 @@ define i32 @gep_struct_field(ptr %p) {
 define i32 @gep_struct_field1(ptr %p) {
 ; CHECK-LABEL: gep_struct_field1:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -72,18 +69,17 @@ define i32 @gep_struct_field1(ptr %p) {
 define i32 @gep_array_of_struct(ptr %arr, i32 %idx) {
 ; CHECK-LABEL: gep_array_of_struct:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 12 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %ptr = getelementptr %struct.Triple, ptr %arr, i32 %idx, i32 1
   %val = load i32, ptr %ptr
   ret i32 %val
@@ -93,8 +89,7 @@ define i32 @gep_array_of_struct(ptr %arr, i32 %idx) {
 define i32 @gep_2d_array(ptr %arr, i32 %row, i32 %col) {
 ; CHECK-LABEL: gep_2d_array:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 4 }
 ; CHECK-NEXT:    { nop; slli32 r2, r3, 2; add32 r1, r1, r2 }
@@ -116,8 +111,7 @@ define i32 @gep_2d_array(ptr %arr, i32 %row, i32 %col) {
 define i32 @gep_nested_struct(ptr %p) {
 ; CHECK-LABEL: gep_nested_struct:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -133,8 +127,7 @@ define i32 @gep_nested_struct(ptr %p) {
 define i32 @gep_const_offset(ptr %arr) {
 ; CHECK-LABEL: gep_const_offset:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -149,15 +142,11 @@ define i32 @gep_const_offset(ptr %arr) {
 define i32 @gep_in_loop(ptr %arr, i32 %n) {
 ; CHECK-LABEL: gep_in_loop:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; GR2.1 Kind-A restamp: loop pipelines (guarded 2-stage peel; kernel packs
-; {add32 + IV bump} then {move32 + slt32}); epilog adds the tail.
 ; CHECK-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 2 }
 ; CHECK-NEXT:    { slt32 r6, r2, r5; addi32 r4, r3, 1 }
-; CHECK-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; nop; s_lw_post_imm r5, r1, 1 }
 ; CHECK-NEXT:    { nop; bnez r6, .LBB7_2 }
 ; CHECK-NEXT:  .LBB7_1: // %loop
 ; CHECK-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -170,6 +159,8 @@ define i32 @gep_in_loop(ptr %arr, i32 %n) {
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; GR2.1 Kind-A restamp: loop pipelines (guarded 2-stage peel; kernel packs
+; {add32 + IV bump} then {move32 + slt32}); epilog adds the tail.
 entry:
   br label %loop
 loop:
@@ -194,8 +185,7 @@ exit:
 define i32 @gep_64bit_index(ptr %arr, i64 %idx) {
 ; CHECK-LABEL: gep_64bit_index:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_l r2, d0 }
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
@@ -213,8 +203,7 @@ define i32 @gep_64bit_index(ptr %arr, i64 %idx) {
 define void @gep_store(ptr %arr, i32 %idx, i32 %val) {
 ; CHECK-LABEL: gep_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slli32 r2, r2, 2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }

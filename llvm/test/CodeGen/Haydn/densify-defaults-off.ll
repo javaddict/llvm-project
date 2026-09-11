@@ -37,7 +37,7 @@
 ; deleted (not merely default-OFF). Dual-ON is flag-forced evidence only:
 ; Role-A insert/expand/fixup appear, deleted densify stays absent,
 ; multi-stage remains inside PostRA (no extra Structure pass). Late
-; Finalize+Verify after BranchRelaxation is product default (same
+; Finalize+Verify after post-stamp LBN is product default (same)
 ; Finalize/Verify; not a second packer). FeatureHWLoop is ISA only.
 
 ; YOLO phase-out: densify / zombie passes deleted from pipeline (not merely
@@ -47,18 +47,17 @@
 ; Deleted densify (no flags): PostPipeliner, InterBlock, Role B, formMACs,
 ; LoadStoreOpt form/phase2.
 
-; Flip sites: hwloop/SMS constexpr true (2026-08-22); -haydn-sms2 constexpr
-; true since the G004 flip 2026-08-27 (trimmed: sms2-only arm measured
-; CM -3.76% / DH -0.86%); the three -haydn-postra-* edge mutations stay
-; constexpr false (combined arm super-additively regressive: CM +33.38%,
-; DH +12.18%). cl::init follows each helper.
+; Flip sites: hwloop/SMS constexpr true (2026-08-22); GR1.7 deleted
+; LateConvergence. The three -haydn-postra-* edge mutations
+; stay constexpr false (combined arm super-additively regressive:
+; CM +33.38%, DH +12.18%). cl::init follows each helper.
 ; HWDEF: hardwareLoopsProductDefaultEnabled() { return true; }
 ; HWASSERT: static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()
 ; HWFLAG: cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
-; S2DEF: haydnLateConvergenceProductDefaultEnabled()
-; S2DEF: return true;
-; S2DEF: "haydn-sms2", cl::Hidden,
-; S2DEF: cl::init(haydnLateConvergenceProductDefaultEnabled()),
+; S2DEF: LimitedCodeGenPipeline
+; S2DEF-NOT: haydnLateConvergenceProductDefaultEnabled
+; S2DEF-NOT: "haydn-sms2"
+; S2DEF-NOT: createHaydnLateConvergencePass
 ; IBDEF: haydnPostRAInterblockProductDefaultEnabled() { return false; }
 ; IBDEF: haydnPostRARegionEndEdgesProductDefaultEnabled() { return false; }
 ; IBDEF: haydnPostRAWAWEdgesProductDefaultEnabled() { return false; }
@@ -81,17 +80,14 @@
 ; PIPE:      Haydn Hardware Loop Expansion
 ; PIPE:      Haydn pseudo instruction expansion pass
 ; PIPE:      PostRA Machine Instruction Scheduler
-; PIPE-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; PIPE-NOT:      Haydn Exposed-Pipeline Latency Stalls
 ; PIPE-NEXT:      Haydn Long-Branch Normalize
-; PIPE-NEXT:      Branch relaxation pass
 ; PIPE-NEXT:      Haydn Bundle Finalization
 ; PIPE-NEXT:      Haydn Bundle Invariant Verifier
 ; PIPE-NOT:      Haydn Circular Buffer Detection
 ; PIPE-NOT:      Haydn Redundant Copy Elimination
-; PIPE:      Branch relaxation pass
-; PIPE-NEXT:      Haydn Hardware Loop Fixup
-; PIPE-NEXT:      Haydn Long-Branch Normalize
-; PIPE-NEXT:      Branch relaxation pass
+; PIPE:      Haydn Long-Branch Normalize
+; PIPE-NOT:      Haydn Hardware Loop Fixup
 ; PIPE-NEXT:      Haydn Bundle Finalization
 ; PIPE-NEXT:      Haydn Bundle Invariant Verifier
 
@@ -100,8 +96,8 @@
 ; DUAL:      Hardware Loop Insertion
 ; DUAL:      Haydn Hardware Loop Expansion
 ; DUAL:      PostRA Machine Instruction Scheduler
-; DUAL:      Haydn Hardware Loop Fixup
-; DUAL:      Branch relaxation pass
+; DUAL-NOT:      Haydn Hardware Loop Fixup
+; DUAL:      Haydn Long-Branch Normalize
 ; DUAL-NEXT:      Haydn Bundle Finalization
 ; DUAL-NEXT:      Haydn Bundle Invariant Verifier
 ; DUAL-NOT:      Haydn Load/Store Optimizer
@@ -114,15 +110,12 @@
 ; ATTR:      Hardware Loop Insertion
 ; ATTR:      Haydn Hardware Loop Expansion
 ; ATTR:      PostRA Machine Instruction Scheduler
-; ATTR-NEXT:      Haydn Exposed-Pipeline Latency Stalls
+; ATTR-NOT:      Haydn Exposed-Pipeline Latency Stalls
 ; ATTR-NEXT:      Haydn Long-Branch Normalize
-; ATTR-NEXT:      Branch relaxation pass
 ; ATTR-NEXT:      Haydn Bundle Finalization
 ; ATTR-NEXT:      Haydn Bundle Invariant Verifier
-; ATTR:      Branch relaxation pass
-; ATTR-NEXT:      Haydn Hardware Loop Fixup
-; ATTR-NEXT:      Haydn Long-Branch Normalize
-; ATTR-NEXT:      Branch relaxation pass
+; ATTR:      Haydn Long-Branch Normalize
+; ATTR-NOT:      Haydn Hardware Loop Fixup
 ; ATTR-NEXT:      Haydn Bundle Finalization
 ;
 ; Independent force-ON: each CLI flag arms only its own path. AIE inserts
@@ -132,7 +125,7 @@
 ; separate policy-only patches. Dual-ON QUALIFY is not claimed here.
 ; HWONLY:      Hardware Loop Insertion
 ; HWONLY:      Haydn Hardware Loop Expansion
-; HWONLY:      Haydn Hardware Loop Fixup
+; HWONLY-NOT:      Haydn Hardware Loop Fixup
 ; HWONLY-NOT:      Haydn PostPipeliner
 ; HWONLY-NOT:      Haydn InterBlock
 ; SMSONLY-NOT:      Hardware Loop Insertion

@@ -1,0 +1,924 @@
+# D1.50 ordered-terminator law pins (proof/coverage slice). The law
+# (HaydnLongBranchNormalize describeOrderedTerminatorTail) names every
+# control cycle in order, proves the selected uncond unique/trailing with
+# its dest the analyzed FBB/TBB, and proves the analyzed cond owns the
+# analyzed TBB — BEFORE any mutation. These shapes prove the vocabulary
+# executes (verifier enabled), not just that corruption fails closed:
+#
+#   far_fbb_non_layout_tbb: far FBB whose analyzed TBB is NEAR but NOT
+#     the layout successor (a trap block sits between). The kept-polarity
+#     arm must retain BEQZ to TBB and replace only the trailing uncond —
+#     invert (which would need a proven near dest) must never fire and
+#     the trap must never be branched to.
+#   one_way_far_tbb: one-way cond to a far TBB with NO trailing uncond.
+#     The law names no erasable member; the rewrite appends JALR only,
+#     leaving the cond exactly as analyzed.
+#   multi_control_far_uncond: unanalyzable two-cond tail whose last cycle
+#     is a coissued BUNDLE{ALU,B}. The law names only the trailing uncond
+#     member; both conds and the ALU sibling survive, ALU spliced before
+#     the first control, JALR last.
+#
+# Far template (d149/d134 law, buffer=4, parcel=12, window edge 2044):
+#   170 NOPs = 2040B. Each logical B/BEQZ/NOP/RET charges one parcel.
+#
+# Whole-file RUN lines would see the corrupt section's second embedded-IR
+# document below (one leading IR doc per .mir file), so every arm runs on
+# its split-file section.
+# RUN: rm -rf %t && split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %t/law.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=FBBNL
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %t/law.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=ONEWAY
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %t/law.mir -o - \
+# RUN:   | FileCheck %s --check-prefix=MCLAW
+# Corruption probe (split-file so the healthy arms never see the corrupt
+# tail): finalize first arms the postcommit stamp, then the normalizer's
+# ordered-terminator law refuses the two-uncond-cycle tail with the named
+# violation (plain `not`: GenCrashDiag=false exits 1). Pre-stamp the same
+# tail defers (nullptr) and Arm A fatals "selected trailing uncond
+# missing" — the stamp discriminates the LAW message.
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 %t/corrupt.mir -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=CORRUPT
+# REQUIRES: haydn-registered-target
+
+#--- law.mir
+--- |
+  define dso_local void @far_fbb_non_layout_tbb() {
+  entry:
+    br i1 undef, label %near, label %far
+  trap:
+    ret void
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @one_way_far_tbb() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @multi_control_far_uncond() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            far_fbb_non_layout_tbb
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.2, %bb.3
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    B %bb.3
+
+  bb.1.trap (inlineasm-br-indirect-target):
+    liveins: $r15
+    RET implicit killed $r15
+
+
+  bb.2.near:
+    successors: %bb.3
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.3.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            one_way_far_tbb
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.2.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            multi_control_far_uncond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.2.far:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    ST32 $r4, $r4, 0, implicit-def dead $sfr :: (store (s32))
+    ST32 $r5, $r5, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+# FBBNL-LABEL: name:            far_fbb_non_layout_tbb
+# Analyzed TBB %bb.2 is near but NOT layout-next (trap %bb.1 sits between
+# entry and near in layout). Far FBB %bb.3 -> only the trailing uncond is
+# replaced; original BEQZ polarity retained; trap never branched to.
+# FBBNL: bb.0.entry
+# FBBNL: $r6 = LUI{{.*}}%bb.3{{$}}
+# FBBNL: ADDI32{{.*}}%bb.3{{$}}
+# FBBNL-NOT: BNEZ{{.*}} $r7
+# FBBNL: BEQZ{{.*}} $r7, %bb.2,
+# FBBNL-NOT: BNEZ
+# FBBNL-NOT: B %bb.
+# FBBNL: JALR
+# FBBNL-NOT: B %bb.
+# FBBNL: bb.1.trap
+#
+# ONEWAY-LABEL: name:            one_way_far_tbb
+# One-way cond to far TBB: no trailing uncond exists, so the law names
+# NO erasable member and the erase step is skipped entirely (one-way
+# arm: append JALR only). The cond is inverted in place to the proven
+# layout-successor near dest (BranchRelaxation.cpp:520-530 one-way
+# fallthrough shape) and JALR takes the far edge.
+# ONEWAY: bb.0.entry
+# ONEWAY: $r6 = LUI{{.*}}%bb.2{{$}}
+# ONEWAY: ADDI32{{.*}}%bb.2{{$}}
+# ONEWAY-NOT: BEQZ{{.*}} $r7
+# ONEWAY: BNEZ{{.*}} $r7, %bb.1,
+# ONEWAY-NOT: B %bb.
+# ONEWAY: JALR
+# ONEWAY-NOT: B %bb.
+# ONEWAY: bb.1.near
+#
+# MCLAW-LABEL: name:            multi_control_far_uncond
+# The law names only the trailing uncond member of the coissued cycle:
+# both retained conds and the ALU sibling survive; ALU is spliced before
+# the first control; LUI/ADDI before that; JALR last; no leftover B.
+# MCLAW: bb.0.entry
+# MCLAW: $r3 = ADD32{{.*}} $r1, $r2
+# MCLAW-NOT: B %bb.
+# MCLAW: LUI{{.*}}%bb.2{{$}}
+# MCLAW: ADDI32{{.*}}%bb.2{{$}}
+# MCLAW: BEQZ{{.*}} $r4, %bb.1,
+# MCLAW: BEQZ{{.*}} $r5, %bb.1,
+# MCLAW-NOT: B %bb.
+# MCLAW: JALR
+# MCLAW-NOT: B %bb.
+# MCLAW: bb.1.near
+
+#--- corrupt.mir
+--- |
+  define dso_local void @two_uncond_cycles_corrupt() {
+  entry:
+    br i1 undef, label %near, label %far
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            two_uncond_cycles_corrupt
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r7, %bb.1, implicit-def dead $sfr
+    BUNDLE 0 {
+      B %bb.2
+    }
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+  bb.2.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+# Two unconditional control cycles in one tail is a corruption
+# description: the law must refuse to name a selected member and (with
+# the postcommit stamp armed by the finalize run) fail with the named
+# ordered-terminator violation — never erase an unnamed member. The
+# postcommit fatal aborts before any MIR print, so the pin is the named
+# violation on stderr (function and block named), not a body LABEL.
+# CORRUPT: ordered terminator tail: multiple unconditional control cycles in tail

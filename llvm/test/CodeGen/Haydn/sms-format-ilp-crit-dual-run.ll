@@ -163,31 +163,30 @@ target triple = "haydn-unknown-elf"
 define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; PROD-LABEL: sms_ilp_independent_loads:
 ; PROD:       // %bb.0: // %entry
-; PROD-NEXT:    { nop; xor32 r0, r0, r0 }
-; PROD-NEXT:    { nop; subi32 sp, sp, 16 }
-; PROD-NEXT:    { nop; st32 r8, sp, 3 }
+; PROD-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; PROD-NEXT:    { nop; st32 r8, sp, 3 } // 4-byte Folded Spill
+; PROD-NEXT:    // 4-byte Spill
 ; PROD-NEXT:    .cfi_def_cfa_offset 16
 ; PROD-NEXT:    .cfi_offset r8, -4
-; PROD-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
+; PROD-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; PROD-NEXT:    { addi32 r8, r0, 2; addi32 r5, r0, 0 }
 ; PROD-NEXT:    { add32 r7, r7, r12; addi32 r6, r5, 1 }
 ; PROD-NEXT:    { nop; s_lw_post_imm r12, r3, 1 }
 ; PROD-NEXT:    { addi32 r1, r1, 4; addi32 r2, r2, 4 }
 ; PROD-NEXT:    { nop; slt32 r8, r4, r8 }
 ; PROD-NEXT:    { nop; bnez r8, .LBB0_2 }
-; PROD-NEXT:    .LBB0_1: // %loop
+; PROD-NEXT:  .LBB0_1: // %loop
 ; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
-; PROD-NEXT:    { nop; add32 r7, r7, r12; ld32 r8, r2, 0 }
-; PROD-NEXT:    { ld32 r12, r1, 0; addi32 r6, r6, 1 }
+; PROD-NEXT:    { add32 r7, r7, r12; ld32 r8, r2, 0 }
+; PROD-NEXT:    { addi32 r6, r6, 1; ld32 r12, r1, 0 }
 ; PROD-NEXT:    { add32 r5, r5, r7; addi32 r2, r2, 4 }
 ; PROD-NEXT:    { add32 r7, r12, r8; addi32 r1, r1, 4 }
 ; PROD-NEXT:    { nop; s_lw_post_imm r12, r3, 1 }
 ; PROD-NEXT:    { nop; slt32 r8, r6, r4 }
 ; PROD-NEXT:    { nop; bnez r8, .LBB0_1 }
-; PROD-NEXT:    .LBB0_2:
+; PROD-NEXT:  .LBB0_2:
 ; PROD-NEXT:    { nop; add32 r1, r7, r12 }
-; PROD-NEXT:    { nop; add32 r1, r5, r1 }
-; PROD-NEXT:    { nop; xor32 r0, r0, r0 }
+; PROD-NEXT:    { nop; add32 r1, r5, r1; xor32 r0, r0, r0 }
 ; PROD-NEXT:    { nop; ld32 r8, sp, 3 }
 ; PROD-NEXT:    { nop; addi32 sp, sp, 16 }
 ; PROD-NEXT:    .cfi_def_cfa sp, 0
@@ -195,12 +194,12 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ;
 ; GEN-LABEL: sms_ilp_independent_loads:
 ; GEN:       // %bb.0: // %entry
-; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
-; GEN-NEXT:    { nop; subi32 sp, sp, 16 }
-; GEN-NEXT:    { nop; st32 r8, sp, 3 }
+; GEN-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; GEN-NEXT:    { nop; st32 r8, sp, 3 } // 4-byte Folded Spill
+; GEN-NEXT:    // 4-byte Spill
 ; GEN-NEXT:    .cfi_def_cfa_offset 16
 ; GEN-NEXT:    .cfi_offset r8, -4
-; GEN-NEXT:    { ld32 r6, r1, 0; ld32 r12, r2, 0 }
+; GEN-NEXT:    { ld32 r12, r2, 0; ld32 r6, r1, 0 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r7, r3, 1 }
 ; GEN-NEXT:    { addi32 r8, r0, 2; addi32 r5, r0, 0 }
 ; GEN-NEXT:    { nop; add32 r6, r6, r12 }
@@ -208,7 +207,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { slt32 r8, r4, r8; addi32 r2, r2, 4 }
 ; GEN-NEXT:    { nop; addi32 r1, r1, 4 }
 ; GEN-NEXT:    { nop; bnez r8, .LBB0_2 }
-; GEN-NEXT:    .LBB0_1: // %loop
+; GEN-NEXT:  .LBB0_1: // %loop
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
 ; GEN-NEXT:    { add32 r6, r6, r7; ld32 r8, r2, 0 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r7, r3, 1 }
@@ -218,10 +217,9 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; GEN-NEXT:    { add32 r6, r6, r8; addi32 r1, r1, 4 }
 ; GEN-NEXT:    { nop; slt32 r8, r12, r4 }
 ; GEN-NEXT:    { nop; bnez r8, .LBB0_1 }
-; GEN-NEXT:    .LBB0_2:
+; GEN-NEXT:  .LBB0_2:
 ; GEN-NEXT:    { nop; add32 r1, r6, r7 }
-; GEN-NEXT:    { nop; add32 r1, r5, r1 }
-; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
+; GEN-NEXT:    { nop; add32 r1, r5, r1; xor32 r0, r0, r0 }
 ; GEN-NEXT:    { nop; ld32 r8, sp, 3 }
 ; GEN-NEXT:    { nop; addi32 sp, sp, 16 }
 ; GEN-NEXT:    .cfi_def_cfa sp, 0
@@ -229,12 +227,12 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ;
 ; RP-LABEL: sms_ilp_independent_loads:
 ; RP:       // %bb.0: // %entry
-; RP-NEXT:    { nop; xor32 r0, r0, r0 }
-; RP-NEXT:    { nop; subi32 sp, sp, 16 }
-; RP-NEXT:    { nop; st32 r8, sp, 3 }
+; RP-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; RP-NEXT:    { nop; st32 r8, sp, 3 } // 4-byte Folded Spill
+; RP-NEXT:    // 4-byte Spill
 ; RP-NEXT:    .cfi_def_cfa_offset 16
 ; RP-NEXT:    .cfi_offset r8, -4
-; RP-NEXT:    { ld32 r6, r1, 0; ld32 r12, r2, 0 }
+; RP-NEXT:    { ld32 r12, r2, 0; ld32 r6, r1, 0 }
 ; RP-NEXT:    { nop; s_lw_post_imm r7, r3, 1 }
 ; RP-NEXT:    { addi32 r8, r0, 2; addi32 r5, r0, 0 }
 ; RP-NEXT:    { nop; add32 r6, r6, r12 }
@@ -242,7 +240,7 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { slt32 r8, r4, r8; addi32 r2, r2, 4 }
 ; RP-NEXT:    { nop; addi32 r1, r1, 4 }
 ; RP-NEXT:    { nop; bnez r8, .LBB0_2 }
-; RP-NEXT:    .LBB0_1: // %loop
+; RP-NEXT:  .LBB0_1: // %loop
 ; RP-NEXT:    // =>This Inner Loop Header: Depth=1
 ; RP-NEXT:    { add32 r6, r6, r7; ld32 r8, r2, 0 }
 ; RP-NEXT:    { nop; s_lw_post_imm r7, r3, 1 }
@@ -252,10 +250,9 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ; RP-NEXT:    { add32 r6, r6, r8; addi32 r1, r1, 4 }
 ; RP-NEXT:    { nop; slt32 r8, r12, r4 }
 ; RP-NEXT:    { nop; bnez r8, .LBB0_1 }
-; RP-NEXT:    .LBB0_2:
+; RP-NEXT:  .LBB0_2:
 ; RP-NEXT:    { nop; add32 r1, r6, r7 }
-; RP-NEXT:    { nop; add32 r1, r5, r1 }
-; RP-NEXT:    { nop; xor32 r0, r0, r0 }
+; RP-NEXT:    { nop; add32 r1, r5, r1; xor32 r0, r0, r0 }
 ; RP-NEXT:    { nop; ld32 r8, sp, 3 }
 ; RP-NEXT:    { nop; addi32 sp, sp, 16 }
 ; RP-NEXT:    .cfi_def_cfa sp, 0
@@ -263,44 +260,97 @@ define i32 @sms_ilp_independent_loads(ptr nocapture readonly %p1,
 ;
 ; ASM-LABEL: sms_ilp_independent_loads:
 ; ASM:       // %bb.0: // %entry
-; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
-; ASM-NEXT:    { nop; subi32 sp, sp, 16 }
-; ASM-NEXT:    { nop; st32 r8, sp, 3 }
+; ASM-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; ASM-NEXT:    { nop; st32 r8, sp, 3 } // 4-byte Folded Spill
+; ASM-NEXT:    // 4-byte Spill
 ; ASM-NEXT:    .cfi_def_cfa_offset 16
 ; ASM-NEXT:    .cfi_offset r8, -4
-; ASM-NEXT:    { ld32 r7, r1, 0; ld32 r12, r2, 0 }
+; ASM-NEXT:    { ld32 r12, r2, 0; ld32 r7, r1, 0 }
 ; ASM-NEXT:    { addi32 r8, r0, 2; addi32 r5, r0, 0 }
 ; ASM-NEXT:    { add32 r7, r7, r12; addi32 r6, r5, 1 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r12, r3, 1 }
 ; ASM-NEXT:    { addi32 r1, r1, 4; addi32 r2, r2, 4 }
 ; ASM-NEXT:    { nop; slt32 r8, r4, r8 }
 ; ASM-NEXT:    { nop; bnez r8, .LBB0_2 }
-; ASM-NEXT:    .LBB0_1: // %loop
+; ASM-NEXT:  .LBB0_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
-; ASM-NEXT:    { nop; add32 r7, r7, r12; ld32 r8, r2, 0 }
-; ASM-NEXT:    { ld32 r12, r1, 0; addi32 r6, r6, 1 }
+; ASM-NEXT:    { add32 r7, r7, r12; ld32 r8, r2, 0 }
+; ASM-NEXT:    { addi32 r6, r6, 1; ld32 r12, r1, 0 }
 ; ASM-NEXT:    { add32 r5, r5, r7; addi32 r2, r2, 4 }
 ; ASM-NEXT:    { add32 r7, r12, r8; addi32 r1, r1, 4 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r12, r3, 1 }
 ; ASM-NEXT:    { nop; slt32 r8, r6, r4 }
 ; ASM-NEXT:    { nop; bnez r8, .LBB0_1 }
-; ASM-NEXT:    .LBB0_2:
+; ASM-NEXT:  .LBB0_2:
 ; ASM-NEXT:    { nop; add32 r1, r7, r12 }
-; ASM-NEXT:    { nop; add32 r1, r5, r1 }
-; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
+; ASM-NEXT:    { nop; add32 r1, r5, r1; xor32 r0, r0, r0 }
 ; ASM-NEXT:    { nop; ld32 r8, sp, 3 }
 ; ASM-NEXT:    { nop; addi32 sp, sp, 16 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
 ; ASM-NEXT:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_independent_loads
-; HANDOFF: bb.{{[0-9]+}}.entry:
-; HANDOFF-NEXT:   successors: {{.*}}
+; HANDOFF: bb.1.entry:
+; HANDOFF-NEXT:   successors: %bb.4(0x80000000)
 ; HANDOFF-NEXT:   liveins: $r1, $r2, $r3, $r4
-; HANDOFF-NOT: BUNDLE
-; HANDOFF:      [[LD32_:%[0-9]+]]:gpr32 = LD32 {{%[0-9]+}}, 0
-; HANDOFF:      [[LD32_1:%[0-9]+]]:gpr32 = LD32 {{%[0-9]+}}, 0
-; HANDOFF:      [[S_LW:%[0-9]+]]:gpr32, {{%[0-9]+}}:gpr32 = S_LW_POST_IMM {{%[0-9]+}}, 1
-; HANDOFF:      BNEZ_W {{%[0-9]+}}, %bb.{{[0-9]+}}
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[COPY:%[0-9]+]]:gpr32 = COPY $r1
+; HANDOFF-NEXT:   [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
+; HANDOFF-NEXT:   [[COPY2:%[0-9]+]]:gpr32 = COPY $r3
+; HANDOFF-NEXT:   [[COPY3:%[0-9]+]]:gpr32 = COPY $r4
+; HANDOFF-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = LOADI32 0
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.4.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x40000000), %bb.6(0x40000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[LD32_:%[0-9]+]]:gpr32 = LD32 [[COPY]], 0 :: (load (s32) from %ir.lsr.iv3)
+; HANDOFF-NEXT:   [[LD32_1:%[0-9]+]]:gpr32 = LD32 [[COPY1]], 0 :: (load (s32) from %ir.lsr.iv1)
+; HANDOFF-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[S_LW_POST_IMM1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY2]], 1 :: (load (s32) from %ir.lsr.iv)
+; HANDOFF-NEXT:   [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[LD32_]], [[LD32_1]]
+; HANDOFF-NEXT:   [[ADDI32_:%[0-9]+]]:gpr32 = ADDI32 [[LOADI32_]], 1
+; HANDOFF-NEXT:   [[ADDI32_1:%[0-9]+]]:gpr32 = ADDI32 [[COPY1]], 4
+; HANDOFF-NEXT:   [[ADDI32_2:%[0-9]+]]:gpr32 = ADDI32 [[COPY]], 4
+; HANDOFF-NEXT:   [[SLT32_:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_]], [[COPY3]]
+; HANDOFF-NEXT:   [[LOADI32_1:%[0-9]+]]:gpr32 = LOADI32 2
+; HANDOFF-NEXT:   [[SLT32_1:%[0-9]+]]:gpr32 = SLT32 [[COPY3]], [[LOADI32_1]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_1]], %bb.6
+; HANDOFF-NEXT:   B %bb.5
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.5.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x7c000000), %bb.6(0x04000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI:%[0-9]+]]:gpr32 = PHI [[ADDI32_2]], %bb.4, %38, %bb.5
+; HANDOFF-NEXT:   [[PHI1:%[0-9]+]]:gpr32 = PHI [[ADDI32_1]], %bb.4, %35, %bb.5
+; HANDOFF-NEXT:   [[PHI2:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM1]], %bb.4, %40, %bb.5
+; HANDOFF-NEXT:   [[PHI3:%[0-9]+]]:gpr32 = PHI [[ADDI32_]], %bb.4, %41, %bb.5
+; HANDOFF-NEXT:   [[PHI4:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, %36, %bb.5
+; HANDOFF-NEXT:   [[PHI5:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, %39, %bb.5
+; HANDOFF-NEXT:   [[PHI6:%[0-9]+]]:gpr32 = PHI [[ADD32_]], %bb.4, %42, %bb.5
+; HANDOFF-NEXT:   [[ADD32_1:%[0-9]+]]:gpr32 = ADD32 [[PHI6]], [[PHI5]]
+; HANDOFF-NEXT:   [[LD32_2:%[0-9]+]]:gpr32 = LD32 [[PHI1]], 0 :: (load (s32) from %ir.lsr.iv1 + 4)
+; HANDOFF-NEXT:   [[ADDI32_3:%[0-9]+]]:gpr32 = ADDI32 [[PHI1]], 4
+; HANDOFF-NEXT:   [[ADD32_2:%[0-9]+]]:gpr32 = ADD32 [[PHI4]], [[ADD32_1]]
+; HANDOFF-NEXT:   [[LD32_3:%[0-9]+]]:gpr32 = LD32 [[PHI]], 0 :: (load (s32) from %ir.lsr.iv3 + 4)
+; HANDOFF-NEXT:   [[ADDI32_4:%[0-9]+]]:gpr32 = ADDI32 [[PHI]], 4
+; HANDOFF-NEXT:   [[S_LW_POST_IMM2:%[0-9]+]]:gpr32, [[S_LW_POST_IMM3:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[PHI2]], 1 :: (load (s32) from %ir.lsr.iv + 4)
+; HANDOFF-NEXT:   [[ADDI32_5:%[0-9]+]]:gpr32 = ADDI32 [[PHI3]], 1
+; HANDOFF-NEXT:   [[ADD32_3:%[0-9]+]]:gpr32 = ADD32 [[LD32_3]], [[LD32_2]]
+; HANDOFF-NEXT:   [[SLT32_2:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_5]], [[COPY3]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_2]], %bb.5
+; HANDOFF-NEXT:   B %bb.6
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.6:
+; HANDOFF-NEXT:   successors: %bb.3(0x80000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI7:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, [[ADD32_2]], %bb.5
+; HANDOFF-NEXT:   [[PHI8:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, [[S_LW_POST_IMM2]], %bb.5
+; HANDOFF-NEXT:   [[PHI9:%[0-9]+]]:gpr32 = PHI [[ADD32_]], %bb.4, [[ADD32_3]], %bb.5
+; HANDOFF-NEXT:   [[ADD32_4:%[0-9]+]]:gpr32 = ADD32 [[PHI9]], [[PHI8]]
+; HANDOFF-NEXT:   [[ADD32_5:%[0-9]+]]:gpr32 = ADD32 [[PHI7]], [[ADD32_4]]
+; HANDOFF-NEXT:   B %bb.3
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.3.exit:
+; HANDOFF-NEXT:   $r1 = COPY [[ADD32_5]]
+; HANDOFF-NEXT:   RET implicit $r15, implicit $r1, implicit $r15
                                       ptr nocapture readonly %p2,
                                       ptr nocapture readonly %p3, i32 %n) {
 entry:
@@ -328,49 +378,48 @@ exit:
 ; Soft-exit II floor = max(format=2, ports=4) = 4; pressure/critical primacy
 ; on the pre-RA sibling must not invent SMS KPI deltas under residual arms.
 define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
-; RP-LABEL: sms_critical_path_chain:
-; RP:       // %bb.0: // %entry
-; RP-NEXT:    { nop; xor32 r0, r0, r0 }
-; RP-NEXT:    { nop; subi32 sp, sp, 8 }
-; RP-NEXT:    .cfi_def_cfa_offset 8
-; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
-; RP-NEXT:    { addi32 r3, r0, 2; addi32 r5, r0, 0 }
-; RP-NEXT:    { nop; xor32 r3, r5, r5; slt32 r7, r2, r3 }
-; RP-NEXT:    { nop; addi32 r6, r5, 1 }
-; RP-NEXT:    { nop; bnez r7, .LBB1_2 }
-; RP-NEXT:    .LBB1_1: // %loop
-; RP-NEXT:    // =>This Inner Loop Header: Depth=1
-; RP-NEXT:    { add32 r5, r4, r5; addi32 r7, r6, 1 }
-; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
-; RP-NEXT:    { nop; slt32 r12, r7, r2; xor32 r3, r3, r6 }
-; RP-NEXT:    { move32 r6, r7; addi32 r5, r5, 6 }
-; RP-NEXT:    { nop; bnez r12, .LBB1_1 }
-; RP-NEXT:    .LBB1_2:
-; RP-NEXT:    { nop; add32 r1, r4, r5 }
-; RP-NEXT:    { nop; addi32 r1, r1, 6 }
-; RP-NEXT:    { nop; add32 r1, r1, r3 }
-; RP-NEXT:    { nop; addi32 sp, sp, 8 }
-; RP-NEXT:    .cfi_def_cfa sp, 0
-; RP-NEXT:    { nop; jalr r0, lr, 0 }
+; PROD-LABEL: sms_critical_path_chain:
+; PROD:       // %bb.0: // %entry
+; PROD-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; PROD-NEXT:    .cfi_def_cfa_offset 8
+; PROD-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; PROD-NEXT:    { addi32 r4, r0, 2; addi32 r3, r0, 0 }
+; PROD-NEXT:    { slt32 r7, r2, r4; addi32 r6, r3, 1 }
+; PROD-NEXT:    { nop; xor32 r4, r3, r3 }
+; PROD-NEXT:    { nop; bnez r7, .LBB1_2 }
+; PROD-NEXT:  .LBB1_1: // %loop
+; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
+; PROD-NEXT:    { nop; xor32 r4, r4, r6 }
+; PROD-NEXT:    { nop; addi32 r6, r6, 1 }
+; PROD-NEXT:    { nop; slt32 r7, r6, r2; add32 r3, r5, r3 }
+; PROD-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
+; PROD-NEXT:    { nop; addi32 r3, r3, 6 }
+; PROD-NEXT:    { nop; bnez r7, .LBB1_1 }
+; PROD-NEXT:  .LBB1_2:
+; PROD-NEXT:    { nop; add32 r1, r5, r3 }
+; PROD-NEXT:    { nop; addi32 r1, r1, 6 }
+; PROD-NEXT:    { nop; add32 r1, r1, r4 }
+; PROD-NEXT:    { nop; addi32 sp, sp, 8 }
+; PROD-NEXT:    .cfi_def_cfa sp, 0
+; PROD-NEXT:    { nop; jalr r0, lr, 0 }
 ;
 ; GEN-LABEL: sms_critical_path_chain:
 ; GEN:       // %bb.0: // %entry
-; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
-; GEN-NEXT:    { nop; subi32 sp, sp, 8 }
+; GEN-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; GEN-NEXT:    .cfi_def_cfa_offset 8
 ; GEN-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
 ; GEN-NEXT:    { addi32 r3, r0, 2; addi32 r5, r0, 0 }
 ; GEN-NEXT:    { nop; xor32 r3, r5, r5; slt32 r7, r2, r3 }
 ; GEN-NEXT:    { nop; addi32 r6, r5, 1 }
 ; GEN-NEXT:    { nop; bnez r7, .LBB1_2 }
-; GEN-NEXT:    .LBB1_1: // %loop
+; GEN-NEXT:  .LBB1_1: // %loop
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
 ; GEN-NEXT:    { add32 r5, r4, r5; addi32 r7, r6, 1 }
 ; GEN-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
 ; GEN-NEXT:    { nop; slt32 r12, r7, r2; xor32 r3, r3, r6 }
 ; GEN-NEXT:    { move32 r6, r7; addi32 r5, r5, 6 }
 ; GEN-NEXT:    { nop; bnez r12, .LBB1_1 }
-; GEN-NEXT:    .LBB1_2:
+; GEN-NEXT:  .LBB1_2:
 ; GEN-NEXT:    { nop; add32 r1, r4, r5 }
 ; GEN-NEXT:    { nop; addi32 r1, r1, 6 }
 ; GEN-NEXT:    { nop; add32 r1, r1, r3 }
@@ -378,17 +427,40 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; GEN-NEXT:    .cfi_def_cfa sp, 0
 ; GEN-NEXT:    { nop; jalr r0, lr, 0 }
 ;
+; RP-LABEL: sms_critical_path_chain:
+; RP:       // %bb.0: // %entry
+; RP-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; RP-NEXT:    .cfi_def_cfa_offset 8
+; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
+; RP-NEXT:    { addi32 r3, r0, 2; addi32 r5, r0, 0 }
+; RP-NEXT:    { nop; xor32 r3, r5, r5; slt32 r7, r2, r3 }
+; RP-NEXT:    { nop; addi32 r6, r5, 1 }
+; RP-NEXT:    { nop; bnez r7, .LBB1_2 }
+; RP-NEXT:  .LBB1_1: // %loop
+; RP-NEXT:    // =>This Inner Loop Header: Depth=1
+; RP-NEXT:    { add32 r5, r4, r5; addi32 r7, r6, 1 }
+; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
+; RP-NEXT:    { nop; slt32 r12, r7, r2; xor32 r3, r3, r6 }
+; RP-NEXT:    { move32 r6, r7; addi32 r5, r5, 6 }
+; RP-NEXT:    { nop; bnez r12, .LBB1_1 }
+; RP-NEXT:  .LBB1_2:
+; RP-NEXT:    { nop; add32 r1, r4, r5 }
+; RP-NEXT:    { nop; addi32 r1, r1, 6 }
+; RP-NEXT:    { nop; add32 r1, r1, r3 }
+; RP-NEXT:    { nop; addi32 sp, sp, 8 }
+; RP-NEXT:    .cfi_def_cfa sp, 0
+; RP-NEXT:    { nop; jalr r0, lr, 0 }
+;
 ; ASM-LABEL: sms_critical_path_chain:
 ; ASM:       // %bb.0: // %entry
-; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
-; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
+; ASM-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; ASM-NEXT:    { addi32 r4, r0, 2; addi32 r3, r0, 0 }
 ; ASM-NEXT:    { slt32 r7, r2, r4; addi32 r6, r3, 1 }
 ; ASM-NEXT:    { nop; xor32 r4, r3, r3 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB1_2 }
-; ASM-NEXT:    .LBB1_1: // %loop
+; ASM-NEXT:  .LBB1_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; xor32 r4, r4, r6 }
 ; ASM-NEXT:    { nop; addi32 r6, r6, 1 }
@@ -396,7 +468,7 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
 ; ASM-NEXT:    { nop; addi32 r3, r3, 6 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB1_1 }
-; ASM-NEXT:    .LBB1_2:
+; ASM-NEXT:  .LBB1_2:
 ; ASM-NEXT:    { nop; add32 r1, r5, r3 }
 ; ASM-NEXT:    { nop; addi32 r1, r1, 6 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r4 }
@@ -404,27 +476,57 @@ define i32 @sms_critical_path_chain(ptr nocapture readonly %p, i32 %n) {
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
 ; ASM-NEXT:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_critical_path_chain
-; HANDOFF: bb.{{[0-9]+}}.entry:
-; HANDOFF-NEXT:   successors: {{.*}}
+; HANDOFF: bb.1.entry:
+; HANDOFF-NEXT:   successors: %bb.4(0x80000000)
 ; HANDOFF-NEXT:   liveins: $r1, $r2
-; HANDOFF-NOT: BUNDLE
-; HANDOFF:      [[S_LW:%[0-9]+]]:gpr32, {{%[0-9]+}}:gpr32 = S_LW_POST_IMM {{%[0-9]+}}, 1
-; HANDOFF:      [[XOR:%[0-9]+]]:gpr32 = XOR32 {{%[0-9]+}}, {{%[0-9]+}}
-; HANDOFF:      BNEZ_W {{%[0-9]+}}, %bb.{{[0-9]+}}
-;
-; POST-LABEL: name: sms_critical_path_chain
-; POST: bb.{{[0-9]+}}.entry:
-; POST-NEXT:   successors: {{.*}}
-; POST-NEXT:   liveins: $r1, $r2, $r0
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
-; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; POST-NEXT:   $r{{[0-9]+}}, $r1 = S_LW_POST_IMM_E3_E2_LOAD1_RI6 killed $r1, 1
-; POST-NEXT:   $r{{[0-9]+}} = ADDI32_E2_E0_ALU0_RI20 $r0, 0
-; POST-NEXT:   $r{{[0-9]+}} = ADDI32_E2_E0_ALU0_RI20 $r0, 2
-; POST:       BUNDLE 0, 0, implicit-def $r{{[0-9]+}}, implicit-def $r{{[0-9]+}}
-; POST:       bb.{{[0-9]+}}
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[COPY:%[0-9]+]]:gpr32 = COPY $r1
+; HANDOFF-NEXT:   [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
+; HANDOFF-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = LOADI32 0
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.4.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x40000000), %bb.6(0x40000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[S_LW_POST_IMM1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY]], 1 :: (load (s32) from %ir.lsr.iv)
+; HANDOFF-NEXT:   [[XOR32_:%[0-9]+]]:gpr32 = XOR32 [[LOADI32_]], [[LOADI32_]]
+; HANDOFF-NEXT:   [[ADDI32_:%[0-9]+]]:gpr32 = ADDI32 [[LOADI32_]], 1
+; HANDOFF-NEXT:   [[SLT32_:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_]], [[COPY1]]
+; HANDOFF-NEXT:   [[LOADI32_1:%[0-9]+]]:gpr32 = LOADI32 2
+; HANDOFF-NEXT:   [[SLT32_1:%[0-9]+]]:gpr32 = SLT32 [[COPY1]], [[LOADI32_1]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_1]], %bb.6
+; HANDOFF-NEXT:   B %bb.5
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.5.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x7c000000), %bb.6(0x04000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM1]], %bb.4, %32, %bb.5
+; HANDOFF-NEXT:   [[PHI1:%[0-9]+]]:gpr32 = PHI [[ADDI32_]], %bb.4, %33, %bb.5
+; HANDOFF-NEXT:   [[PHI2:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, %34, %bb.5
+; HANDOFF-NEXT:   [[PHI3:%[0-9]+]]:gpr32 = PHI [[XOR32_]], %bb.4, %35, %bb.5
+; HANDOFF-NEXT:   [[PHI4:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, %31, %bb.5
+; HANDOFF-NEXT:   [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[PHI4]], [[PHI2]]
+; HANDOFF-NEXT:   [[S_LW_POST_IMM2:%[0-9]+]]:gpr32, [[S_LW_POST_IMM3:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[PHI]], 1 :: (load (s32) from %ir.lsr.iv + 4)
+; HANDOFF-NEXT:   [[ADDI32_1:%[0-9]+]]:gpr32 = ADDI32 [[PHI1]], 1
+; HANDOFF-NEXT:   [[ADDI32_2:%[0-9]+]]:gpr32 = ADDI32 [[ADD32_]], 6
+; HANDOFF-NEXT:   [[XOR32_1:%[0-9]+]]:gpr32 = XOR32 [[PHI3]], [[PHI1]]
+; HANDOFF-NEXT:   [[SLT32_2:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_1]], [[COPY1]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_2]], %bb.5
+; HANDOFF-NEXT:   B %bb.6
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.6:
+; HANDOFF-NEXT:   successors: %bb.3(0x80000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI5:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, [[ADDI32_2]], %bb.5
+; HANDOFF-NEXT:   [[PHI6:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, [[S_LW_POST_IMM2]], %bb.5
+; HANDOFF-NEXT:   [[PHI7:%[0-9]+]]:gpr32 = PHI [[XOR32_]], %bb.4, [[XOR32_1]], %bb.5
+; HANDOFF-NEXT:   [[ADD32_1:%[0-9]+]]:gpr32 = ADD32 [[PHI6]], [[PHI5]]
+; HANDOFF-NEXT:   [[ADDI32_3:%[0-9]+]]:gpr32 = ADDI32 [[ADD32_1]], 6
+; HANDOFF-NEXT:   B %bb.3
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.3.exit:
+; HANDOFF-NEXT:   [[ADD32_2:%[0-9]+]]:gpr32 = ADD32 [[ADDI32_3]], [[PHI7]]
+; HANDOFF-NEXT:   $r1 = COPY [[ADD32_2]]
+; HANDOFF-NEXT:   RET implicit $r15, implicit $r1, implicit $r15
 entry:
   br label %loop
 loop:
@@ -449,94 +551,147 @@ exit:
 ; ILP ALU dual-accumulator stream — two independent reductions over one load.
 ; Soft-exit II floor = max(format=2, ports=3) = 3 under all ranking arms.
 define i32 @sms_ilp_dual_acc(ptr nocapture readonly %p, i32 %n) {
-; RP-LABEL: sms_ilp_dual_acc:
-; RP:       // %bb.0: // %entry
-; RP-NEXT:    { nop; xor32 r0, r0, r0 }
-; RP-NEXT:    { nop; subi32 sp, sp, 8 }
-; RP-NEXT:    .cfi_def_cfa_offset 8
-; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
-; RP-NEXT:    { addi32 r5, r0, 2; addi32 r3, r0, 0 }
-; RP-NEXT:    { slt32 r7, r2, r5; addi32 r6, r3, 1 }
-; RP-NEXT:    { nop; move32 r5, r3 }
-; RP-NEXT:    { nop; bnez r7, .LBB2_2 }
-; RP-NEXT:    .LBB2_1: // %loop
-; RP-NEXT:    // =>This Inner Loop Header: Depth=1
-; RP-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
-; RP-NEXT:    { add32 r3, r3, r4; addi32 r6, r6, 1 }
-; RP-NEXT:    { nop; slt32 r12, r6, r2; xor32 r5, r5, r4 }
-; RP-NEXT:    { nop; move32 r4, r7 }
-; RP-NEXT:    { nop; bnez r12, .LBB2_1 }
-; RP-NEXT:    .LBB2_2:
-; RP-NEXT:    { nop; xor32 r2, r5, r4; add32 r1, r3, r4 }
-; RP-NEXT:    { nop; add32 r1, r1, r2 }
-; RP-NEXT:    { nop; addi32 sp, sp, 8 }
-; RP-NEXT:    .cfi_def_cfa sp, 0
-; RP-NEXT:    { nop; jalr r0, lr, 0 }
+; PROD-LABEL: sms_ilp_dual_acc:
+; PROD:       // %bb.0: // %entry
+; PROD-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; PROD-NEXT:    .cfi_def_cfa_offset 8
+; PROD-NEXT:    { addi32 r3, r0, 0; addi32 r6, r0, 2 }
+; PROD-NEXT:    { slt32 r7, r2, r6; addi32 r5, r3, 1 }
+; PROD-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
+; PROD-NEXT:    { nop; move32 r4, r3 }
+; PROD-NEXT:    { nop; bnez r7, .LBB2_2 }
+; PROD-NEXT:  .LBB2_1: // %loop
+; PROD-NEXT:    // =>This Inner Loop Header: Depth=1
+; PROD-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
+; PROD-NEXT:    { add32 r3, r3, r6; addi32 r5, r5, 1 }
+; PROD-NEXT:    { nop; slt32 r12, r5, r2; xor32 r4, r4, r6 }
+; PROD-NEXT:    { nop; move32 r6, r7 }
+; PROD-NEXT:    { nop; bnez r12, .LBB2_1 }
+; PROD-NEXT:  .LBB2_2:
+; PROD-NEXT:    { nop; xor32 r2, r4, r6; add32 r1, r3, r6 }
+; PROD-NEXT:    { nop; add32 r1, r1, r2 }
+; PROD-NEXT:    { nop; addi32 sp, sp, 8 }
+; PROD-NEXT:    .cfi_def_cfa sp, 0
+; PROD-NEXT:    { nop; jalr r0, lr, 0 }
 ;
 ; GEN-LABEL: sms_ilp_dual_acc:
 ; GEN:       // %bb.0: // %entry
-; GEN-NEXT:    { nop; xor32 r0, r0, r0 }
-; GEN-NEXT:    { nop; subi32 sp, sp, 8 }
+; GEN-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; GEN-NEXT:    .cfi_def_cfa_offset 8
 ; GEN-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
 ; GEN-NEXT:    { addi32 r5, r0, 2; addi32 r3, r0, 0 }
 ; GEN-NEXT:    { slt32 r7, r2, r5; addi32 r6, r3, 1 }
 ; GEN-NEXT:    { nop; move32 r5, r3 }
 ; GEN-NEXT:    { nop; bnez r7, .LBB2_2 }
-; GEN-NEXT:    .LBB2_1: // %loop
+; GEN-NEXT:  .LBB2_1: // %loop
 ; GEN-NEXT:    // =>This Inner Loop Header: Depth=1
 ; GEN-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
 ; GEN-NEXT:    { add32 r3, r3, r4; addi32 r6, r6, 1 }
 ; GEN-NEXT:    { nop; slt32 r12, r6, r2; xor32 r5, r5, r4 }
 ; GEN-NEXT:    { nop; move32 r4, r7 }
 ; GEN-NEXT:    { nop; bnez r12, .LBB2_1 }
-; GEN-NEXT:    .LBB2_2:
+; GEN-NEXT:  .LBB2_2:
 ; GEN-NEXT:    { nop; xor32 r2, r5, r4; add32 r1, r3, r4 }
 ; GEN-NEXT:    { nop; add32 r1, r1, r2 }
 ; GEN-NEXT:    { nop; addi32 sp, sp, 8 }
 ; GEN-NEXT:    .cfi_def_cfa sp, 0
 ; GEN-NEXT:    { nop; jalr r0, lr, 0 }
 ;
+; RP-LABEL: sms_ilp_dual_acc:
+; RP:       // %bb.0: // %entry
+; RP-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; RP-NEXT:    .cfi_def_cfa_offset 8
+; RP-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
+; RP-NEXT:    { addi32 r5, r0, 2; addi32 r3, r0, 0 }
+; RP-NEXT:    { slt32 r7, r2, r5; addi32 r6, r3, 1 }
+; RP-NEXT:    { nop; move32 r5, r3 }
+; RP-NEXT:    { nop; bnez r7, .LBB2_2 }
+; RP-NEXT:  .LBB2_1: // %loop
+; RP-NEXT:    // =>This Inner Loop Header: Depth=1
+; RP-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
+; RP-NEXT:    { add32 r3, r3, r4; addi32 r6, r6, 1 }
+; RP-NEXT:    { nop; slt32 r12, r6, r2; xor32 r5, r5, r4 }
+; RP-NEXT:    { nop; move32 r4, r7 }
+; RP-NEXT:    { nop; bnez r12, .LBB2_1 }
+; RP-NEXT:  .LBB2_2:
+; RP-NEXT:    { nop; xor32 r2, r5, r4; add32 r1, r3, r4 }
+; RP-NEXT:    { nop; add32 r1, r1, r2 }
+; RP-NEXT:    { nop; addi32 sp, sp, 8 }
+; RP-NEXT:    .cfi_def_cfa sp, 0
+; RP-NEXT:    { nop; jalr r0, lr, 0 }
+;
 ; ASM-LABEL: sms_ilp_dual_acc:
 ; ASM:       // %bb.0: // %entry
-; ASM-NEXT:    { nop; xor32 r0, r0, r0 }
-; ASM-NEXT:    { nop; subi32 sp, sp, 8 }
+; ASM-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa_offset 8
 ; ASM-NEXT:    { addi32 r3, r0, 0; addi32 r6, r0, 2 }
 ; ASM-NEXT:    { slt32 r7, r2, r6; addi32 r5, r3, 1 }
 ; ASM-NEXT:    { nop; s_lw_post_imm r6, r1, 1 }
 ; ASM-NEXT:    { nop; move32 r4, r3 }
 ; ASM-NEXT:    { nop; bnez r7, .LBB2_2 }
-; ASM-NEXT:    .LBB2_1: // %loop
+; ASM-NEXT:  .LBB2_1: // %loop
 ; ASM-NEXT:    // =>This Inner Loop Header: Depth=1
 ; ASM-NEXT:    { nop; s_lw_post_imm r7, r1, 1 }
 ; ASM-NEXT:    { add32 r3, r3, r6; addi32 r5, r5, 1 }
 ; ASM-NEXT:    { nop; slt32 r12, r5, r2; xor32 r4, r4, r6 }
 ; ASM-NEXT:    { nop; move32 r6, r7 }
 ; ASM-NEXT:    { nop; bnez r12, .LBB2_1 }
-; ASM-NEXT:    .LBB2_2:
+; ASM-NEXT:  .LBB2_2:
 ; ASM-NEXT:    { nop; xor32 r2, r4, r6; add32 r1, r3, r6 }
 ; ASM-NEXT:    { nop; add32 r1, r1, r2 }
 ; ASM-NEXT:    { nop; addi32 sp, sp, 8 }
 ; ASM-NEXT:    .cfi_def_cfa sp, 0
 ; ASM-NEXT:    { nop; jalr r0, lr, 0 }
 ; HANDOFF-LABEL: name: sms_ilp_dual_acc
-; HANDOFF: bb.{{[0-9]+}}.entry:
-; HANDOFF-NEXT:   successors: {{.*}}
+; HANDOFF: bb.1.entry:
+; HANDOFF-NEXT:   successors: %bb.4(0x80000000)
 ; HANDOFF-NEXT:   liveins: $r1, $r2
-; HANDOFF-NOT: BUNDLE
-; HANDOFF:      [[S_LW:%[0-9]+]]:gpr32, {{%[0-9]+}}:gpr32 = S_LW_POST_IMM {{%[0-9]+}}, 1
-; HANDOFF:      BNEZ_W {{%[0-9]+}}, %bb.{{[0-9]+}}
-;
-; POST-LABEL: name: sms_ilp_dual_acc
-; POST: bb.{{[0-9]+}}.entry:
-; POST-NEXT:   successors: {{.*}}
-; POST-NEXT:   liveins: $r1, $r2, $r0
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
-; POST:       BUNDLE {{[01]}}, 0, 
-; POST:       bb.{{[0-9]+}}
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[COPY:%[0-9]+]]:gpr32 = COPY $r1
+; HANDOFF-NEXT:   [[COPY1:%[0-9]+]]:gpr32 = COPY $r2
+; HANDOFF-NEXT:   [[LOADI32_:%[0-9]+]]:gpr32 = LOADI32 0
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.4.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x40000000), %bb.6(0x40000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[S_LW_POST_IMM:%[0-9]+]]:gpr32, [[S_LW_POST_IMM1:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[COPY]], 1 :: (load (s32) from %ir.lsr.iv)
+; HANDOFF-NEXT:   [[ADDI32_:%[0-9]+]]:gpr32 = ADDI32 [[LOADI32_]], 1
+; HANDOFF-NEXT:   [[SLT32_:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_]], [[COPY1]]
+; HANDOFF-NEXT:   [[LOADI32_1:%[0-9]+]]:gpr32 = LOADI32 2
+; HANDOFF-NEXT:   [[SLT32_1:%[0-9]+]]:gpr32 = SLT32 [[COPY1]], [[LOADI32_1]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_1]], %bb.6
+; HANDOFF-NEXT:   B %bb.5
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.5.loop:
+; HANDOFF-NEXT:   successors: %bb.5(0x7c000000), %bb.6(0x04000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM1]], %bb.4, %22, %bb.5
+; HANDOFF-NEXT:   [[PHI1:%[0-9]+]]:gpr32 = PHI [[ADDI32_]], %bb.4, %23, %bb.5
+; HANDOFF-NEXT:   [[PHI2:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, %24, %bb.5
+; HANDOFF-NEXT:   [[PHI3:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, %25, %bb.5
+; HANDOFF-NEXT:   [[PHI4:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, %21, %bb.5
+; HANDOFF-NEXT:   [[S_LW_POST_IMM2:%[0-9]+]]:gpr32, [[S_LW_POST_IMM3:%[0-9]+]]:gpr32 = S_LW_POST_IMM [[PHI]], 1 :: (load (s32) from %ir.lsr.iv + 4)
+; HANDOFF-NEXT:   [[ADDI32_1:%[0-9]+]]:gpr32 = ADDI32 [[PHI1]], 1
+; HANDOFF-NEXT:   [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[PHI2]], [[PHI4]]
+; HANDOFF-NEXT:   [[XOR32_:%[0-9]+]]:gpr32 = XOR32 [[PHI3]], [[PHI4]]
+; HANDOFF-NEXT:   [[SLT32_2:%[0-9]+]]:gpr32 = SLT32 [[ADDI32_1]], [[COPY1]]
+; HANDOFF-NEXT:   BNEZ_W [[SLT32_2]], %bb.5
+; HANDOFF-NEXT:   B %bb.6
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.6:
+; HANDOFF-NEXT:   successors: %bb.3(0x80000000)
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT:   [[PHI5:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, [[ADD32_]], %bb.5
+; HANDOFF-NEXT:   [[PHI6:%[0-9]+]]:gpr32 = PHI [[LOADI32_]], %bb.4, [[XOR32_]], %bb.5
+; HANDOFF-NEXT:   [[PHI7:%[0-9]+]]:gpr32 = PHI [[S_LW_POST_IMM]], %bb.4, [[S_LW_POST_IMM2]], %bb.5
+; HANDOFF-NEXT:   [[ADD32_1:%[0-9]+]]:gpr32 = ADD32 [[PHI5]], [[PHI7]]
+; HANDOFF-NEXT:   [[XOR32_1:%[0-9]+]]:gpr32 = XOR32 [[PHI6]], [[PHI7]]
+; HANDOFF-NEXT:   B %bb.3
+; HANDOFF-NEXT: {{  $}}
+; HANDOFF-NEXT: bb.3.exit:
+; HANDOFF-NEXT:   [[ADD32_2:%[0-9]+]]:gpr32 = ADD32 [[ADD32_1]], [[XOR32_1]]
+; HANDOFF-NEXT:   $r1 = COPY [[ADD32_2]]
+; HANDOFF-NEXT:   RET implicit $r15, implicit $r1, implicit $r15
 entry:
   br label %loop
 loop:
@@ -555,6 +710,8 @@ exit:
   ret i32 %r
 }
 ;; NOTE: These prefixes are unused and the list is autogenerated. Do not add tests below this line:
+; BASE: {{.*}}
+; POST: {{.*}}
 ; STATS-GEN: {{.*}}
 ; STATS-PROD: {{.*}}
 ; STATS-RP: {{.*}}

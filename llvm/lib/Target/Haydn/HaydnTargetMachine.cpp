@@ -18,9 +18,6 @@
 #include "HaydnExpandPseudos.h"
 #include "HaydnEnsureTerminators.h"
 #include "HaydnFinalizeBundle.h"
-#include "HaydnLateConvergence.h"
-#include "HaydnLatencyStalls.h"
-#include "HaydnMachineAlignment.h"
 #include "HaydnVerifyBundles.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMachineScheduler.h"
@@ -101,38 +98,6 @@ static_assert(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled(),
               "hardware-loop product default is ON after the 2026-08-22 "
               "independent + combined qualification; this assert pins the "
               "policy against accidental re-parking without evidence");
-// W68.2R: S2/LateConvergence driver flag. Product default ON since the
-// G004 flip 2026-08-27 (entry-qualified relocations a7473774858a + read-old
-// dissolve order 554957730440 closed the two defect classes behind the
-// original keep-off; same-artifact matrix 659/659 sms2-ON, torture
-// 1479/1479, CM -3.76% bundles, DH -0.86%). The three -haydn-postra-*
-// edge mutations stay default OFF: with them ON the QoR bisect
-// (2026-08-27, CM/DHRY ON-vs-OFF) is super-additively bundle-regressive
-// (CM +33.38%, DH +12.18%); see HaydnSchedMutations.h. When on, the same
-// post-RA scheduler implementation runs at addPostBBSections after the
-// common executable tail (outliner/split/BB sections) and before the
-// closure Finalize. S1 commits reopenable provisional BUNDLEs (the first
-// S2 invocation canonicalizes them back to logicals under the direct-shape
-// and CB-167 read-old order gates). HC#0 walker hooks
-// stay declined; this flag does not port them.
-static constexpr bool haydnLateConvergenceProductDefaultEnabled() {
-  // G004 flip 2026-08-27 (@ 5549577): sms2-only arm of the same-artifact
-  // matrix green — 659-suite 659/659, torture -O2 1479/1479, CoreMark
-  // PASS -3.76% bundles, Dhrystone PASS -0.86%, default lit+MC+lld
-  // 1071/0F, HaydnTests 599/599, BundleSim full 687/687. The
-  // postra-edges=ON arms were measured super-additively regressive and
-  // are NOT part of this default.
-  return true;
-}
-static cl::opt<bool> EnableHaydnSMS2(
-    "haydn-sms2", cl::Hidden,
-    cl::init(haydnLateConvergenceProductDefaultEnabled()),
-    cl::desc("W68.2R: invoke the post-RA scheduler a second time (S2; "
-             "addPostBBSections after the common executable tail). "
-             "Product default ON (G004 flip 2026-08-27)."));
-
-bool llvm::haydnSMS2Enabled() { return EnableHaydnSMS2; }
-
 static cl::opt<bool> EnableHaydnHardwareLoops(
     "haydn-enable-hwloops",
     cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled()),
@@ -165,11 +130,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeHaydnTarget() {
   initializeHaydnEnsureTerminatorsPass(PR);
   initializeHaydnFinalizeBundlePass(PR);
   initializeHaydnVerifyBundlesPass(PR);
-  initializeHaydnLatencyStallsPass(PR);
   initializeHaydnHardwareLoopsPass(PR);
-  initializeHaydnFixupHwLoopsPass(PR);
-  initializeHaydnLateConvergencePassPass(PR);
-  initializeHaydnMachineAlignmentPass(PR);
   initializeHaydnLongBranchNormalizePass(PR);
   initializeBranchRelaxationLegacyPass(PR);
   initializeMachinePipelinerPass(PR);
@@ -202,8 +163,10 @@ HaydnTargetMachine::getSubtargetImpl(const Function &F) const {
 
   std::string CPU =
       CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
-  std::string TuneCPU =
-      TuneAttr.isValid() ? TuneAttr.getValueAsString().str() : CPU;
+  // Product default tune is haydn. Do not copy target-cpu: -mcpu is the
+  // legacy ISA selector and must not silently become the tune model.
+  std::string TuneCPU = TuneAttr.isValid() ? TuneAttr.getValueAsString().str()
+                                           : Haydn::kDefaultTuneCPUName;
   std::string FS =
       FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
 
@@ -271,12 +234,13 @@ static cl::opt<T> *registeredOptionAs(StringRef Name) {
 
 //===----------------------------------------------------------------------===//
 // GR2.3: fail-closed forced-enable rejection for unsupported executable
-// common-tail writers (MachineOutliner, MachineFunctionSplitter,
-// BasicBlockSections). One predicate, one owner (the Haydn addPreEmitPass
+// writers (MachineOutliner, MachineFunctionSplitter, BasicBlockSections,
+// ImplicitNullChecks). One predicate, one owner (the Haydn addPreEmitPass
 // override), one mechanism: read-only TargetMachine state + read-only
-// cl::getRegisteredOptions() introspection of the two llc-only *hidden
-// static* flags (-enable-machine-outliner, -enable-split-machine-functions)
-// that generic code owns and no TargetMachine bit carries.
+// cl::getRegisteredOptions() introspection of the llc-only *hidden
+// static* flags (-enable-machine-outliner,
+// -enable-split-machine-functions, -enable-implicit-null-checks) that
+// generic code owns and no TargetMachine bit carries.
 //
 // Why the registered-option lookup is needed at all: every clang/C-API arm
 // arrives as a TM option bit (Options.EnableMachineOutliner,
@@ -300,9 +264,10 @@ static cl::opt<T> *registeredOptionAs(StringRef Name) {
 //    (contracts/pipeline.md common tail).
 //  - -basic-block-address-map alone: metadata-only, contract-admitted.
 //  - disable/no-op spellings (-enable-machine-outliner=never,
-//    -basic-block-sections=none, =false values): admitted, so shared
-//    multi-triple command lines that globally pass a disable spelling keep
-//    working on Haydn. This seat rejects ENABLE requests only.
+//    -basic-block-sections=none, -enable-implicit-null-checks=false/=0,
+//    =false values): admitted, so shared multi-triple command lines that
+//    globally pass a disable spelling keep working on Haydn. This seat
+//    rejects ENABLE requests only.
 //
 // -run-pass/-start-after/-stop-after carve-outs never invoke
 // addMachinePasses, hence never this seat — the same carve-out shape the
@@ -317,7 +282,7 @@ static cl::opt<T> *registeredOptionAs(StringRef Name) {
 static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM) {
   // Stable diagnostic family; GenCrashDiag=false so the process exits 1
   // with the "LLVM ERROR:" prefix (plain `not llc` arm) rather than
-  // aborting — the HaydnLateConvergence/VerifyBundles diagnostic idiom.
+  // aborting — the VerifyBundles diagnostic idiom.
   auto Reject = [](const char *What) {
     report_fatal_error(Twine("Haydn: unsupported forced common-tail writer: ") +
                            What,
@@ -339,7 +304,7 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
   // request. The value is read directly from the typed cl::opt object —
   // no printOptionValue/fd capture (that path wrote to llvm::outs(), is
   // process-wide under in-process parallel codegen, and is not portable).
-  // Static type facts (TargetPassConfig.cpp, both cl::Hidden):
+  // Static type facts (TargetPassConfig.cpp, cl::Hidden):
   //   -enable-machine-outliner          cl::opt<RunOutliner>
   //                                      (ValueOptional; init TargetDefault;
   //                                      enum values always/optimistic-pgo/
@@ -348,6 +313,7 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
   //                                      parses the "" sentinel row which the
   //                                      cl parser maps to AlwaysOutline)
   //   -enable-split-machine-functions   cl::opt<bool>
+  //   -enable-implicit-null-checks      cl::opt<bool> (init false)
   //
   // (2) MachineOutliner. TM bit (clang -moutline via -mllvm, C API
   // LLVMSetTargetMachineMachineOutliner) OR the llc hidden static flag
@@ -391,6 +357,20 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
              "Format E packet lifecycle (contracts/pipeline.md common tail; "
              "GR2.3)");
   }
+
+  // (4) ImplicitNullChecks. No TM bit — the llc hidden static flag
+  // -enable-implicit-null-checks (TargetPassConfig.cpp) is the only
+  // request. Default-off. The pass is queued after addPreSched2, before
+  // this seat; rejection here still fires at pipeline construction, so
+  // the pass never runs. Folding null checks into faulting memory ops
+  // is not qualified for the one-commit Format E packet lifecycle.
+  if (cl::opt<bool> *O =
+          registeredOptionAs<bool>("enable-implicit-null-checks")) {
+    if (O->getNumOccurrences() > 0 && O->getValue())
+      Reject("implicit-null-checks (-enable-implicit-null-checks) is not "
+             "qualified for the one-commit Format E packet lifecycle "
+             "(contracts/pipeline.md common tail; GR2.3)");
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -407,36 +387,56 @@ static void haydnRejectUnsupportedCommonTailWriters(const HaydnTargetMachine &TM
 // DeadMIElim after SMS; MachineScheduler/HaydnPreRASchedStrategy *
 // register allocation (upstream)
 // Post-RA: EnsureTerminators * (addPostRegAlloc, pre-PEI)
-// addPreSched2 (AIE2TargetMachine.cpp:229-244):
+// addPreSched2 (AIE2TargetMachine.cpp:229-244 plus Haydn overlay):
 // DeadMI (O1); MBP (O1) BEFORE HardwareLoops;
 // HardwareLoops (O1, product default ON); ExpandPseudos *;
-// PostMachineScheduler/HaydnPostRA pack * (sole pack, all levels);
-// HaydnLatencyStalls * (Haydn overlay: RAW net; stall NOPs committed next);
-// HaydnFinalizeBundle * + HaydnVerifyBundles * (AIE FinalizeBundle :243)
+// LongBranchNormalize -> BranchRelaxation (pre-S1; RestoreBB while CFG
+// is mutable); PostMachineScheduler/HaydnPostRA pack * (sole pack, all
+// levels; leaveMBB packets + S1-exit stall fold + PostCommitCfgSnapshot);
+// LongBranchNormalize (post-stamp in-block templates);
+// HaydnFinalizeBundle * + HaydnVerifyBundles * (wrap-only AIE Finalize :243)
 // Layout: addBlockPlacement empty (AIE2TargetMachine.cpp:250-253)
-// Pre-emit: BranchRelaxation; FixupHwLoops(O1+hwloops) + second BR;
-// mid Finalize+Verify after BR (bare-parcel recommit). S2/LateConvergence
-// is at addPostBBSections under -haydn-sms2 (product default ON, G004
-// flip 2026-08-27), after the common executable tail and before closure
-// Finalize. insertIndirectBranch
-// emits real LUI+ADDI32_W+JALR_W that must rejoin the mid/late lanes.
-// AIE PreEmit empty :88 — AIE has no BR. Asm: AsmPrinter
+// addPreEmitPass: LongBranchNormalize (HWLoop FitPatch library first;
+// padInternalMBBAlignment ClearMetadata=true after the closer loop);
+// mid Finalize+Verify (wrap-only). Generic BR is not seated after S1.
+// addPostBBSections: empty override (read-only TPC default;
+// TargetPassConfig.h:447). addPreEmitPass2: terminal read-only freeze
+// Verify. AIE PreEmit empty :88 — AIE has no BR. Asm: AsmPrinter
 // (O1) = opt-gated; * = load-bearing / legal encode. Deleted: PushPopOpt
 // CommonGEP deleted. PreRALoadPromote deleted.
 // CopyElim/ConditionOptimizer/BitSimplify/PEIPeephole/CFGOptimizer deleted.
 //
-// Pack ownership follows AIE2 (AIE2TargetMachine::addPreSched2):
+// D1.60 late-seat census (TM addPass seats; a hidden extra addPass of
+// Normalize/BR/Finalize/Verify fails the D160TM pin):
+//   addPreSched2:       Normalize -> BR (pre-S1) -> PostMachineScheduler
+//                       -> Normalize -> Finalize -> Verify(invariant)
+//   addPreEmitPass:     Normalize
+//                       Finalize -> Verify(invariant)
+//   addPostBBSections:  (empty; read-only)
+//   addPreEmitPass2:    Verify(freeze)
+// Structure counts (product defaults unless noted):
+//   O0 / O1+:           Normalize x3, BR x1, Finalize x2, Verify x3
+//
+// Pack ownership follows AIE2 (AIE2TargetMachine.cpp:238-255 addPreSched2):
 // DeadMI → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
-// → (Haydn overlay) LatencyStalls → Finalize+Verify. Suppress generic
-// post-pack MBP via addBlockPlacement. PreEmit is BR (+ Fixup/BR when
-// hwloops ON) then the same Finalize+Verify — not a second packer. S2 is
-// addPostBBSections (AArch64TargetMachine.cpp:883-891 late writers after
-// BB sections), not PreEmit.
+// (Haydn overlay: pre-S1 LBN+BR, then leaveMBB packets + leaveFunction
+// stall fold + CFG stamp) → Normalize → wrap-only Finalize+Verify.
+// Hexagon packetizes last (HexagonTargetMachine.cpp:476-493); RISC-V has
+// no walker (RISCVTargetMachine.cpp:548-555) and seats BR in PreEmit
+// (:572). Suppress generic post-pack MBP via addBlockPlacement. PreEmit
+// is Normalize then the same Finalize+Verify — not a second packer.
+// AIE seats createAIEMachineAlignment in addPreSched2 only because AIE
+// PreEmit is empty; Haydn's closer is stamped LBN in addPreEmitPass.
 //===----------------------------------------------------------------------===//
 class HaydnPassConfig : public TargetPassConfig {
+  // Truncation captured at construction. Freeze/closure skip must not
+  // re-read process-global StartBefore/StartAfter/StopBefore/StopAfter.
+  const bool LimitedCodeGenPipeline;
+
 public:
   HaydnPassConfig(HaydnTargetMachine &TM, PassManagerBase &PM)
-      : TargetPassConfig(TM, PM) {
+      : TargetPassConfig(TM, PM),
+        LimitedCodeGenPipeline(TargetPassConfig::hasLimitedCodeGenPipeline()) {
     // AIE2 dual-sched: pre-RA MachineScheduler stays in the pipeline;
     // createMachineScheduler never returns nullptr (no silent GenericScheduler).
   }
@@ -464,9 +464,7 @@ public:
   // AIE2: MBP runs in addPreSched2 before PostRA pack — suppress late MBP.
   void addBlockPlacement() override;
   void addPreEmitPass() override;
-  // W68.2R: the late VLIW closure runs after every common executable
-  // writer (outlining/splitting/BB-sections) and the terminal read-only
-  // verifier is the freeze gate (contracts/pipeline.md required seats).
+  // GR2.9: keep the override as the empty read-only TPC default.
   void addPostBBSections() override;
   void addPreEmitPass2() override;
 
@@ -613,9 +611,12 @@ void HaydnPassConfig::addPreSched2() {
   if (getOptLevel() != CodeGenOptLevel::None)
     addPass(&DeadMachineInstructionElimID);
 
-  // DeadMIElim → MBP (O1) → HardwareLoops → PseudoExpand → PostMachineScheduler
-  // → LatencyStalls → Finalize+Verify (AIE2TargetMachine.cpp:229-244; Haydn
-  // overlay is LatencyStalls between pack and first commit).
+  // DeadMIElim → MBP (O1) → HardwareLoops → PseudoExpand →
+  // LBN → BR (pre-S1) → PostMachineScheduler (packets + stall fold +
+  // CFG stamp) → LBN → wrap-only Finalize+Verify
+  // (AIE2TargetMachine.cpp:229-244; Haydn overlay is pre-stamp BR while
+  // CFG is mutable, then the S1 packet+stamp transaction. Post-stamp
+  // generic BR is not seated.)
   // EnsureTerminators already ran in addPostRegAlloc (pre-PEI).
   // CopyElim/ConditionOptimizer/BitSimplify/PEIPeephole stay deleted.
   // CFG simplification: generic BranchFolder (addMachineLateOptimization,
@@ -639,10 +640,24 @@ void HaydnPassConfig::addPreSched2() {
   // SET_HWLOOP rewrite. Product SET is SET_HWLOOP_F2_W at HardwareLoops
   // (HaydnHardwareLoops.cpp:701). Post-call soft-zero R0 is
   // HaydnPostRAScratch; Expand calls it after leftover expand so real
-  // JAL_W is visible. ADJCALLSTACK is PEI; calls are JAL_W from
-  // CallLowering; va_arg/libcall are the legalizer. Always on — residual
+  // JALR is visible. ADJCALLSTACK is PEI; calls are LOAD_ADDR + JAL_IND
+  // from CallLowering (short JAL is LLD cycle-neutral relax);
+  // va_arg/libcall are the legalizer. Always on — residual
   // pseudos are fatal at Verify/AsmPrinter.
   addPass(createHaydnExpandPseudosPass());
+
+  // Wave 4 B: CFG-changing branch normalization finishes before scheduler
+  // inventory. LBN sees gMIR B / JALR_CALL (D1.130) and rewrites far
+  // sites to the in-block long form so generic BR's trampoline/RestoreBB/
+  // split arms stay product-unreachable after this seat. AIE has no
+  // BranchRelaxation; ARM/Thumb is the monotone range-closure precedent
+  // (Thumb2SizeReduction / ARMConstantIslands), not a CFG-creating seat
+  // after commit.
+  // Pre-stamp BR after LBN: scratch-miss latches get RestoreBB while CFG
+  // is mutable (gr26 / embench). Unpacked sizes overestimate — extra
+  // trampolines are conservative. This is the only TM generic-BR addPass.
+  addPass(createHaydnLongBranchNormalizePass());
+  addPass(&BranchRelaxationPassID);
 
   // Sole Format E pack: leaveRegion/leaveMBB. Packetizer retired.
   // AIE2 always runs PostRA for bundle/NoOp correctness (incl. O0).
@@ -656,105 +671,32 @@ void HaydnPassConfig::addPreSched2() {
   // -enable-post-ra-machine-sched=false product flag and pipeline truncation
   // (-stop-after/-run-pass).
   addPass(&PostMachineSchedulerID);
-  // W68.2 S2: second invocation of the SAME scheduler implementation,
-  // flag-gated. S1 (above) scheduled the function and recorded per-MI
-  // issue cycles into the inter-block DDGs; S2 reschedules with those
-  // depths feeding the effective-latency cut (successors are now
-  // "scheduled" from S1's perspective). Same impl = no second scheduler.
-  // W68.3 will seat the late range/layout mutations BETWEEN the two.
-  // Exposed-pipeline RAW net between pack and first commit. AIE2 addPreSched2
-  // is PostMachineScheduler then createAIEFinalizeBundle
-  // (AIE2TargetMachine.cpp:242-244; AIE PreEmit empty at :88). Stall NOPs are
-  // committed by the following Finalize+Verify. BranchRelaxation can still
-  // emit bare LUI+ADDI32_W+JALR_W (insertIndirectBranch); addPreEmitPass
-  // re-runs the same Finalize+Verify after BR so those parcels commit.
-  addPass(createHaydnLatencyStallsPass());
+  // GR1.2: S1 leaveMBB installs complete packets; leaveFunction folds
+  // one dest-window stall net (haydnInsertExposedPipelineStalls) and
+  // leftover inverse bake, then stamps PostCommitCfgSnapshot so the
+  // first visible complete root and the CFG/inventory stamp arise
+  // together. AIE2 addPreSched2 is PostMachineScheduler then
+  // createAIEFinalizeBundle (AIE2TargetMachine.cpp:242-254; AIE PreEmit
+  // empty at :88). Haydn's stronger overlay is that same wrap-only
+  // Finalize after the atomic packet+stamp transaction. Dest-window
+  // does not run after stamp. BranchRelaxation can still emit bare
+  // LUI+ADDI32_W+JALR_W only while unstamped; insertIndirectBranch
+  // refuses once S1 has stamped.
 
-  // GR2.7 pre-commit CFG-form normalization: one additional invocation of
-  // the SAME generic BranchRelaxation (the existing addPreEmitPass
-  // BR→FixupHwLoops→BR multipass pattern, one invocation earlier), seated
-  // AFTER LatencyStalls and BEFORE the first (commit-normalization)
-  // Finalize so every branch site whose estimate (TII getInstSizeInBytes
-  // offset walk + namedLateLayoutGrowthBytes, inflated one per-direction
-  // BranchRelaxSafetyBufferBytes = MaxSingleBranchGrowthBytes,
-  // HaydnHWLoopContracts.h) exceeds the generated WIDE_BranchSImm12 window
-  // is already at its terminal long form BEFORE the first packet commit.
-  // The commit deadline is this Finalize's stamp; seating the normalizer
-  // here (not before S1) makes the estimate include the S1 pack + stall
-  // layout — before S1 a real ~250B growth window remained on
-  // tdsp3-class kernels that the post-stamp BR had to close with CFG
-  // forms. Unconditional (the addPreEmitPass BR is also unconditional):
-  // optnone bodies take far branches too.
-  //
-  // Catalog of generic-BranchRelaxation CFG/bare forms normalized HERE
-  // (BranchRelaxation.cpp authority, read-only):
-  //   C1 fixupUnconditionalBranch always creates a trampoline MBB (the MBB
-  //      always contains the branch MI, so BranchBB is never empty) +
-  //      insertIndirectBranch LUI+ADDI32_W+JALR_W (HaydnInstrInfo).
-  //   C2 no-free-scratch R11 spill + RestoreBB splice before DestBB;
-  //      preservation helper haydnPreserveLongFormJumpState.
-  //   C3 fixupConditionalBranch split arms (NewBB for the inverted-cond and
-  //      the far-B legs).
-  //   C4 cold-section trampoline arm — product-unreachable under GR2.3
-  //      (BB sections rejected) and covered by the postcommit CFG wall.
-  //   C5 splitBlockBeforeInstr for multi-conditional blocks.
-  //   C6 insertBranch bare short-form re-emission (cond/B re-emitted bare;
-  //      post-stamp real-encode emissions self-commit — see
-  //      HaydnInstrInfo::insertBranch).
-  // Whole-body hwloop demotes are NOT normalized here (their latch site
-  // does not exist pre-demote); the HaydnHardwareLoops demote installs the
-  // terminal in-block long latch itself when the backedge is out of
-  // simm12 (GR2.7 template; no CFG creation).
-  //
-  // Interim-seat law: the addPreEmitPass BR→FixupHwLoops→BR chain below
-  // STAYS SEATED until the GR1 lifecycle — its CFG arms become
-  // product-unreachable (far sites are terminal pre-commit) and
-  // fatal-if-reached via the postcommit CFG-creation wall (MFI stamp +
-  // HaydnVerifyBundles independent repeat).
-  //
-  // GR2.7: LongBranchNormalize BEFORE this first (pre-stamp) BR too. Its
-  // in-block rewrite owns every far site's terminal form in one owner;
-  // generic fixupConditionalBranch asserted on a tail made unanalyzable
-  // by earlier same-seat rewrites (nsichneu benchmark_body), and the
-  // in-block form makes the split/trampoline arms unreachable here as
-  // well — the whole-function far-site inventory is terminal before the
-  // first commit.
-  //
-  // D1.35 estimate-coverage law (path B, DECIDED — do not widen here):
-  // this seat's far decision sees the CURRENT layout walk + one
-  // BranchRelaxSafetyBufferBytes inflation per direction. Post-stamp
-  // growth beyond that vocabulary is admitted and lawful: one HWLoop
-  // demote insertion (up to MaxHwLoopDemoteGrowthBytes), closure-loop
-  // stall regeneration (InterveningCycles-floor per site), and the S2
-  // repack that may redistribute spans with NO event at all. The typed
-  // composition of the walk-invisible sources is
-  // haydn::hwloop::PreS1PostStampGrowthBytes (HaydnHWLoopContracts.h) —
-  // but it is deliberately NOT charged into this estimate: D1.33's
-  // single-inflation law makes TII.isBranchOffsetInRange the ONLY seat
-  // that adds any allowance, so a pre-added composition here would
-  // double-charge and steal the legal near-boundary short band, and no
-  // finite composition can cover eventless S2 redistribution anyway.
-  // The rejection class this leaves is closed, named, and pinned: a
-  // still-relaxable site re-overflowed post-stamp either takes the
-  // in-block long form at the post-stamp LongBranchNormalize seats
-  // (legal recovery; gr27-d135-demote-growth-pushes-branch.mir) or is a
-  // fail-closed fatal there (no dead-on-edge GPR / uninvertible cond /
-  // no near dest) — never a silent accept, never a CFG-creating repair.
+  // Post-stamp LBN owns in-block long-form / field-patch on committed
+  // roots (Wave 4 B). Generic BranchRelaxation is not seated after S1:
+  // RestoreBB/trampoline/split remain the pre-S1 seat above while CFG
+  // is mutable. AIE2 addPreSched2 is PostMachineScheduler then
+  // createAIEFinalizeBundle (AIE2TargetMachine.cpp:242-254); AIE PreEmit
+  // is empty and AIE has no BR (AIE2TargetMachine.cpp:88). A still-far
+  // short after this LBN is a named LBN fatal, never a CFG-creating
+  // repair (gr27-d135-demote-growth-pushes-branch.mir).
   addPass(createHaydnLongBranchNormalizePass());
-  addPass(&BranchRelaxationPassID);
-  // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs and
-  // stamp generated Format E members (AIE2TargetMachine.cpp:242-244
-  // createAIEFinalizeBundle; AIEFinalizeBundle.cpp:40-59). Multi-MI already
-  // stamped in HaydnPostRASchedStrategy::finalizeLegalMultiMI. Finalize and
-  // Verify never call skipFunction: they are target-local no-reorder commit
-  // ownership so product emission never sees uncommitted bare encode MIR.
-  // Do not reopen skipFunction on Finalize/Verify.
-  // GR2.4: with forcePostRAScheduling() the scheduler has already committed
-  // every function incl. optnone; Finalize owns only true residual commits
-  // (e.g. late BranchRelaxation insertIndirectBranch parcels re-committed by
-  // the addPreEmitPass re-run). VerifyBundles' optnone bare-encode refusal is
-  // unchanged. Leave only committed Format-E cycles for MC (underfill/top-pad
-  // invent stays fail-closed when golden is silent).
+  // After scheduling, wrap remaining standalone MIs as singleton BUNDLEs
+  // (AIE2TargetMachine.cpp:242-244 createAIEFinalizeBundle;
+  // AIEFinalizeBundle.cpp:40-59). Multi-MI and the CFG stamp already
+  // committed in HaydnPostRASchedStrategy S1. Finalize is wrap-only on the
+  // product path. Finalize and Verify never call skipFunction.
   addPass(createHaydnFinalizeBundlePass());
   // Fail-closed committed-cycle verifier immediately after finalize
   // (AIEBaseInstrInfo.cpp:1440-1459 verifyInstruction peer; AIE finalize
@@ -778,138 +720,66 @@ void HaydnPassConfig::addPreEmitPass() {
   // (TargetPassConfig.cpp addPreEmitPass call -> writer passes ->
   // addPostBBSections -> addPreEmitPass2), so a rejection here fires at
   // pipeline construction: no outlining/splitting/reordering MI is ever
-  // created, and nothing unqualified ever reaches the S2 closure, the
-  // addPostBBSections closure Finalize/Verify, or the addPreEmitPass2
+  // created, and nothing unqualified ever reaches the addPreEmitPass2
   // freeze verifier. contracts/pipeline.md common tail: "A configuration
   // requesting an unsupported executable common-tail writer rejects."
   haydnRejectUnsupportedCommonTailWriters(getHaydnTargetMachine());
   // AIE PreEmit is empty (AIE2TargetMachine.cpp:88;
   // AIEBaseTargetMachine.cpp:388) — AIE has no BranchRelaxation. Haydn
-  // keeps BR after the first commit (Format E simm fields).
-  // insertIndirectBranch emits real LUI+ADDI32_W+JALR_W
-  // (HaydnInstrInfo.cpp); those are one-parcel real MIs. Re-run the same
-  // Finalize+Verify after BR at every opt level so mixed committed+bare
-  // never reaches the printer. Not a second commit implementation:
+  // keeps post-stamp LBN (in-block templates plus ClearMetadata=true pad)
+  // plus wrap-only Finalize+Verify; generic BR is not seated here.
+  // Not a second packer:
   // AIEFinalizeBundle.cpp:40-59 is identity on already-bundled roots.
   //
-  // 1. BranchRelaxation — Format E simm fields
-  // 2. HaydnFixupHwLoops (hwloops ON) — SET_HWLOOP Off1/Off2 ÷4; product
-  //    demote-first (fatal if live demote fails). demote OFF = debug
-  //    erase-setup only — not product.
-  // 3. BranchRelaxation — re-close after Fixup growth (e.g. long BEQZ_W)
-  // 4. Late Finalize+Verify after BR (product default and hwloops ON):
-  //      materialize bare MIs via empty-cycle tryAdd → setDesc
-  //        (AIEMachineScheduler.cpp:1121-1139; AIEHazardRecognizer.cpp:174-214;
-  //         HaydnBundleMaterialize commitLateProductCycle)
-  //      FinalizeBundle singleton wrap + generated member stamp
-  //        (AIEFinalizeBundle.cpp:40-59; AIE2TargetMachine.cpp:242-244)
-  //      fail-closed verifyCommittedBundle
-  //        (AIEBaseInstrInfo.cpp:1440-1459; haydn-verify-bundles)
-  // Do not move BR before pack (sizes wrong). No PostMachineScheduler here.
-  //
-  // GR2.7: LongBranchNormalize sits immediately before EVERY post-stamp
-  // BR invocation here (and inside the LateConvergence closure). It
-  // rewrites each far short-branch site to the terminal in-block
-  // LUI+ADDI32_W(+cond)+JALR_W form first, so BR's CFG-creating fixup
-  // arms (trampoline/RestoreBB/split) are product-unreachable after the
-  // first Finalize stamp — the S2 repack and FixupHwLoops pads/demotes
-  // can re-overflow a site the pre-S1 normalization BR accepted, and the
-  // postcommit CFG-creation wall refuses BR's only generic promotion
-  // path at that point. In-block rewrite keeps MF.size() unchanged.
+  // 1. LongBranchNormalize — HWLoop Off1/Off2 FitPatch first (library
+  //    closeRetainedHwLoops when stamped), then in-block long form, then
+  //    padInternalMBBAlignment ClearMetadata=true.
+  //    HaydnFixupHwLoops is not a pass (GR1.4). Extra LBN sandwich after
+  //    Fixup is deleted.
+  // 2. Mid Finalize+Verify (every opt level): wrap-only identity on
+  //    already-bundled roots (AIEFinalizeBundle.cpp:40-59;
+  //    AIE2TargetMachine.cpp:242-244) then fail-closed
+  //    verifyCommittedBundle (AIEBaseInstrInfo.cpp:1440-1459).
+  // No PostMachineScheduler here.
   addPass(createHaydnLongBranchNormalizePass());
-  addPass(&BranchRelaxationPassID);
-  if (getOptLevel() != CodeGenOptLevel::None && EnableHaydnHardwareLoops) {
-    addPass(createHaydnFixupHwLoopsPass());
-    addPass(createHaydnLongBranchNormalizePass());
-    addPass(&BranchRelaxationPassID);
-  }
-  // Mid Finalize+Verify after BR at every opt level (same Finalize/Verify;
-  // identity on already-bundled roots, recommit for BR bare parcels). S2/
-  // LateConvergence is NOT here: it must choose current physical MIs after
-  // the common executable tail. The W68.2R S2 + closure + freeze seats live
-  // at addPostBBSections/addPreEmitPass2. Peer: AArch64 addPostBBSections
-  // seats late BranchRelaxation after BB sections
-  // (AArch64TargetMachine.cpp:883-891); AIE2 PreEmit is empty
-  // (AIE2TargetMachine.cpp:90).
+  // Mid Finalize+Verify at every opt level (identity on already-bundled
+  // roots). Peer: AIE2 PreEmit is empty (AIE2TargetMachine.cpp:90);
+  // AIE seats createAIEMachineAlignment in addPreSched2 only because
+  // that PreEmit is empty. Haydn's closer is this LBN seat.
   addPass(createHaydnFinalizeBundlePass());
   // Invariant-only seat (D1.13): explicit non-freeze registration.
   addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/false));
 }
 
 void HaydnPassConfig::addPostBBSections() {
-  // W68.2R late VLIW closure owner (contracts/pipeline.md "Required
-  // terminal multi-format lifecycle"): this seat runs AFTER every common
-  // executable writer — RegUsageInfoCollector/IPRA, FuncletLayout,
-  // RemoveLoadsIntoFakeUses, StackMapLiveness, LiveDebugValues, sanitizer
-  // metadata, MachineOutliner, function/data splitting, and
-  // BasicBlockSections all precede addPostBBSections. S2
-  // (HaydnLateConvergence, -haydn-sms2 product default ON) chooses current
-  // physical MIs here, then the
-  // one closure Finalize commits any bare MI those writers reintroduced
-  // (outlined sequences rejoin committed state) and Verify fail-closes the
-  // committed-cycle invariants. Optional CFIFixup (metadata/CFI only,
-  // enabled by setCFIFixup(true) in the TM ctor) follows this seat via
-  // the common TargetPassConfig tail; the terminal read-only verifier at
-  // addPreEmitPass2 is the executable freeze.
-  //
-  // A -start-after/-stop-…-carved pipeline is a seat PROBE, not the
-  // product pipeline: the closure must not commit state the probe
-  // deliberately left bare (e96/vf5/mc printer fixtures predate the
-  // freeze seat and probe serialization directly). Product runs are
-  // never limited (llc/clang full pipelines), so this gate cannot mask
-  // a real freeze.
-  //
-  // S2 still seats under the limited-pipeline carve-out so -stop-after=
-  // haydn-late-convergence can observe the pass; Finalize/Verify remain
-  // product-pipeline-only. Flag is product default ON (G004 flip
-  // 2026-08-27, haydnLateConvergenceProductDefaultEnabled).
-  if (haydnSMS2Enabled())
-    addPass(createHaydnLateConvergencePass());
-  if (TargetPassConfig::hasLimitedCodeGenPipeline())
-    return;
-  addPass(createHaydnFinalizeBundlePass());
-  // Invariant-only seat (D1.13): the freeze verifier is the later
-  // addPreEmitPass2 registration, not this closure Verify.
-  addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/false));
-  // W70.2 function-alignment writer (GOALS/contract: "AIE MachineAlignment
-  // seat after first Finalize and after S2 closure: pad with a legal
-  // generated idle row. Delete printer emitFunctionEntryLabel growth.
-  // Prefix budgets charge the same pad."). Peer AIE2TargetMachine.cpp:247
-  // seats createAIEMachineAlignment directly after createAIEFinalizeBundle.
-  // This seat is after the FIRST Finalize (addPreSched2) and after the S2
-  // closure Finalize+Verify above, and before the addPreEmitPass2 freeze
-  // verifier — the pads are real committed idle-parcel BUNDLEs, so the
-  // freeze verifier and every byte-distance consumer (BR/HWLoop walks via
-  // getInstSizeInBytes) charge them for free. Pad-only (no AIE elongation):
-  // both product rows encode the same single EncodedBytes parcel and golden
-  // admits no underfill/top-pad. Runs at every opt level including optnone
-  // (layout, not optimization); same limited-pipeline carve-out as the
-  // closure seats above it.
-  addPass(createHaydnMachineAlignmentPass());
+  // GR2.9: read-only. TargetPassConfig.h default addPostBBSections is
+  // empty. Do not copy AArch64 late writers. EncodedBytes internal pads
+  // and MBB metadata clear finish in stamped addPreEmitPass LBN.
 }
 
 void HaydnPassConfig::addPreEmitPass2() {
-  // W68.2R executable freeze gate: terminal read-only VerifyBundles after
+  // Executable freeze gate: terminal read-only VerifyBundles after
   // optional CFIFixup and frame-layout analysis. Only serialization
   // (AsmPrinter/MC) follows. Read-only by construction — VerifyBundles
   // never mutates MIR; a violation here is a hard diagnostic, never a
-  // repair. A second Finalize is deliberately NOT seated here: closure
-  // owned addPostBBSections; anything bare at this seat is a pipeline
-  // contract violation the verifier reports.
+  // repair. A second Finalize is deliberately NOT seated here: wrap-only
+  // Finalize already ran in addPreSched2 and addPreEmitPass; anything
+  // bare at this seat is a pipeline contract violation the verifier
+  // reports.
   //
   // D1.13 closed invariant: freeze identity is pinned HERE, by the
   // IsFreezeSeat=true registration argument — the only such instance in
-  // the pipeline. The three earlier Verify seats (addPreSched2,
-  // addPreEmitPass, addPostBBSections) are invariant-only by explicit
-  // false; no instance-count heuristic and no cross-instance global
-  // exists, so neither pipeline census drift nor per-thread pass cloning
-  // under parallel codegen can silently move or disable a freeze wall.
+  // the pipeline. The two earlier Verify seats (addPreSched2,
+  // addPreEmitPass) are invariant-only by explicit false; no
+  // instance-count heuristic and no cross-instance global exists, so
+  // neither pipeline census drift nor per-thread pass cloning under
+  // parallel codegen can silently move or disable a freeze wall.
   // The factory takes no default argument: any future seat must state
   // its identity at the call site (compile error otherwise).
   //
-  // Same limited-pipeline probe carve-out as addPostBBSections: the
-  // freeze is a property of the COMPLETE pipeline only.
-  if (TargetPassConfig::hasLimitedCodeGenPipeline())
+  // D1.175: skip freeze only when this PassConfig was constructed under
+  // a truncated pipeline. Product llc/clang single-shot never hits it.
+  if (LimitedCodeGenPipeline)
     return;
   addPass(createHaydnVerifyBundlesPass(/*IsFreezeSeat=*/true));
 }

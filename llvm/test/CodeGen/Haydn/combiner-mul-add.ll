@@ -33,8 +33,8 @@ define i64 @mul_by_one_64(i64 %x) nounwind {
 ; i64 mul by 1: the IR/GISel combiner folds x*1 -> x, so no multiply remains.
 ; Even if it didn't fold, G_MUL <s64> now lowers to native MUL64_LL partials
 ; never a __muldi3 libcall. Either way there is no jal_w __muldi3.
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__mulsi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__mulsi3
 ; CHECK: jalr{{(\.s[012])?}}
   %r = mul i64 %x, 1
   ret i64 %r

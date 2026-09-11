@@ -1,0 +1,65 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnLatencyStalls.cpp --check-prefix=WALL
+# RUN: rm -rf %t && split-file %s %t
+# RUN: %python %t/gen.py > %t/cap.mir
+# RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   %t/cap.mir -o - 2>&1 | FileCheck %s --check-prefix=CAP
+# REQUIRES: haydn-registered-target
+#
+# D1.161: EncodedBytes wrap/exit stall-cap is fail-closed. insertStalls
+# returns Inserted; DestHR.advanceDestWindows and NumWrapStallBundles use
+# Inserted, not the requested count. CapLayout drop of residual dest-window
+# need is a named fatal (no-interlock silent under-pad; non-latch exit
+# leaks are unverified). Size-neutral same-row NOP wrap cannot add a
+# cycle. AIEFinalizeBundle.cpp:40-59 / HexagonInstrInfo.cpp:1667-1671
+# have no EncodedBytes stall-cap peer.
+#
+# Runtime: a still-short backward BEQZ_W spans a ZOL wrap pad
+# (Data_Latency=2 load as the last real latch cycle). Insert-before-src
+# grows the backedge past WIDE_BranchSImm12. Fail closed rather than
+# skip the pad.
+#
+# WALL: -> unsigned {
+# WALL: NumStallsSkippedEncodedBytesCap += Stalls - Inserted;
+# WALL-NEXT: report_fatal_error(
+# WALL-NEXT: "Haydn: EncodedBytes stall cap would drop dest-window pads"
+# WALL: NumWrapStallBundles += Inserted;
+# WALL: for (unsigned I = 0; I < Inserted; ++I)
+# WALL-NEXT: DestHR.advanceDestWindows();
+#
+# CAP: EncodedBytes stall cap would drop dest-window pads
+
+#--- gen.py
+print("""--- |
+  define void @stall_cap_off() { ret void }
+...
+---
+name:            stall_cap_off
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r5, $r15
+    successors: %bb.1
+    NOP
+
+  bb.1:
+    successors: %bb.1, %bb.2
+    liveins: $r1
+    $r3 = LD32 $r1, 0
+    PseudoLoopEnd %bb.1
+
+  bb.2:
+    liveins: $r5, $r15
+    successors: %bb.0, %bb.3""")
+# 180 * 12B = 2160B (d1141 far template). ZOL wrap pad in bb.1 sits
+# on this backward BEQZ_W (insert-before-src grows a backedge). Grown
+# + BranchRelaxSafetyBufferBytes exceeds WIDE_BranchSImm12.
+for _ in range(180):
+    print("    NOP")
+print("""    BEQZ_W $r5, %bb.0, implicit-def dead $sfr
+
+  bb.3:
+    liveins: $r15
+    RET implicit $r15
+...
+""")

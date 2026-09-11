@@ -63,7 +63,7 @@
 ; IB: successorsAreScheduled
 ; IB: ScheduledMBBs.insert(BB);
 
-; G004 trim 2026-08-27: -haydn-sms2 is product default ON (sms2-only arm
+; G004 trim 2026-08-27: is product default ON (sms2-only arm
 ; CM -3.76% / DH -0.86%); the three post-RA edge mutations stay default
 ; OFF (combined arm super-additively regressive: CM +33.38%, DH +12.18%).
 ; IBBRICK: haydn-postra-region-end-edges",

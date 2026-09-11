@@ -10,23 +10,22 @@
 define void @dual_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-LABEL: dual_load_i64_slot_poly:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    { addi32 r4, r1, 8; addi32 r3, r1, 4 }
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r3, r3, 0 }
+; CHECK-NEXT:    { ld32 r3, r3, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r1, sp, 2; addi32 r5, r4, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { ld32 r4, r4, 0; ld32 r5, r5, 0 }
-; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r6, r2, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r5, r4, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { ld32 r4, r4, 0; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r4, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r4, sp, 2; ld32 r5, r5, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; st32 r5, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32 r5, sp, 3; addi32 r6, r2, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
@@ -49,30 +48,30 @@ entry:
 define void @triple_load_i64_slot_poly(ptr %p, ptr %q) nounwind {
 ; CHECK-LABEL: triple_load_i64_slot_poly:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { addi32 r3, r1, 4; ld32 r6, r1, 0 }
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { addi32 r4, r1, 8; ld32 r6, r1, 0 }
+; CHECK-NEXT:    { nop; addi32 r3, r1, 4 }
 ; CHECK-NEXT:    { st32 r6, sp, 2; ld32 r3, r3, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r4, r1, 8 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r1, r1, 16 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { ld32 r4, r4, 0; addi32 r5, r4, 4 }
-; CHECK-NEXT:    { ld64 d0, sp, 1; ld32 r3, r5, 0 } // 8-byte Folded Reload
-; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; addi32 r1, r1, 16 }
-; CHECK-NEXT:    { st32 r4, sp, 2; addi32 r5, r1, 4 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { st32 r3, sp, 3; ld32 r1, r1, 0 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { ld32 r3, r5, 0; addi32 r4, r2, 4 }
-; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; addi32 r5, r4, 4 }
+; CHECK-NEXT:    { ld32 r4, r4, 0; ld64 d0, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
 ; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32 r4, sp, 2; ld32 r3, r5, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r5, r1, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { ld32 r1, r1, 0; ld64 d1, sp, 1 } // 8-byte Folded Reload
+; CHECK-NEXT:    // 8-byte Reload
+; CHECK-NEXT:    { nop; ld32 r3, r5, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2; add64 d0, d0, d1 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r4, r2, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d2, sp, 1 } // 8-byte Folded Reload

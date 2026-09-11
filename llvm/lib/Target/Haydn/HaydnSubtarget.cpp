@@ -12,6 +12,8 @@
 
 #include "HaydnSubtarget.h"
 #include "Haydn.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "GISel/HaydnCallLowering.h"
 #include "GISel/HaydnLegalizerInfo.h"
 #include "llvm/Support/CommandLine.h"
@@ -39,18 +41,35 @@ createHaydnInstructionSelector(const HaydnSubtarget &ST,
 
 void HaydnSubtarget::anchor() {}
 
+/// True when FS contains an explicit minus for \p Name (last +/- token wins).
+/// Empty FS, a partial +feat list, or an unknown CPU must not demote ISA bits.
+static bool haydnISAFeatureForcedOff(StringRef FS, StringRef Name) {
+  bool Off = false;
+  SmallVector<StringRef, 8> Parts;
+  FS.split(Parts, ',', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
+  for (StringRef P : Parts) {
+    P = P.trim();
+    if (P.empty())
+      continue;
+    const char Sign = P.front();
+    if (Sign != '+' && Sign != '-')
+      continue;
+    if (P.drop_front() != Name)
+      continue;
+    Off = Sign == '-';
+  }
+  return Off;
+}
+
 HaydnSubtarget &HaydnSubtarget::initializeSubtargetDependencies(
     const Triple &TT, StringRef CPUName, StringRef TuneCPUName, StringRef FS) {
 
-  // Default to the "generic" CPU. The generic model carries FeatureHWLoop
-  // + FeatureAGU as ISA baseline (post/pre-inc fuse is the sole update-addr
-  // path). FeatureHWLoop does not enable HardwareLoops formation.
-  // Full "haydn" CPU adds CircularBuffer / BitReversed / SIMD via
-  // -mcpu=haydn. Disable AGU densify with -mattr=-agu.
+  // Empty -mcpu is "generic", the same full ISA as "haydn". Empty -mtune
+  // defaults to haydn (HaydnSchedModel only; TuneImplies is empty).
   if (CPUName.empty())
-    CPUName = "generic";
+    CPUName = Haydn::kDefaultCPUName;
   if (TuneCPUName.empty())
-    TuneCPUName = CPUName;
+    TuneCPUName = Haydn::kDefaultTuneCPUName;
 
   // Initialize feature flags to default values
   HasAGU = false;
@@ -63,6 +82,19 @@ HaydnSubtarget &HaydnSubtarget::initializeSubtargetDependencies(
   UseFramePointer = false;
 
   ParseSubtargetFeatures(CPUName, TuneCPUName, FS);
+  // Product ISA baseline is full. ParseSubtargetFeatures leaves bits false
+  // on an unknown CPU or when FS lists only a subset of +feat tokens.
+  // Restore any bit that was not explicitly forced off.
+  if (!haydnISAFeatureForcedOff(FS, "agu"))
+    HasAGU = true;
+  if (!haydnISAFeatureForcedOff(FS, "circular-buffer"))
+    HasCircularBuffer = true;
+  if (!haydnISAFeatureForcedOff(FS, "bit-reversed"))
+    HasBitReversed = true;
+  if (!haydnISAFeatureForcedOff(FS, "hwloop"))
+    HasHWLoop = true;
+  if (!haydnISAFeatureForcedOff(FS, "simd"))
+    HasSIMD = true;
   return *this;
 }
 

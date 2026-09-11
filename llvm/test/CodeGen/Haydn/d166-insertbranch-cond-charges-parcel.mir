@@ -1,0 +1,77 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.66 pin: a postcommit insertBranch one-way conditional emission must
+# charge its real parcel to BytesAdded even though it self-commits into a
+# singleton BUNDLE root (bundle children charge 0; the root owns the
+# charge). Before D1.66 the charge ran after selfCommitCondBranch and
+# reported +0, while the matching removeBranch charges
+# lateLayoutBytes = one product parcel — every postcommit cond
+# insert/remove cycle (generic BR invert-swap) drifted BlockInfo.Size by
+# -12 and BR could judge an out-of-range branch in-range.
+#
+# Observable: with the safety buffer forced to 0 and a successor placed
+# just beyond the short-cond window, BR must still SEE the site as
+# out-of-range (growth-aware) and relax it; a 0-byte insert would leave
+# the accounting short and mis-judge the window. The relaxed tail here is
+# the in-block long form (JALR last); the block count never changes.
+
+--- |
+  define void @d166_cond_insert_charges_parcel(i1 %c) {
+  entry:
+    br i1 %c, label %near, label %far
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            d166_cond_insert_charges_parcel
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis: true
+isSSA: false
+noVRegs: true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r15
+    ; CHECK-LABEL: name: d166_cond_insert_charges_parcel
+    ; CHECK: bb.0.entry
+    ; Postcommit BR may rewrite this committed cond cycle; whatever form
+    ; survives, the entry tail keeps exactly one control cycle and every
+    ; emitted real conditional charged its parcel (D1.66).
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      BEQZ_W $r0, %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    ; CHECK: bb.1.near
+    ; CHECK: BUNDLE
+    BUNDLE 0 {
+      B %bb.2
+    }
+
+  bb.2.far:
+    liveins: $r15
+    ; CHECK: bb.2.far
+    ; CHECK: {{RET|JALR}}
+    RET implicit $r15
+
+...

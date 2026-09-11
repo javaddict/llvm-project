@@ -25,43 +25,37 @@
 define i32 @sum_arr(ptr %a, i32 %n) {
 ; DEFAULT-LABEL: sum_arr:
 ; DEFAULT:       // %bb.0: // %entry
-; DEFAULT-NEXT:    { nop; xor32 r0, r0, r0 }
-; DEFAULT-NEXT:    { nop; subi32 sp, sp, 8 }
-; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
+; DEFAULT-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; DEFAULT-NEXT:    .cfi_def_cfa_offset 16
 ; DEFAULT-NEXT:    { nop; addi32 r3, r0, 1 }
 ; DEFAULT-NEXT:    { nop; max32 r3, r2, r3 }
-; DEFAULT-NEXT:    { nop; addi32 r2, r0, 0 }
-; DEFAULT-NEXT:    { nop; addi32 r4, r3, -1 }
+; DEFAULT-NEXT:    { addi32 r2, r0, 0; addi32 r4, r3, -1 }
 ; DEFAULT-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start0, .LLhwloop_end0, r4 }
 ; DEFAULT-NEXT:    { nop; addi32 r4, r0, 2 }
 ; DEFAULT-NEXT:    { nop; slt32 r4, r3, r4 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r3, r1, 1 }
-; DEFAULT-NEXT:    { nop; nop }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r3, r1, 1 }
 ; DEFAULT-NEXT:    { nop; bnez r4, .LBB0_2 }
 ; DEFAULT-NEXT:  .LBB0_1: // %for.body
 ; DEFAULT-NEXT:    // =>This Inner Loop Header: Depth=1
 ; DEFAULT-NEXT:    // Label of block must be emitted
 ; DEFAULT-NEXT:  .LLhwloop_start0:
-; DEFAULT-NEXT:    { nop; add32 r2, r2, r3 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r3, r1, 1 }
+; DEFAULT-NEXT:    { nop; nop; add32 r2, r2, r3 }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r3, r1, 1 }
 ; DEFAULT-NEXT:  .LLhwloop_end0:
 ; DEFAULT-NEXT:    { nop; nop }
 ; DEFAULT-NEXT:  .LBB0_2:
 ; DEFAULT-NEXT:    { nop; add32 r1, r2, r3 }
-; DEFAULT-NEXT:    { nop; addi32 sp, sp, 8 }
+; DEFAULT-NEXT:    { nop; addi32 sp, sp, 16 }
 ; DEFAULT-NEXT:    .cfi_def_cfa sp, 0
 ; DEFAULT-NEXT:    { nop; jalr r0, lr, 0 }
 ;
 ; HWOFF-LABEL: sum_arr:
 ; HWOFF:       // %bb.0: // %entry
-; HWOFF-NEXT:    { nop; xor32 r0, r0, r0 }
-; HWOFF-NEXT:    { nop; subi32 sp, sp, 8 }
+; HWOFF-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; HWOFF-NEXT:    .cfi_def_cfa_offset 8
-; GR2.1 Kind-A restamp: software-pipelines with a guarded 2-stage peel.
 ; HWOFF-NEXT:    { addi32 r3, r0, 0; addi32 r5, r0, 2 }
 ; HWOFF-NEXT:    { slt32 r6, r2, r5; addi32 r4, r3, 1 }
-; HWOFF-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
-; HWOFF-NEXT:    { nop; nop }
+; HWOFF-NEXT:    { nop; nop; s_lw_post_imm r5, r1, 1 }
 ; HWOFF-NEXT:    { nop; bnez r6, .LBB0_2 }
 ; HWOFF-NEXT:  .LBB0_1: // %for.body
 ; HWOFF-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -74,6 +68,7 @@ define i32 @sum_arr(ptr %a, i32 %n) {
 ; HWOFF-NEXT:    { nop; addi32 sp, sp, 8 }
 ; HWOFF-NEXT:    .cfi_def_cfa sp, 0
 ; HWOFF-NEXT:    { nop; jalr r0, lr, 0 }
+; GR2.1 Kind-A restamp: software-pipelines with a guarded 2-stage peel.
 entry:
   br label %for.body
 
@@ -95,51 +90,45 @@ for.end:
 define i32 @bigimm(ptr %a, i32 %n) {
 ; DEFAULT-LABEL: bigimm:
 ; DEFAULT:       // %bb.0: // %entry
-; DEFAULT-NEXT:    { nop; xor32 r0, r0, r0 }
-; DEFAULT-NEXT:    { nop; subi32 sp, sp, 8 }
-; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
-; GR2.1 Kind-A restamp: guarded 2-stage peel before the ZOL window; the
-; kernel keeps {add32, mull, s_lw} one-per-cycle; epilog drains the tail.
+; DEFAULT-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; DEFAULT-NEXT:    .cfi_def_cfa_offset 16
 ; DEFAULT-NEXT:    { nop; addi32 r3, r0, 1 }
 ; DEFAULT-NEXT:    { nop; max32 r6, r2, r3 }
-; DEFAULT-NEXT:    { nop; addi32 r2, r0, 74565 }
-; DEFAULT-NEXT:    { addi32 r3, r0, 0; addi32 r4, r6, -2 }
-; DEFAULT-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start1, .LLhwloop_end1, r4 }
+; DEFAULT-NEXT:    { addi32 r2, r0, 74565; addi32 r4, r6, -2 }
+; DEFAULT-NEXT:    { set_hwloop_f2 0, .LLhwloop_start1, .LLhwloop_end1, r4; addi32 r3, r0, 0 }
 ; DEFAULT-NEXT:    { nop; addi32 r4, r0, 2 }
 ; DEFAULT-NEXT:    { nop; slt32 r5, r6, r4 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
-; DEFAULT-NEXT:    { nop; nop }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r4, r1, 1 }
 ; DEFAULT-NEXT:    { nop; bnez r5, .LBB1_4 }
-; DEFAULT-NEXT:  // %bb.1: // %for.body
-; DEFAULT-NEXT:    { addi32 r7, r0, 3; mull r5, r4, r2 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
-; DEFAULT-NEXT:    { nop; slt32 r6, r6, r7 }
-; DEFAULT-NEXT:    { nop; bnez r6, .LBB1_3 }
-; DEFAULT-NEXT:  .LBB1_2: // %for.body
+; DEFAULT-NEXT:    { nop; beqz r0, .LBB1_2 }
+; DEFAULT-NEXT:  .LBB1_1: // %for.body
 ; DEFAULT-NEXT:    // =>This Inner Loop Header: Depth=1
 ; DEFAULT-NEXT:    // Label of block must be emitted
 ; DEFAULT-NEXT:  .LLhwloop_start1:
 ; DEFAULT-NEXT:    { nop; add32 r3, r3, r5 }
 ; DEFAULT-NEXT:    { nop; mull r5, r4, r2 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r4, r1, 1 }
 ; DEFAULT-NEXT:  .LLhwloop_end1:
-; DEFAULT-NEXT:    { nop; nop }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r4, r1, 1 }
+; DEFAULT-NEXT:    { nop; beqz r0, .LBB1_3 }
+; DEFAULT-NEXT:  .LBB1_2: // %for.body
+; DEFAULT-NEXT:    { nop; addi32 r7, r0, 3 }
+; DEFAULT-NEXT:    { nop; slt32 r6, r6, r7; mull r5, r4, r2 }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r4, r1, 1 }
+; DEFAULT-NEXT:    { nop; beqz r6, .LBB1_1 }
 ; DEFAULT-NEXT:  .LBB1_3:
 ; DEFAULT-NEXT:    { nop; add32 r3, r3, r5 }
 ; DEFAULT-NEXT:  .LBB1_4:
 ; DEFAULT-NEXT:    { nop; mull r1, r4, r2 }
 ; DEFAULT-NEXT:    { nop; add32 r1, r3, r1 }
-; DEFAULT-NEXT:    { nop; addi32 sp, sp, 8 }
+; DEFAULT-NEXT:    { nop; addi32 sp, sp, 16 }
 ; DEFAULT-NEXT:    .cfi_def_cfa sp, 0
 ; DEFAULT-NEXT:    { nop; jalr r0, lr, 0 }
 ;
 ; HWOFF-LABEL: bigimm:
 ; HWOFF:       // %bb.0: // %entry
-; HWOFF-NEXT:    { nop; xor32 r0, r0, r0 }
-; GR2.1 Kind-A restamp: software-pipelines with a guarded 2-stage peel; the
-; kernel folds {add32 + IV bump} and {slt32 + mull} into single packs.
-; HWOFF-NEXT:    { nop; subi32 sp, sp, 16 }
-; HWOFF-NEXT:    { nop; st32 r8, sp, 3 }
+; HWOFF-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; HWOFF-NEXT:    { nop; st32 r8, sp, 3 } // 4-byte Folded Spill
+; HWOFF-NEXT:    // 4-byte Spill
 ; HWOFF-NEXT:    .cfi_def_cfa_offset 16
 ; HWOFF-NEXT:    .cfi_offset r8, -4
 ; HWOFF-NEXT:    { addi32 r4, r0, 0; addi32 r5, r0, 2 }
@@ -148,9 +137,10 @@ define i32 @bigimm(ptr %a, i32 %n) {
 ; HWOFF-NEXT:    { nop; addi32 r3, r0, 74565 }
 ; HWOFF-NEXT:    { nop; bnez r6, .LBB1_4 }
 ; HWOFF-NEXT:  // %bb.1: // %for.body
-; HWOFF-NEXT:    { addi32 r12, r0, 3; mull r6, r5, r3 }
+; HWOFF-NEXT:    { nop; addi32 r12, r0, 3 }
+; HWOFF-NEXT:    { mull r6, r5, r3; addi32 r7, r7, 1 }
 ; HWOFF-NEXT:    { nop; s_lw_post_imm r5, r1, 1 }
-; HWOFF-NEXT:    { slt32 r12, r2, r12; addi32 r7, r7, 1 }
+; HWOFF-NEXT:    { nop; slt32 r12, r2, r12 }
 ; HWOFF-NEXT:    { nop; bnez r12, .LBB1_3 }
 ; HWOFF-NEXT:  .LBB1_2: // %for.body
 ; HWOFF-NEXT:    // =>This Inner Loop Header: Depth=1
@@ -161,6 +151,17 @@ define i32 @bigimm(ptr %a, i32 %n) {
 ; HWOFF-NEXT:    { nop; bnez r8, .LBB1_2 }
 ; HWOFF-NEXT:  .LBB1_3:
 ; HWOFF-NEXT:    { nop; add32 r4, r4, r6 }
+; HWOFF-NEXT:  .LBB1_4:
+; HWOFF-NEXT:    { nop; mull r1, r5, r3 }
+; HWOFF-NEXT:    { nop; add32 r1, r4, r1; xor32 r0, r0, r0 }
+; HWOFF-NEXT:    { nop; ld32 r8, sp, 3 }
+; HWOFF-NEXT:    { nop; addi32 sp, sp, 16 }
+; HWOFF-NEXT:    .cfi_def_cfa sp, 0
+; HWOFF-NEXT:    { nop; jalr r0, lr, 0 }
+; GR2.1 Kind-A restamp: guarded 2-stage peel before the ZOL window; the
+; kernel keeps {add32, mull, s_lw} one-per-cycle; epilog drains the tail.
+; GR2.1 Kind-A restamp: software-pipelines with a guarded 2-stage peel; the
+; kernel folds {add32 + IV bump} and {slt32 + mull} into single packs.
 entry:
   br label %for.body
 
@@ -190,52 +191,50 @@ for.end:
 define i32 @nested_hwloop(ptr noalias %a, i32 %n, i32 %m) {
 ; DEFAULT-LABEL: nested_hwloop:
 ; DEFAULT:       // %bb.0: // %entry
-; DEFAULT-NEXT:    { nop; xor32 r0, r0, r0 }
-; DEFAULT-NEXT:    { nop; subi32 sp, sp, 8 }
-; DEFAULT-NEXT:    .cfi_def_cfa_offset 8
+; DEFAULT-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; DEFAULT-NEXT:    .cfi_def_cfa_offset 16
 ; DEFAULT-NEXT:    { addi32 r4, r0, 0; addi32 r5, r0, 1 }
 ; DEFAULT-NEXT:    { nop; move32 r5, r4; max32 r3, r3, r5 }
 ; DEFAULT-NEXT:    { nop; beqz r0, .LBB2_2 }
 ; DEFAULT-NEXT:  .LBB2_1: // in Loop: Header=BB2_2 Depth=1
 ; DEFAULT-NEXT:    { add32 r4, r4, r7; addi32 r5, r5, 1 }
 ; DEFAULT-NEXT:    { slt32 r6, r5, r2; addi32 r1, r1, 4 }
-; DEFAULT-NEXT:    { nop; beqz r6, .LBB2_4 }
+; DEFAULT-NEXT:    { nop; beqz r6, .LBB2_5 }
 ; DEFAULT-NEXT:  .LBB2_2: // %outer.header
 ; DEFAULT-NEXT:    // =>This Loop Header: Depth=1
 ; DEFAULT-NEXT:    // Child Loop BB2_3 Depth 2
 ; DEFAULT-NEXT:    { addi32 r7, r0, 2; addi32 r6, r3, -1 }
 ; DEFAULT-NEXT:    { nop; set_hwloop_f2 0, .LLhwloop_start2, .LLhwloop_end2, r6 }
-; DEFAULT-NEXT:    { nop; move32 r6, r1 }
-; DEFAULT-NEXT:    { nop; slt32 r12, r3, r7 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r7, r6, 1 }
-; DEFAULT-NEXT:    { nop; nop }
+; DEFAULT-NEXT:    { nop; slt32 r12, r3, r7; move32 r6, r1 }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r7, r6, 1 }
 ; DEFAULT-NEXT:    { nop; bnez r12, .LBB2_1 }
 ; DEFAULT-NEXT:  .LBB2_3: // %inner.body
 ; DEFAULT-NEXT:    // Parent Loop BB2_2 Depth=1
 ; DEFAULT-NEXT:    // => This Inner Loop Header: Depth=2
 ; DEFAULT-NEXT:    // Label of block must be emitted
 ; DEFAULT-NEXT:  .LLhwloop_start2:
-; DEFAULT-NEXT:    { nop; add32 r4, r4, r7 }
-; DEFAULT-NEXT:    { nop; s_lw_post_imm r7, r6, 1 }
+; DEFAULT-NEXT:    { nop; nop; add32 r4, r4, r7 }
+; DEFAULT-NEXT:    { nop; nop; s_lw_post_imm r7, r6, 1 }
 ; DEFAULT-NEXT:  .LLhwloop_end2:
 ; DEFAULT-NEXT:    { nop; nop }
+; DEFAULT-NEXT:  // %bb.4: // in Loop: Header=BB2_2 Depth=1
 ; DEFAULT-NEXT:    { nop; beqz r0, .LBB2_1 }
-; DEFAULT-NEXT:  .LBB2_4: // %for.end
+; DEFAULT-NEXT:  .LBB2_5: // %for.end
 ; DEFAULT-NEXT:    { nop; move32 r1, r4 }
-; DEFAULT-NEXT:    { nop; addi32 sp, sp, 8 }
+; DEFAULT-NEXT:    { nop; addi32 sp, sp, 16 }
 ; DEFAULT-NEXT:    .cfi_def_cfa sp, 0
 ; DEFAULT-NEXT:    { nop; jalr r0, lr, 0 }
 ;
 ; HWOFF-LABEL: nested_hwloop:
 ; HWOFF:       // %bb.0: // %entry
-; HWOFF-NEXT:    { nop; xor32 r0, r0, r0 }
-; GR2.1 Kind-A restamp: BOTH loops software-pipeline (guarded 2-stage peels);
-; the inner kernel packs {add32 + IV bump} then {move32 + slt32}.
-; HWOFF-NEXT:    { nop; subi32 sp, sp, 24 }
+; HWOFF-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; HWOFF-NEXT:    { nop; addi32 r4, sp, 12 }
-; HWOFF-NEXT:    { nop; st32 r10, r4, 0 }
-; HWOFF-NEXT:    { nop; st32 r9, r4, 1 }
-; HWOFF-NEXT:    { nop; st32 r8, r4, 2 }
+; HWOFF-NEXT:    { nop; st32 r10, r4, 0 } // 4-byte Folded Spill
+; HWOFF-NEXT:    // 4-byte Spill
+; HWOFF-NEXT:    { nop; st32 r9, r4, 1 } // 4-byte Folded Spill
+; HWOFF-NEXT:    // 4-byte Spill
+; HWOFF-NEXT:    { nop; st32 r8, r4, 2 } // 4-byte Folded Spill
+; HWOFF-NEXT:    // 4-byte Spill
 ; HWOFF-NEXT:    .cfi_def_cfa_offset 24
 ; HWOFF-NEXT:    .cfi_offset r8, -4
 ; HWOFF-NEXT:    .cfi_offset r9, -8
@@ -250,10 +249,10 @@ define i32 @nested_hwloop(ptr noalias %a, i32 %n, i32 %m) {
 ; HWOFF-NEXT:  .LBB2_2: // %inner.body
 ; HWOFF-NEXT:    // =>This Loop Header: Depth=1
 ; HWOFF-NEXT:    // Child Loop BB2_3 Depth 2
-; HWOFF-NEXT:    { move32 r12, r1; addi32 r8, r0, 2 }
-; HWOFF-NEXT:    { slt32 r9, r3, r8; addi32 r7, r5, 1 }
+; HWOFF-NEXT:    { nop; addi32 r8, r0, 2 }
+; HWOFF-NEXT:    { nop; slt32 r9, r3, r8; move32 r12, r1 }
 ; HWOFF-NEXT:    { nop; s_lw_post_imm r8, r12, 1 }
-; HWOFF-NEXT:    { nop; nop }
+; HWOFF-NEXT:    { nop; addi32 r7, r5, 1 }
 ; HWOFF-NEXT:    { nop; bnez r9, .LBB2_1 }
 ; HWOFF-NEXT:  .LBB2_3: // %inner.body
 ; HWOFF-NEXT:    // Parent Loop BB2_2 Depth=1
@@ -264,14 +263,14 @@ define i32 @nested_hwloop(ptr noalias %a, i32 %n, i32 %m) {
 ; HWOFF-NEXT:    { nop; bnez r10, .LBB2_3 }
 ; HWOFF-NEXT:    { nop; beqz r0, .LBB2_1 }
 ; HWOFF-NEXT:  .LBB2_4: // %for.end
-; HWOFF-NEXT:    { nop; move32 r1, r4 }
-; HWOFF-NEXT:    { nop; xor32 r0, r0, r0 }
-; HWOFF-NEXT:    { nop; ld32 r10, sp, 3 }
-; HWOFF-NEXT:    { nop; ld32 r9, sp, 4 }
+; HWOFF-NEXT:    { nop; move32 r1, r4; xor32 r0, r0, r0 }
+; HWOFF-NEXT:    { ld32 r9, sp, 4; ld32 r10, sp, 3 }
 ; HWOFF-NEXT:    { nop; ld32 r8, sp, 5 }
 ; HWOFF-NEXT:    { nop; addi32 sp, sp, 24 }
 ; HWOFF-NEXT:    .cfi_def_cfa sp, 0
 ; HWOFF-NEXT:    { nop; jalr r0, lr, 0 }
+; GR2.1 Kind-A restamp: BOTH loops software-pipeline (guarded 2-stage peels);
+; the inner kernel packs {add32 + IV bump} then {move32 + slt32}.
 entry:
   br label %outer.header
 

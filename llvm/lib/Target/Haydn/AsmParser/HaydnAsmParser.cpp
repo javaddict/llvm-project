@@ -442,6 +442,10 @@ class HaydnAsmParser : public MCTargetAsmParser {
   bool parseOperandWithSpecifier(OperandVector &Operands);
   bool parseExprWithSpecifier(const MCExpr *&Res, SMLoc &E);
 
+  /// ISA-69: refuse jalr/jalr_w whose immediate is symbolic/relocatable.
+  bool rejectUnsupportedSymbolicJalr(StringRef Mnemonic,
+                                     const OperandVector &Operands);
+
   // Match and emit instruction
   bool matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                OperandVector &Operands, MCStreamer &Out,
@@ -516,6 +520,21 @@ static bool isPrivatePlacementInst(unsigned Opcode, const MCInstrInfo &MII) {
     return false;
   return isPrivatePlacementOpcode(MII.getName(Opcode)) ||
          haydnFindFormatEMemberByOpcode(Opcode);
+}
+
+static bool isJalrMnemonic(StringRef Name) {
+  return Name.equals_insensitive("jalr") || Name.equals_insensitive("jalr_w");
+}
+
+/// ISA-69: identifier, specifier, or any non-absolute MCExpr. Absolute
+/// integer immediates (including odd/negative) remain legal.
+static bool isUnsupportedSymbolicJalrImm(const MCExpr *Expr) {
+  if (!Expr)
+    return false;
+  if (isa<MCSpecifierExpr>(Expr) || isa<MCSymbolRefExpr>(Expr))
+    return true;
+  int64_t Abs = 0;
+  return !Expr->evaluateAsAbsolute(Abs);
 }
 
 /// Composite opcode from generated Mode membership + MemberId assignment.
@@ -739,6 +758,20 @@ bool HaydnAsmParser::parseExprWithSpecifier(const MCExpr *&Res, SMLoc &E) {
   return false;
 }
 
+bool HaydnAsmParser::rejectUnsupportedSymbolicJalr(
+    StringRef Mnemonic, const OperandVector &Operands) {
+  if (!isJalrMnemonic(Mnemonic))
+    return false;
+  for (const auto &OpPtr : Operands) {
+    const auto *Op = static_cast<const HaydnOperand *>(OpPtr.get());
+    if (!Op->isImm())
+      continue;
+    if (isUnsupportedSymbolicJalrImm(Op->getImm()))
+      return Error(Op->getStartLoc(), HaydnReloc::kUnsupportedSymbolicJalrDiag);
+  }
+  return false;
+}
+
 bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
                                        StringRef Name, SMLoc NameLoc,
                                        OperandVector &Operands) {
@@ -811,6 +844,9 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
         if (parseOperand(Operands))
           return true;
       }
+
+      if (rejectUnsupportedSymbolicJalr(Mnemonic, Operands))
+        return true;
 
       // Match this instruction's operands to an MCInst. Allocate the MCInst
       // via MCContext so its lifetime extends through emission and any later
@@ -1010,6 +1046,8 @@ bool HaydnAsmParser::parseInstruction(ParseInstructionInfo &Info,
   }
 
   Parser.Lex(); // Eat EndOfStatement
+  if (rejectUnsupportedSymbolicJalr(Name, Operands))
+    return true;
   return false;
 }
 
@@ -1035,6 +1073,13 @@ bool HaydnAsmParser::matchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_Success:
     if (isPrivatePlacementInst(Inst.getOpcode(), MII))
       return Error(IDLoc, "assembler matched a private placement opcode");
+    if (isJalrMnemonic(MII.getName(Inst.getOpcode()))) {
+      for (unsigned I = 0, E = Inst.getNumOperands(); I != E; ++I) {
+        const MCOperand &MO = Inst.getOperand(I);
+        if (MO.isExpr() && isUnsupportedSymbolicJalrImm(MO.getExpr()))
+          return Error(IDLoc, HaydnReloc::kUnsupportedSymbolicJalrDiag);
+      }
+    }
     Inst.setLoc(IDLoc);
     Out.emitInstruction(Inst, getSTI());
     return false;

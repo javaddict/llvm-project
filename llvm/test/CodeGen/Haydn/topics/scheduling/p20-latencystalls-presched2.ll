@@ -8,11 +8,9 @@
 ; REQUIRES: asserts
 ; REQUIRES: haydn-registered-target
 ;
-; Role: IR — LatencyStalls sits in addPreSched2 after PostMachineScheduler,
-; then the GR2.7 pre-commit normalization BranchRelaxation, then the first
-; Finalize+Verify. Product default (hwloops ON since 2026-08-22) runs late
-; Finalize/Verify after BranchRelaxation (same Finalize/Verify). Multi-stage
-; SMS and Stage-0 IB/PP stay absent.
+; Role: IR — GR1.2 folds LatencyStalls into S1 PostMachineScheduler.
+; Post-pack Normalize then wrap-only Finalize+Verify. Generic BR is
+; Structure-only pre-S1. Multi-stage SMS and Stage-0 IB/PP stay absent.
 
 define i32 @p20_seat(i32 %a, i32 %b) {
   %t = add i32 %a, %b
@@ -24,17 +22,17 @@ define i32 @p20_seat(i32 %a, i32 %b) {
 ; O2: Hardware Loop Insertion
 ; O2-NOT: Haydn Hardware Loop Detection
 ; COMMON: PostRA Machine Instruction Scheduler
-; COMMON-NEXT: Haydn Exposed-Pipeline Latency Stalls
+; COMMON-NOT: Haydn Exposed-Pipeline Latency Stalls
 ; COMMON-NEXT:      Haydn Long-Branch Normalize
-; COMMON-NEXT: Branch relaxation pass
 ; COMMON-NEXT: Haydn Bundle Finalization
 ; COMMON-NEXT: Haydn Bundle Invariant Verifier
-; COMMON: Branch relaxation pass
 ; COMMON-NOT: InterBlock
 ; COMMON-NOT: PostPipeliner
+; O0: Haydn Long-Branch Normalize
 ; O0-NOT: Haydn Hardware Loop Fixup
 ; O0-NEXT: Haydn Bundle Finalization
-; O2-NEXT: Haydn Hardware Loop Fixup
-; HWON: Haydn Hardware Loop Fixup
+; O2: Haydn Long-Branch Normalize
+; O2-NEXT: Haydn Bundle Finalization
+; HWON-NOT: Haydn Hardware Loop Fixup
 ; HWON: Haydn Bundle Finalization
 ; HWON: Haydn Bundle Invariant Verifier

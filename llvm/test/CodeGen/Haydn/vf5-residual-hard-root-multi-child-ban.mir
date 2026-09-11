@@ -18,23 +18,23 @@
 # RUN:   %t/verify_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SET_HWLOOP
 # RUN: not llc -mtriple=haydn-unknown-elf -run-pass=haydn-verify-bundles \
 # RUN:   %t/verify_set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=V-SET_HWLOOP_REG
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_loadi32.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOADI32
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_load_addr.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOAD_ADDR
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_loopdec.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPDEC
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_loopjnz.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPJNZ
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_loopstart.mir -o - 2>&1 | FileCheck %s --check-prefix=P-LOOPSTART
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_setcbr_begin.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SETCBR_B
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_setcbr_end.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SETCBR_E
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_set_hwloop.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SET_HWLOOP
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/printer_set_hwloop_reg.mir -o - 2>&1 | FileCheck %s --check-prefix=P-SET_HWLOOP_REG
 
 # Role: verifier — Late-MC one-to-one residual ban on multi-member hard roots.

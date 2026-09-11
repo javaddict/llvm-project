@@ -1,10 +1,11 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 < %s | FileCheck %s
 
-; Role: semantic — BranchRelaxation must be able to analyze a conditional branch that sits in the same MBB as a preceding libcall (JAL_W).
+; Role: semantic — BranchRelaxation must be able to analyze a conditional branch that sits in the same MBB as a preceding libcall (JALR / JAL).
 
 ; BranchRelaxation must be able to analyze a conditional branch that
-; sits in the same MBB as a preceding libcall (JAL_W). analyzeBranch used to
-; treat the mid-block JAL_W as "unanalyzable" after already parsing the
+; sits in the same MBB as a preceding libcall (JAL_IND, later JALR or
+; relaxed JAL). analyzeBranch used to
+; treat the mid-block call as "unanalyzable" after already parsing the
 ; trailing cond-branch, so fixupConditionalBranch asserted
 ; "branches to be relaxed must be analyzable" (yarpgen seed 2289: __divsi3
 ; then BNE_W).

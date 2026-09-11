@@ -475,13 +475,16 @@ TEST(HaydnRelocLayoutTest, Hi12FieldLsbFollowsCommittedLuiWindow) {
   EXPECT_EQ(readField(E3e2Alu0, HI.NBytes, HI.FieldSize, 81u), 1u);
 }
 
-// JALRSImm12 (RI12 type-opcode 1): dedicated row for the JALR symbolic
-// imm12. Same golden E2 e0 field numbers as the RI12 branch row (imm12 @
-// bits[43:32], signed byte displacement from parcel origin, Align=2) but a
-// DISTINCT kind so a JALR fixup can never borrow the branch row.
-// findFixupFromFixupFields must route RI12 opc 1 here and opc 2..7 to the
-// branch row. Pinned byte-displacement semantics: branch-all.s 0x114 ->
-// target1@0 = -276 = 0xEEC in the imm12 field.
+// JALRSImm12 (RI12 type-opcode 1): dedicated row identity for JALR imm12.
+// Same golden E2 e0 field numbers as the RI12 branch row (imm12 @
+// bits[43:32], ValueShift=0) but a DISTINCT kind so a JALR fixup can
+// never borrow the branch row. Symbolic JALR is ISA-69 fail-closed —
+// Align=2 / IsPCRel on this row are residual table geometry, not a
+// qualified relocation ABI. Literal odd immediates encode on the
+// encoder path (p18-jalr-rs-rel-odd-imm.s) and do not consult Align.
+// findFixupFromFixupFields must route RI12 opc 1 here and opc 2..7 to
+// the branch row. Pinned byte-displacement field math: branch-all.s
+// 0x114 -> target1@0 = -276 = 0xEEC in the imm12 field.
 TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
   const RelocKind K = RelocKind::JALRSImm12;
   const RelocFieldInfo &FI = getRelocFieldInfo(K);
@@ -491,14 +494,21 @@ TEST(HaydnRelocLayoutTest, JalrSImm12DedicatedRowNotBranchAlias) {
   EXPECT_EQ(FI.FieldLsb, Br.FieldLsb);
   EXPECT_EQ(FI.FieldSize, 12u);
   EXPECT_EQ(FI.NBytes, 12u);
-  EXPECT_EQ(FI.ValueShift, 0u); // byte displacement, no extra scale
-  EXPECT_EQ(FI.Align, 2u);
+  EXPECT_EQ(FI.ValueShift, 0u); // no extra scale (not halfword)
+  EXPECT_EQ(FI.Align, 2u);      // residual table; not a symbolic-JALR ABI
   EXPECT_TRUE(FI.IsSigned);
-  EXPECT_TRUE(FI.IsPCRel);
+  EXPECT_TRUE(FI.IsPCRel); // residual table; LLD must not return R_PC
   EXPECT_TRUE(isRelocTransformReady(K));
+  EXPECT_TRUE(isSymbolicJalrReloc(K));
+  EXPECT_TRUE(isSymbolicJalrReloc(RelocKind::JALRSImm12_E3E0));
+  EXPECT_TRUE(isSymbolicJalrReloc(RelocKind::JALRSImm12_E3E1));
+  EXPECT_FALSE(isSymbolicJalrReloc(RelocKind::WIDE_BranchSImm12_RI));
+  EXPECT_STREQ(kUnsupportedSymbolicJalrDiag,
+               "Haydn symbolic JALR is unsupported (ISA-69: no golden "
+               "relocation base); refusing silent PC-relative "
+               "R_HAYDN_JALRSImm12");
 
-  // Signed 12-bit byte window [-2048, +2046] even — same bounds math as
-  // the branch row, but reachable only through the dedicated kind.
+  // Residual computeRelocValue window. Not a qualified symbolic ABI.
   EXPECT_TRUE(ok(K, +2046));
   EXPECT_EQ(field(K, -276) & 0xFFFu, 0xEECu); // branch-all.s 0x114 → 0x0
   EXPECT_FALSE(ok(K, +2048));
@@ -922,9 +932,9 @@ TEST(HaydnRelocLayoutTest, NineFileHashAndProvisionalObjectIdentity) {
   EXPECT_EQ(Jalr.ValueShift, 0u);
   EXPECT_EQ(Jalr.FieldSize, 12u);
   EXPECT_EQ(Jalr.FieldLsb, 32u);
-  EXPECT_EQ(Jalr.Align, 2u);
+  EXPECT_EQ(Jalr.Align, 2u); // residual table; not a symbolic-JALR ABI
   EXPECT_TRUE(Jalr.IsSigned);
-  EXPECT_TRUE(Jalr.IsPCRel);
+  EXPECT_TRUE(Jalr.IsPCRel); // residual table; LLD must not return R_PC
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 0, 0, 0), 32u);
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 0, 0), 23u);
   EXPECT_EQ(resolveFieldLsbForMember(RelocKind::JALRSImm12, 1, 1, 0), 54u);
@@ -1167,6 +1177,67 @@ TEST(HaydnRelocLayoutTest, ResolveFieldLsbForMemberHi12CsrUnitSplits) {
   // No E2-e1 window is published for either kind.
   EXPECT_FALSE(isPublishedFieldLsb(RelocKind::HI12, 65u));
   EXPECT_FALSE(isPublishedFieldLsb(RelocKind::CSR_UImm8, 65u));
+}
+
+// D1.146: entry-qualified kind selection is generated FieldLsbSites +
+// RelocFieldInfo twins, not a hand-written (Mode, Entry, Unit) switch.
+TEST(HaydnRelocLayoutTest, QualifyRelocKindFromGeneratedSites) {
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 1, 0, 2),
+            RelocKind::HI12_E3E0_ALU2);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 1, 0, 0),
+            RelocKind::HI12_E3E0_ALU0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 1, 1, 0),
+            RelocKind::HI12_E3E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 1, 2, 2),
+            RelocKind::HI12_E3E2_ALU2);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 1, 2, 0),
+            RelocKind::HI12_E3E2_ALU0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 0, 0, 0),
+            RelocKind::HI12);
+  // E2 e1 has no I12 site: fail-through to the base window, not Invalid.
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::HI12, 0, 1, 1),
+            RelocKind::HI12);
+
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::CSR_UImm8, 1, 0, 2),
+            RelocKind::CSR_UImm8_E3E0_ALU2);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::CSR_UImm8, 1, 0, 0),
+            RelocKind::CSR_UImm8_E3E0_ALU0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::CSR_UImm8, 1, 1, 0),
+            RelocKind::CSR_UImm8_E3E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::CSR_UImm8, 1, 2, 0),
+            RelocKind::CSR_UImm8_E3E2);
+
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::LO20, 0, 1, 1),
+            RelocKind::LO20_E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::PC_LO20, 0, 1, 1),
+            RelocKind::PC_LO20_E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::LO20, 0, 0, 0),
+            RelocKind::LO20);
+
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_CallSImm20, 1, 1, 0),
+            RelocKind::WIDE_CallSImm20_E3E1);
+  // E3 e0 Call window @17 has no minted twin — keep the base kind.
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_CallSImm20, 1, 0, 0),
+            RelocKind::WIDE_CallSImm20);
+
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_BranchSImm12, 1, 0, 0),
+            RelocKind::WIDE_BranchSImm12_E3E0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_BranchSImm12, 1, 1, 0),
+            RelocKind::WIDE_BranchSImm12_E3E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_BranchSImm12, 1, 2, 0),
+            RelocKind::WIDE_BranchSImm12_E3E2);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_BranchSImm12_RI, 1, 0, 0),
+            RelocKind::WIDE_BranchSImm12_RI_E3E0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::WIDE_BranchSImm12_RI, 1, 1, 0),
+            RelocKind::WIDE_BranchSImm12_RI_E3E1);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::JALRSImm12, 1, 0, 0),
+            RelocKind::JALRSImm12_E3E0);
+  EXPECT_EQ(qualifyRelocKindForMember(RelocKind::JALRSImm12, 1, 1, 0),
+            RelocKind::JALRSImm12_E3E1);
+
+  EXPECT_EQ(mapRelocKindToFixup(qualifyRelocKindForMember(
+                RelocKind::HI12, 1, 0, 2)),
+            Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2);
 }
 
 // D1.42: the generated HwLoopSniffSites table is the sole hwloop sniff

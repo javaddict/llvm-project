@@ -16,8 +16,7 @@
 define i32 @f_value_not(i32 %a, i32 %b) {
 ; CHECK-LABEL: f_value_not:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; slt32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }

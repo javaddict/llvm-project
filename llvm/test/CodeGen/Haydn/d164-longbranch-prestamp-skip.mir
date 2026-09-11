@@ -1,0 +1,1190 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.64 HOLD va-arg-24: LongBranchNormalize must prestamp remaining far
+# uncond so LateConvergence BR never calls insertIndirectBranch (GR2.7).
+# Skip only the LUI+ADDI+JALR CFG form. A returning JALR_CALL / last-JALR
+# without that pair is not already-long (opcode-only skip left a far B
+# for BranchRelaxation::fixupUnconditionalBranch).
+# Peer: RISCVInstrInfo.cpp insertIndirectBranch AUIPC+JALR; Hexagon
+# A2_tfrsi+J2_jumpr; AIE has no insertIndirectBranch.
+#
+# Far template (d150 law, buffer=4, parcel=12, window edge 2044):
+#   180 NOPs = 2160B. Each logical B/BEQZ/NOP/RET charges one parcel.
+#
+#   already_long_lui_addi_jalr : skip holds; never a second LUI+ADDI+JALR
+#     (matmult-int hang class).
+#   jalr_msp_then_far_uncond : returning call then far B; prestamp the B.
+#   bundled_far_uncond_with_jalr_msp : last cycle lists JALR_CALL first then
+#     far B (AnyInBundle isUnconditionalBranch poison); prestamp the B.
+#   unanalyzable_far_cond_not_arm_b : two far BEQZ; Arm B must not match
+#     a trailing cond via isBranch (MEMORY_FAULT class).
+#   coissue_alu_two_cond_far_uncond : BUNDLE{ADD32,B} + two BEQZ.
+#     findAnalyzedCondMI must walk past the coissued ALU (AIE terminator
+#     count, AIEBaseInstrInfo.cpp:164-192). Prestamp the B; both BEQZs
+#     and ADD32 survive (d150 multi_control / tii5
+#     coissue_far_uncond_preceding).
+
+--- |
+  define void @already_long_lui_addi_jalr() {
+  entry:
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @jalr_msp_then_far_uncond(ptr %p) {
+  entry:
+    call void %p()
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @bundled_far_uncond_with_jalr_msp(ptr %p) {
+  entry:
+    call void %p()
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @unanalyzable_far_cond_not_arm_b(i32 %a, i32 %b) {
+  entry:
+    br i1 undef, label %far, label %pad
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @coissue_alu_two_cond_far_uncond() {
+  entry:
+    br i1 undef, label %far, label %pad
+  pad:
+    ret void
+  far:
+    ret void
+  }
+...
+---
+name:            already_long_lui_addi_jalr
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r15
+    ; CHECK-LABEL: name: already_long_lui_addi_jalr
+    ; CHECK: bb.0.entry
+    ; CHECK: $r6 = LUI
+    ; CHECK: $r6 = ADDI32
+    ; CHECK: JALR
+    ; CHECK-NOT: $r{{[0-9]+}} = LUI
+    $r6 = LUI %bb.2
+    $r6 = ADDI32_W $r6, %bb.2
+    $r6 = JALR_W $r6, 0
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            jalr_msp_then_far_uncond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r10, $r11, $r15
+    ; CHECK-LABEL: name: jalr_msp_then_far_uncond
+    ; CHECK: JALR_CALL
+    ; CHECK: $r{{[0-9]+}} = LUI
+    ; CHECK: ADDI32
+    ; CHECK: JALR_W
+    ; CHECK-NOT: B %bb.2
+    $r11 = ADDI32_W $r11, 0
+    $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    B %bb.2
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_far_uncond_with_jalr_msp
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r10, $r11, $r15
+    ; CHECK-LABEL: name: bundled_far_uncond_with_jalr_msp
+    ; Far uncond is LUI+ADDI+JALR_W. Short B is gone.
+    ; CHECK: $r{{[0-9]+}} = LUI
+    ; CHECK: ADDI32
+    ; CHECK: $r{{[0-9]+}} = JALR_W
+    ; CHECK-NOT: B %bb.2
+    $r11 = ADDI32_W $r11, 0
+    BUNDLE implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+      B %bb.2
+    }
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            unanalyzable_far_cond_not_arm_b
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r8', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r7, $r8, $r11, $r15
+    ; CHECK-LABEL: name: unanalyzable_far_cond_not_arm_b
+    ; Two far conds: unanalyzable. Arm B must not match the trailing
+    ; BEQZ via isBranch and JALR it (MEMORY_FAULT class).
+    ; CHECK: BEQZ_W $r7
+    ; CHECK: BEQZ_W $r8
+    ; CHECK-NOT: JALR
+    $r11 = ADDI32_W $r11, 0
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    BEQZ_W $r8, %bb.2, implicit-def dead $sfr
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            coissue_alu_two_cond_far_uncond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r4, $r5, $r15
+    ; CHECK-LABEL: name: coissue_alu_two_cond_far_uncond
+    ; BUNDLE{ADD32,B} + two BEQZ. Coissued ALU must not stop the
+    ; analyzed-cond walk; prestamp B; both BEQZs and ADD32 survive.
+    ; CHECK: bb.0.entry
+    ; CHECK: $r3 = ADD32
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: LUI
+    ; CHECK: ADDI32
+    ; CHECK: BEQZ{{.*}} $r4, %bb.1
+    ; CHECK: BEQZ{{.*}} $r5, %bb.1
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: JALR
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: bb.1.pad
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15

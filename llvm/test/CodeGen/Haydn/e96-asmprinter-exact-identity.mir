@@ -1,17 +1,17 @@
 # RUN: rm -rf %t && split-file %s %t
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/missing_row.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-ROW
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/child_count_override.mir -o - 2>&1 | FileCheck %s --check-prefix=NO-E3
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/completion_mismatch.mir -o - 2>&1 | FileCheck %s --check-prefix=COMP-MISMATCH
-# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/idle_fullslot.mir -o - | FileCheck %s --check-prefix=IDLE
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/residual_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=RES-RET
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
-# RUN:   %t/residual_b.mir -o - 2>&1 | FileCheck %s --check-prefix=RES-B
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
+# RUN:   %t/residual_b.mir -o - | FileCheck %s --check-prefix=RES-B
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   %t/bundled_ret.mir -o - 2>&1 | FileCheck %s --check-prefix=BUNDLED-RET
 # REQUIRES: haydn-registered-target
 
@@ -19,8 +19,8 @@
 # Missing-row E2 default and child-count E3 override are silent repairs.
 # Present CompletionStateID must still match golden-row fill: unused
 # windows and pad-only idle are AllEntriesReal (architectural NOP).
-# Serialize-only: residual B/RET/BR_JT (bundled or top-level) is fatal;
-# no BEQZ_W/JALR_W rewrite.
+# Serialize-only: residual RET/BR_JT (bundled or top-level) is fatal.
+# D1.130: bare B is product gMIR uncond; encoder peels BEQZ rs=R0.
 
 #--- missing_row.mir
 --- |
@@ -118,7 +118,7 @@ noVRegs:         true
 body:             |
   bb.0:
     successors: %bb.1
-    ; RES-B: residual unexpanded representation
+    ; RES-B: beqz r0
     B %bb.1
   bb.1:
     $r0 = JALR_W $r15, 0

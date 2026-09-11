@@ -47,6 +47,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
+#include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
 #include "llvm/MC/MCInst.h"
@@ -310,7 +311,12 @@ verifyCommittedBundle(BundleFormatRowID Row, ArrayRef<unsigned> MemberOpcodes,
 
 /// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
-/// After the shared port-budget re-check, also fail-closed on intra-cycle
+/// Before the shared port-budget re-check, every real member is first
+/// validated against its generated descriptor census (D1.54): member
+/// ledger-row presence, compiled-desc arity/kinds, descriptor tie
+/// closure, implicit-operand closure against the member and its
+/// authored logical descriptor, and the memory-effect closure — never
+/// relying on the optional MachineVerifier. After the shared port-budget re-check, also fail-closed on intra-cycle
 /// RAW (live def-then-use; legal WAR and dead-def read-old pass),
 /// WAW (HaydnIntraCycleWAW; leftover implicit-def $sfr ignored when
 /// !haydnDescNamesSfrPort), named same-cycle laws, hwloop-trip, and
@@ -347,7 +353,27 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
 std::optional<std::string>
 verifyMBBDestWindowSeams(const MachineBasicBlock &MBB);
 
-/// Parse-time bundle legality (Hexagon MCChecker; AIE AIEBaseAsmParser.h:192
+/// Freeze-only independent layout/corruption wall (GR1.8 / GR2.8).
+/// Rebuilds packet PCs from layout-order committed BUNDLE EncodedBytes
+/// (children/meta contribute 0), then fail-closes residual MBB alignment
+/// metadata, parcel-grid offsets, RelocFieldInfo displacements (exact
+/// DestStart-PacketPC; SET Off1/Off2 via anchoredFromAfterSet), complete
+/// JALR materialize-chain Dest, duplicate-control / non-NOP neutralized
+/// sibling, leftover vreg or FI operands, and two latches sharing one
+/// stack-counter FI. Does not call TII.isBranchOffsetInRange (safety
+/// buffer) and does not reuse computeLayoutBlockStarts. JALR rs+imm12
+/// reach is skipped (register-indirect; symbolic JALR already fail-closed
+/// at LayoutSiteTable::collect). Transient LayoutSiteTable only — not an
+/// MFI field. Peer: AIE verifyInstruction has no range recompute
+/// (AIEBaseInstrInfo.cpp:1440-1459 / :1616-1635); AIEMachineAlignment.cpp:
+/// 370-424 verifyAlignment after padRegions; HexagonBranchRelaxation.cpp:
+/// 95-114 computeOffset; RISC-V isBranchOffsetInRange is opcode+imm width,
+/// not layout-recomputed PC. Sole window is RelocFieldInfo /
+/// computeRelocValue (HaydnRelocLayout.cpp:913-926).
+/// \returns nullopt on success; reason when freeze layout is corrupt.
+std::optional<std::string> verifyFrozenLayout(MachineFunction &MF);
+
+/// Parse-time bundle legality (Hexagon MCChecker; AIE AIEBaseAsmParser.h:192)
 /// is the structural peer — Haydn overlay is FormatEInverse, never Bundle.canAdd).
 /// One law with verifyCommittedBundle: opcode-keyed inverse + unit injectivity
 /// at each encode-dag entry, plus same-reg WAW, SET_HWLOOP same-sel, and

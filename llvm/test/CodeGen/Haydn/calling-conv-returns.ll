@@ -99,7 +99,9 @@ declare i64 @get_i64()
 
 define i32 @forward_ret_i32() {
 ; CHECK-LABEL: forward_ret_i32:
-; CHECK: jal{{(\.s[012])?}} {{.*}}, get_i32
+; CHECK: lui{{.*}}get_i32
+; CHECK: addi32{{.*}}get_i32
+; CHECK: jalr{{.*}}lr
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = call i32 @get_i32()
   ret i32 %r
@@ -107,7 +109,9 @@ define i32 @forward_ret_i32() {
 
 define i64 @forward_ret_i64() {
 ; CHECK-LABEL: forward_ret_i64:
-; CHECK: jal{{(\.s[012])?}} {{.*}}, get_i64
+; CHECK: lui{{.*}}get_i64
+; CHECK: addi32{{.*}}get_i64
+; CHECK: jalr{{.*}}lr
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = call i64 @get_i64()
   ret i64 %r

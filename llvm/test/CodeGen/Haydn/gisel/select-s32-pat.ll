@@ -16,7 +16,7 @@ define i32 @sel_s32(i1 %c, i32 %t, i32 %f) {
 }
 
 ; CHECK-LABEL: sel_s64:
-; CHECK-COUNT-2: movt32
+; CHECK: movt64
 define i64 @sel_s64(i1 %c, i64 %t, i64 %f) {
   %r = select i1 %c, i64 %t, i64 %f
   ret i64 %r

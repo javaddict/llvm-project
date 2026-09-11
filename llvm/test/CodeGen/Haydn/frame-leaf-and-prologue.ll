@@ -26,8 +26,7 @@ define i32 @pure_leaf(i32 %x) {
 ; Only the R0 zeroing prologue, no SP adjustment
 ; CHECK-LABEL: pure_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -42,8 +41,7 @@ define i32 @pure_leaf(i32 %x) {
 define i32 @leaf_arith(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: leaf_arith:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
@@ -65,8 +63,7 @@ define i32 @leaf_arith(i32 %a, i32 %b, i32 %c) {
 define i64 @leaf_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: leaf_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -81,8 +78,7 @@ define i64 @leaf_i64(i64 %a, i64 %b) {
 define i32 @leaf_cmp(i32 %a, i32 %b) {
 ; CHECK-LABEL: leaf_cmp:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; max32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -101,15 +97,16 @@ define i32 @non_leaf(i32 %x) {
 ; Must save/restore callee-saved registers
 ; CHECK-LABEL: non_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
-; CHECK-NEXT:    { nop; jal lr, extern }
+; CHECK-NEXT:    { nop; lui r2, extern }
+; CHECK-NEXT:    { nop; addi32 r2, r2, extern }
+; CHECK-NEXT:    { jalr lr, r2, 0 }
 ; CHECK-NEXT:    { xor32 r0, r0, r0; addi32 r1, r1, 1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -127,8 +124,7 @@ define i32 @leaf_with_alloca(i32 %x) {
 ; alloc/dealloc and local access are matched regardless of order. Rebaselined.
 ; CHECK-LABEL: leaf_with_alloca:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
@@ -151,11 +147,10 @@ define i32 @leaf_with_alloca(i32 %x) {
 define i32 @leaf_multi_alloca(i32 %x) {
 ; CHECK-LABEL: leaf_multi_alloca:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
-; CHECK-NEXT:    { addi32 r3, sp, 8; addi32 r2, sp, 12 }
-; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
+; CHECK-NEXT:    { st32 r1, r2, 0; addi32 r3, sp, 8 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -179,8 +174,7 @@ define i32 @leaf_multi_alloca(i32 %x) {
 define void @void_leaf() {
 ; CHECK-LABEL: void_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -193,8 +187,7 @@ define void @void_leaf() {
 define i32 @leaf_branch(i32 %a, i32 %b) {
 ; CHECK-LABEL: leaf_branch:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 0 }

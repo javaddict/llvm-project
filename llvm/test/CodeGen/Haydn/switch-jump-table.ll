@@ -9,8 +9,7 @@
 define i32 @switch_jt_8(i32 %x) nounwind {
 ; CHECK-LABEL: switch_jt_8:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 7 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB0_10 }
@@ -91,8 +90,7 @@ default: ret i32 0
 define i32 @switch_small_no_jt(i32 %x) nounwind {
 ; CHECK-LABEL: switch_small_no_jt:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 3 }
 ; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB1_5 }
@@ -137,11 +135,9 @@ default: ret i32 0
 define i32 @switch_jt_offset(i32 %x) nounwind {
 ; CHECK-LABEL: switch_jt_offset:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
-; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
-; CHECK-NEXT:    { nop; addi32 r2, r2, -10 }
+; CHECK-NEXT:    { addi32 r1, r0, 3; addi32 r2, r2, -10 }
 ; CHECK-NEXT:    { nop; sltu32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; bnez r3, .LBB2_6 }
 ; CHECK-NEXT:  // %bb.1: // %entry
@@ -190,8 +186,7 @@ default: ret i32 0
 define i32 @switch_jt_with_default(i32 %x) nounwind {
 ; CHECK-LABEL: switch_jt_with_default:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 3 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB3_6 }

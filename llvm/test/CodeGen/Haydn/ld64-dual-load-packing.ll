@@ -13,10 +13,9 @@ define void @dual_load_i64(ptr %a, ptr %b) {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: dual_load_i64:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; d_ldw_post_imm d0, r1, 1 }
+; CHECK-NEXT:    { nop; nop; d_ldw_post_imm d0, r1, 1 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }

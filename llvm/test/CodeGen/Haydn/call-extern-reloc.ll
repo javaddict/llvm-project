@@ -14,13 +14,13 @@
 ; returned false unconditionally. Fixed by returning true to mirror RISC-V.
 ; But re-verification showed was NECESSARY BUT NOT SUFFICIENT: the
 ; extern symbol was STILL missing from.symtab entirely and the
-; R_HAYDN_CallSImm20 reloc still referenced symbol index 0 ("-").
+; address-parcel reloc still referenced symbol index 0 ("-").
 ; * / : root cause found in the AsmPrinter. The Haydn
 ; AsmPrinter wraps EVERY instruction in a BUNDLE MCInst whose children are
 ; MCOperand::createInst operands. MCStreamer::emitInstruction only calls
 ; visitUsedExpr on the *direct* Expr operands of the MCInst it receives;
 ; it does NOT recurse into MCOperand::createInst children. So a child's
-; Expr operand (e.g. the JAL call target MCSymbolRefExpr) was never visited
+; Expr operand (e.g. the LUI/ADDI32 callee MCSymbolRefExpr) was never visited
 ; > the referenced extern MCSymbol was never registered with the
 ; MCAssembler (MCAssembler::registerSymbol) -> it never made it into
 ; MCAssembler::Symbols -> ELFWriter::computeSymbolTable never wrote it to
@@ -46,10 +46,11 @@
 ;
 ; Test design: declare an extern function and call it from main. The
 ; resulting object MUST contain (a) an undefined global symbol "ext_func"
-; in.symtab and (b) an R_HAYDN_CallSimm20 relocation whose Symbol field
-; names "ext_func" (not "-", not index 0). If this regresses, the symbol
+; in.symtab and (b) HI12/LO20 relocations whose Symbol field names
+; "ext_func" (not "-", not index 0). If this regresses, the symbol
 ; vanishes and the relocation's Symbol reverts to "-" (index 0), breaking
-; the link (the call resolves to address 0 at runtime).
+; the link (the call resolves to address 0 at runtime). Short CallSImm20
+; JAL is LLD cycle-neutral relax, not the compiler object form.
 
 declare dso_local i32 @ext_func()
 
@@ -61,8 +62,11 @@ entry:
 
 ; llvm-readobj prints the Relocations section before the Symbols section.
 ; CHECK:      Relocation {
-; CHECK:        Offset:
-; CHECK:        Type: R_HAYDN_WIDE_CallSImm20 (19)
+; CHECK:        Type: R_HAYDN_HI12 (13)
+; CHECK:        Symbol: ext_func
+; CHECK:        Addend: 0x0
+; CHECK:      Relocation {
+; CHECK:        Type: R_HAYDN_LO20{{(_E1)?}}
 ; CHECK:        Symbol: ext_func
 ; CHECK:        Addend: 0x0
 ; CHECK:      Symbol {

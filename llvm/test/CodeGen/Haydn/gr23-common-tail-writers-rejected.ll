@@ -12,6 +12,12 @@
 ; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=SPLIT
 ; RUN: not llc -mtriple=haydn-unknown-elf -O2 -basic-block-sections=all \
 ; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=BBSEC
+; RUN: not llc -mtriple=haydn-unknown-elf -O2 -enable-implicit-null-checks \
+; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=INC
+; RUN: not llc -mtriple=haydn-unknown-elf -O2 -enable-implicit-null-checks=true \
+; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=INC
+; RUN: not llc -mtriple=haydn-unknown-elf -O2 -enable-implicit-null-checks=1 \
+; RUN:     < %s 2>&1 | FileCheck %s --check-prefix=INC
 
 ; Disable/no-op spellings stay admitted (fail-closed rejects enables only):
 ; shared multi-triple command lines that globally pass a disable spelling keep
@@ -22,13 +28,18 @@
 ; RUN:     < %s > /dev/null
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -basic-block-sections=none \
 ; RUN:     < %s > /dev/null
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -enable-implicit-null-checks=false \
+; RUN:     < %s > /dev/null
+; RUN: llc -mtriple=haydn-unknown-elf -O2 -enable-implicit-null-checks=0 \
+; RUN:     < %s > /dev/null
 ; D1.46: the rejection seat reads the STORED cl::opt value directly (no
 ; printOptionValue/stdout capture — that fd-swap was process-wide under
 ; in-process parallel codegen and not portable). This combined-disable pin
 ; locks the typed-read semantics: explicit enum disable + explicit bool
 ; zero together classify as no-request.
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 -enable-machine-outliner=never \
-; RUN:     -enable-split-machine-functions=0 < %s > /dev/null
+; RUN:     -enable-split-machine-functions=0 -enable-implicit-null-checks=0 \
+; RUN:     < %s > /dev/null
 
 ; Default path is unchanged: plain -O2 compiles clean with ordinary asm.
 ; RUN: llc -mtriple=haydn-unknown-elf -O2 < %s | FileCheck %s --check-prefix=DEF
@@ -36,21 +47,25 @@
 ; OUTL: LLVM ERROR: Haydn: unsupported forced common-tail writer: machine-outliner
 ; SPLIT: LLVM ERROR: Haydn: unsupported forced common-tail writer: machine-function-splitter
 ; BBSEC: LLVM ERROR: Haydn: unsupported forced common-tail writer: basic-block-sections
+; INC: LLVM ERROR: Haydn: unsupported forced common-tail writer: implicit-null-checks
 
 ; DEF-LABEL: gr23_src:
 ; DEF: jalr{{(\.s[012])?}} r0, lr, 0
 
 ; GR2.3 closed invariant: no Haydn pipeline configuration that requests
-; MachineOutliner, MachineFunctionSplitter, or BasicBlockSections — via any
-; enable spelling (llc hidden static flags, clang -fbasic-block-sections /
-; -fsplit-machine-functions / -moutline TM bits, C API) — reaches the common
-; executable tail. The request itself rejects at pipeline construction in
-; HaydnPassConfig::addPreEmitPass, which TargetPassConfig::addMachinePasses
-; invokes strictly BEFORE its writer block (outliner, function/static-data
-; splitting, BasicBlockSections) and before addPostBBSections closure /
+; MachineOutliner, MachineFunctionSplitter, BasicBlockSections, or
+; ImplicitNullChecks — via any enable spelling (llc hidden static flags,
+; clang -fbasic-block-sections / -fsplit-machine-functions / -moutline TM
+; bits, C API) — reaches the common executable tail. The request itself
+; rejects at pipeline construction in HaydnPassConfig::addPreEmitPass,
+; which TargetPassConfig::addMachinePasses invokes strictly BEFORE its
+; writer block (outliner, function/static-data splitting,
+; BasicBlockSections) and before empty addPostBBSections /
 ; addPreEmitPass2 freeze — so no outlining/splitting/reordering MI is ever
-; created. The `not` arms need no --crash: the diagnostic uses
-; GenCrashDiag=false (exit 1, "LLVM ERROR:" prefix).
+; created. ImplicitNullChecks is queued after addPreSched2, before this
+; seat; rejection still aborts construction so the pass never runs. The
+; `not` arms need no --crash: the diagnostic uses GenCrashDiag=false
+; (exit 1, "LLVM ERROR:" prefix).
 ;
 ; Deliberate exclusions (scope boundary is law, contracts/pipeline.md common
 ; tail): static-data splitting (-split-static-data) is data-section-only and

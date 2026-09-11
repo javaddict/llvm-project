@@ -1,0 +1,506 @@
+# D1.76: insertBranch long-form retarget consumes one recovered record
+# (control member, rs-def chain, old destination). OldDest must equal a
+# selected analyzed edge (invert-swap OldDest==TBB after
+# BranchRelaxation.cpp:489-490 insertBranch(MBB, FBB, TBB, Cond);
+# identity OldDest==FBB). Mutate only those identities. Named post-stamp
+# fatal if recovery fails or OldDest is neither edge — never a dead short
+# B after the retained JALR.
+#
+# Green arm: finalize stamps, then BR invert-swap (d166 seat). Far cond TBB
+# %bb.2, near long-form FBB %bb.1. After invert, LUI/ADDI of the recovered
+# rs are pinned to the new uncond dest %bb.2. Foreign LUI %bb.3 is not on
+# the rs-def chain and must stay.
+# Red arm: finalize-then-BR. Short B is the analyzed FBB; retained pair names
+# a third %bb. FileCheck the named stale-old-destination fatal.
+#
+# RUN: rm -rf %t && split-file %s %t
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,branch-relaxation \
+# RUN:   -verify-machineinstrs %t/green.mir -o - | FileCheck %s --check-prefix=GREEN
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,branch-relaxation \
+# RUN:   %t/red.mir -o - 2>&1 | FileCheck %s --check-prefix=RED
+# REQUIRES: haydn-registered-target
+
+#--- green.mir
+--- |
+  define void @d176_invert_swap(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    ret void
+  far:
+    ret void
+  other:
+    ret void
+  }
+...
+---
+name:            d176_invert_swap
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r6, $r7, $r15
+    $r7 = LUI_E2_E0_ALU0_I12 %bb.3
+    $r6 = LUI_E2_E0_ALU0_I12 %bb.1
+    $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.1
+    BNEZ_E2_E0_ALU0_I12 $r1, %bb.2
+    $r6 = JALR_E2_E0_ALU0_RI12 $r6, 0
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+
+#--- red.mir
+--- |
+  define void @d176_stale_old_dest(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    ret void
+  far:
+    ret void
+  other:
+    ret void
+  }
+...
+---
+name:            d176_stale_old_dest
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r0, $r6, $r15
+    $r6 = LUI %bb.3
+    $r6 = ADDI32_W $r6, %bb.3
+    BEQZ_W $r0, %bb.2
+    B %bb.1
+    $r6 = JALR_W $r6, 0
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+
+# GREEN-LABEL: name:            d176_invert_swap
+# GREEN: bb.0.entry
+# GREEN: $r7 = LUI{{.*}}%bb.3
+# GREEN: $r6 = LUI{{.*}}%bb.2
+# GREEN: ADDI32{{.*}}%bb.2
+# GREEN: {{BEQZ|BNEZ}}{{.*}}%bb.1
+# GREEN: JALR
+# GREEN-NOT: B %bb.2
+# GREEN: bb.1.near
+#
+# RED: stale-old-destination

@@ -32,7 +32,7 @@
 ; stack-protector have no ISR or protector ABI. naked is a product seat
 ; (positive shape in naked-fn.ll). inreg / nest / swift* /
 ; byref have no Haydn seat. half is storage/libcall, not a CC type.
-; musttail stays fail-closed separately. Soft tail is ordinary JAL_W + RET.
+; musttail stays fail-closed separately. Soft tail is ordinary JAL_IND + RET.
 ;
 ; PEI last-line pin if those attributes still reach layout lives in
 ; frame-unsupported-abi-fail-closed.mir.

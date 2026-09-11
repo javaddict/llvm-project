@@ -24,8 +24,7 @@ define i32 @xor_xor_const_fold(i32 %a) nounwind {
 ; The two XOR constants should be folded into one.
 ; CHECK-LABEL: xor_xor_const_fold:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -40,8 +39,7 @@ define i32 @xor_xor_cancel(i32 %a) nounwind {
 ; XOR with same constant twice cancels out -> identity (no xor at all).
 ; CHECK-LABEL: xor_xor_cancel:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %t1 = xor i32 %a, 42
@@ -55,8 +53,7 @@ define i32 @double_not(i32 %a) nounwind {
 ; Two NOT operations cancel out -> identity.
 ; CHECK-LABEL: double_not:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %not1 = xor i32 %a, -1
@@ -72,8 +69,7 @@ define i32 @and_or_disjoint_not_full(i32 %a) nounwind {
 ; The mask does NOT cover all bits, so no simplification.
 ; CHECK-LABEL: and_or_disjoint_not_full:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; ori32 r1, r1, 65280 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -91,8 +87,7 @@ define i32 @and_or_disjoint_full(i32 %a) nounwind {
 ; MaskC|SetC covers all 32 bits -> simplifies to A | SetC.
 ; CHECK-LABEL: and_or_disjoint_full:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r2, 4080 }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, 65280 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
@@ -110,8 +105,7 @@ define i32 @shift_mask_redundant_lshr(i32 %a) nounwind {
 ; covers exactly those bits -> the AND is redundant.
 ; CHECK-LABEL: shift_mask_redundant_lshr:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -126,8 +120,7 @@ define i32 @shift_mask_not_redundant(i32 %a) nounwind {
 ; Mask 0xFF only covers 8 of the 24 meaningful bits -> AND is NOT redundant.
 ; CHECK-LABEL: shift_mask_not_redundant:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -144,8 +137,7 @@ define i32 @shift_mask_not_redundant(i32 %a) nounwind {
 define i32 @xor_zero_identity(i32 %x) nounwind {
 ; CHECK-LABEL: xor_zero_identity:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %r = xor i32 %x, 0

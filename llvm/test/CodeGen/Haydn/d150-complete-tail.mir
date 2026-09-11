@@ -1,0 +1,708 @@
+# D1.50 complete-tail pins. LongBranchNormalize must prove the analyzed
+# near edge for far TBB/FBB (never an arbitrary layout successor) and, on
+# an unanalyzable tail, replace only the selected unconditional root/member.
+# Generic BranchRelaxation invert+swap uses FBB when present
+# (BranchRelaxation.cpp:477-490) and layout-next only if FBB is null
+# (520-530). AIE analyzeBranch sets TBB from the cond and FBB from the
+# trailing uncond (AIEBaseInstrInfo.cpp:138-235); layout successor only
+# deletes a fallthrough uncond (225-230); removeBranch erases at most last
+# uncond + preceding cond (237-266). Hexagon range-tests the analyzed
+# TBB/FBB terminator (HexagonBranchRelaxation.cpp:153-181);
+# removeBranch stops at the first non-branch (HexagonInstrInfo.cpp:605-625).
+# RISCV FBB is the trailing uncond (RISCVInstrInfo.cpp:1333-1355);
+# removeBranch erases at most two trailing branches (1361-1390).
+#
+# Far template (d149/d134 law, buffer=4, parcel=12, window edge 2044):
+#   170 NOPs = 2040B. Each logical B/BEQZ/NOP/RET charges one parcel.
+#
+# Arms:
+#   far_tbb_non_layout: far TBB, FBB is a non-layout near dest, layout-next
+#     is an extra successor (inlineasm-br trap) not FBB. Invert must target
+#     FBB (%bb.2), never the trap (%bb.1).
+#   far_fbb: far FBB, TBB is the original near cond; only the trailing
+#     uncond becomes LUI+ADDI+JALR (polarity stays BEQZ, not inverted BNEZ).
+#   multi_control: unanalyzable two-cond tail whose last cycle is a
+#     coissued BUNDLE{ALU,B}. Preceding BEQZs and the ALU sibling survive;
+#     only the selected uncond member is replaced (Arm B).
+#
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=NEAR
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=FBB
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=MULTI
+# REQUIRES: haydn-registered-target
+
+--- |
+  define dso_local void @far_tbb_non_layout() {
+  entry:
+    br i1 undef, label %far, label %near
+  trap:
+    ret void
+  near:
+    ret void
+  far:
+    ret void
+  }
+
+  define dso_local void @far_fbb() {
+  entry:
+    br i1 undef, label %near, label %far
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @multi_control() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            far_tbb_non_layout
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2, %bb.3
+    BEQZ_W $r7, %bb.3, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.trap (inlineasm-br-indirect-target):
+    liveins: $r15
+    RET implicit killed $r15
+
+  bb.2.near:
+    successors: %bb.3
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.3.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            far_fbb
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r7, %bb.1, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r7, $r15
+    ST32 $r7, $r7, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            multi_control
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    ST32 $r4, $r4, 0, implicit-def dead $sfr :: (store (s32))
+    ST32 $r5, $r5, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+# NEAR-LABEL: name:            far_tbb_non_layout
+# Analyzed FBB is %bb.2 (near), not layout-next trap %bb.1.
+# LUI/ADDI are EOL (`{{$}}`); cond dests include the trailing comma so
+# `%bb.1` cannot prefix-match `%bb.12`. LABEL-scoped so a later function
+# cannot satisfy dest/polarity.
+# NEAR: bb.0.entry
+# NEAR: $r6 = LUI{{.*}}%bb.3{{$}}
+# NEAR: ADDI32{{.*}}%bb.3{{$}}
+# Invert dest != layout-next trap %bb.1; must be analyzed FBB %bb.2.
+# NEAR-NOT: {{BEQZ|BNEZ}}{{.*}} $r7, %bb.1,
+# NEAR: BNEZ{{.*}} $r7, %bb.2,
+# Original BEQZ polarity must not remain; no leftover short B beside JALR.
+# NEAR-NOT: BEQZ{{.*}} $r7
+# NEAR-NOT: B %bb.
+# NEAR: JALR
+# NEAR-NOT: B %bb.
+# NEAR: bb.1.trap
+#
+# FBB-LABEL: name:            far_fbb
+# Original near cond to TBB survives; only trailing uncond is long-form.
+# FBB: bb.0.entry
+# FBB: $r6 = LUI{{.*}}%bb.2{{$}}
+# FBB: ADDI32{{.*}}%bb.2{{$}}
+# Original BEQZ polarity on in-range TBB; not inverted BNEZ.
+# FBB-NOT: BNEZ{{.*}} $r7
+# FBB: BEQZ{{.*}} $r7, %bb.1,
+# FBB-NOT: BNEZ
+# FBB-NOT: B %bb.
+# FBB: JALR
+# FBB-NOT: B %bb.
+# FBB: bb.1.near
+#
+# MULTI-LABEL: name:            multi_control
+# Unanalyzable two-cond tail whose last cycle is BUNDLE{ALU,B}: preceding
+# BEQZs and the ALU sibling survive; only the selected uncond is replaced.
+# Splice puts the coissued ALU before the first control; LUI+ADDI then
+# land before that control; JALR is last. CHECK-NOT leftover B both after
+# ADD32 (coissue member) and after the retained BEQZs.
+# MULTI: bb.0.entry
+# Coissued sibling (not any ADD32). Finalize may bake ADD32_E2_*.
+# MULTI: $r3 = ADD32{{.*}} $r1, $r2
+# MULTI-NOT: B %bb.
+# MULTI: LUI{{.*}}%bb.2{{$}}
+# MULTI: ADDI32{{.*}}%bb.2{{$}}
+# MULTI: BEQZ{{.*}} $r4, %bb.1,
+# MULTI: BEQZ{{.*}} $r5, %bb.1,
+# MULTI-NOT: B %bb.
+# MULTI: JALR
+# MULTI-NOT: B %bb.
+# MULTI: bb.1.near

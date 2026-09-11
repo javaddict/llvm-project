@@ -124,6 +124,11 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
   }
 
   HaydnReloc::RelocKind R = HaydnReloc::mapFixupKind(static_cast<unsigned>(Kind));
+  if (HaydnReloc::isSymbolicJalrReloc(R)) {
+    getContext().reportError(Fixup.getLoc(),
+                             HaydnReloc::kUnsupportedSymbolicJalrDiag);
+    return;
+  }
   if (R != HaydnReloc::RelocKind::Invalid) {
     HaydnReloc::RelocCompute Comp = HaydnReloc::computeRelocValue(R, Value);
     if (!Comp.OK) {
@@ -150,8 +155,7 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
           R == HaydnReloc::RelocKind::WIDE_BranchSImm12_RI ||
           R == HaydnReloc::RelocKind::WIDE_CallSImm20 ||
           R == HaydnReloc::RelocKind::HWLoopOff1 ||
-          R == HaydnReloc::RelocKind::HWLoopOff2 ||
-          R == HaydnReloc::RelocKind::JALRSImm12;
+          R == HaydnReloc::RelocKind::HWLoopOff2;
       if ((ParcelAbsField || ControlPCRel) && (Abs % Parcel) != 0) {
         getContext().reportError(
             Fixup.getLoc(),
@@ -160,14 +164,14 @@ void HaydnAsmBackend::applyFixup(const MCFragment &F, const MCFixup &Fixup,
                 : "Format E relocation offset is not an exact Format E record");
         return;
       }
-      // JALR is rs+imm (not a PC-relative long-branch); odd immediates are
-      // legal. PC-relative B/JAL/HWLOOP displacements must be whole parcels
-      // so the resolved target is an exact code record. Align=2/4 failures
-      // share computeRelocValue's "mis-aligned relocation target"; the
+      // Symbolic JALR never reaches this wall (ISA-69). Literal odd
+      // immediates encode without a fixup (ISA-68 / p18). PC-relative
+      // B/JAL/HWLOOP displacements must be whole parcels so the resolved
+      // target is an exact code record. Align=2/4 failures share
+      // computeRelocValue's "mis-aligned relocation target"; the
       // parcel-grid check is only for Align-ok displacements that still
       // miss a 12-byte record.
-      if (ControlPCRel && R != HaydnReloc::RelocKind::JALRSImm12 &&
-          FI.IsPCRel &&
+      if (ControlPCRel && FI.IsPCRel &&
           (static_cast<int64_t>(Value) % static_cast<int64_t>(Parcel)) != 0) {
         if (FI.Align <= 1 ||
             (static_cast<int64_t>(Value) % static_cast<int64_t>(FI.Align)) ==

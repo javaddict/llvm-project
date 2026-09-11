@@ -20,13 +20,14 @@
 // PreS1PostStampGrowthBytes composes the two walk-invisible terms. It is
 // deliberately NOT charged into the estimate: D1.33's single-inflation
 // law makes isBranchOffsetInRange the only seat that adds an allowance,
-// and no finite composition can cover eventless S2 redistribution. The
-// rejection class this leaves is closed and named at the post-stamp
-// LongBranchNormalize seats (in-block promotion, else fail-closed fatal).
+// and GR1.7 deleted eventless S2 redistribution. The rejection class
+// this leaves is closed and named at the post-stamp LongBranchNormalize
+// seats (in-block promotion, else fail-closed fatal).
 //
 // These tests pin the composition law only — pure constants, no
-// MachineFunction, no dependency on the closure ledger API (that
-// vocabulary is owned by HaydnLateConvergenceBudgetTest / D1.41).
+// MachineFunction, no dependency on a deleted closure ledger API (the
+// vocabulary is MaxHwLoopDemoteGrowthBytes / InterveningCycles in
+// HaydnHWLoopContracts.h).
 #include "HaydnHWLoopContracts.h"
 #include "gtest/gtest.h"
 

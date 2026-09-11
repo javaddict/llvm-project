@@ -19,11 +19,13 @@ declare i32 @nine(i32, i32, i32, i32, i32, i32, i32, i32, i32)
 
 define i32 @reg_only_caller() {
 ; CHECK-LABEL: reg_only_caller:
-; CHECK:       { nop; xor32 r0, r0, r0 }
+; CHECK:       xor32 r0, r0, r0
 ; CHECK:       st32 lr,
 ; CHECK-NOT:   .cfi_def_cfa fp
 ; CHECK-NOT:   addi32{{(_w)?}} fp, sp
-; CHECK:       { nop; jal lr, seven }
+; CHECK-DAG:   lui{{.*}}seven
+; CHECK-DAG:   addi32{{.*}}seven
+; CHECK-DAG:   jalr{{.*}}lr
 ; CHECK:       { nop; jalr r0, lr, 0 }
   %r = call i32 @seven(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7)
   ret i32 %r
@@ -31,12 +33,14 @@ define i32 @reg_only_caller() {
 
 define i32 @stack_arg_caller() {
 ; CHECK-LABEL: stack_arg_caller:
-; CHECK:       { nop; xor32 r0, r0, r0 }
+; CHECK:       xor32 r0, r0, r0
 ; CHECK:       st32 lr,
 ; CHECK-NOT:   .cfi_def_cfa fp
 ; CHECK-NOT:   addi32{{(_w)?}} fp, sp
 ; CHECK:       subi32{{(_w)?}}{{.*}}sp{{.*}}, 16
-; CHECK:       { nop; jal lr, nine }
+; CHECK-DAG:   lui{{.*}}nine
+; CHECK-DAG:   addi32{{.*}}nine
+; CHECK-DAG:   jalr{{.*}}lr
 ; CHECK:       addi32{{(_w)?}}{{.*}}sp{{.*}}, 16
 ; CHECK:       { nop; jalr r0, lr, 0 }
   %r = call i32 @nine(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9)

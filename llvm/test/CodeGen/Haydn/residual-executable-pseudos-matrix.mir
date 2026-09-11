@@ -84,7 +84,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; PRINT_SETCBR: residual {{cycle-forming|executable}} pseudo
+    ; PRINT_SETCBR: {{bundled residual executable pseudo|residual (cycle-forming|executable) pseudo}}
     SETCBR_END 0, $r1
     RET implicit $r15
 
@@ -129,7 +129,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; PRINT_VASTART: VASTART/VACOPY must be expanded
+    ; PRINT_VASTART: {{bundled residual executable pseudo|VASTART/VACOPY must be expanded}}
     VASTART $r1
     RET implicit $r15
 
@@ -144,7 +144,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r2, $r15
-    ; PRINT_VACOPY: VASTART/VACOPY must be expanded
+    ; PRINT_VACOPY: {{bundled residual executable pseudo|VASTART/VACOPY must be expanded}}
     VACOPY $r1, $r2
     RET implicit $r15
 
@@ -190,7 +190,7 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r3, $r4, $r15
-    ; PRINT_LIBCALL: residual cross-bank or LIBCALL
+    ; PRINT_LIBCALL: {{bundled residual executable pseudo|LIBCALL_|expand before pack}}
     $r1 = LIBCALL_SDIV $r3, $r4, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit-def $r15
     RET implicit $r15
 
@@ -205,6 +205,6 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r2, $r15
-    ; PRINT_MOV: residual cross-bank or LIBCALL
+    ; PRINT_MOV: {{bundled residual executable pseudo|LIBCALL_|expand before pack}}
     $d0 = MOV_GPR_TO_DR64 $r1, $r2
     RET implicit $r15

@@ -8,8 +8,7 @@
 define i32 @cmp_eq_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_eq_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -28,8 +27,7 @@ define i32 @cmp_eq_i64(i64 %a, i64 %b) {
 define i32 @cmp_ne_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_ne_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -49,8 +47,7 @@ define i32 @cmp_ne_i64(i64 %a, i64 %b) {
 define i32 @cmp_ult_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_ult_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -73,8 +70,7 @@ define i32 @cmp_ult_i64(i64 %a, i64 %b) {
 define i32 @cmp_slt_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_slt_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -95,8 +91,7 @@ define i32 @cmp_slt_i64(i64 %a, i64 %b) {
 define void @cmp_branch_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_branch_i64:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

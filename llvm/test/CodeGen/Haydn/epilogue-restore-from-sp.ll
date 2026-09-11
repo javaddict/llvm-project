@@ -21,41 +21,39 @@
 define void @epilogue_restore_from_sp(i32 %a, i32 %b, i32 %c, i32 %d) nounwind {
 ; CHECK-LABEL: epilogue_restore_from_sp:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
-; CHECK-NEXT:    { nop; addi32 r5, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r5, 0 }
-; CHECK-NEXT:    { nop; st32 r11, r5, 1 }
-; CHECK-NEXT:    { nop; st32 r10, r5, 2 }
-; CHECK-NEXT:    { nop; st32 r9, r5, 3 }
-; CHECK-NEXT:    { nop; st32 r8, r5, 4 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 r5, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r5, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 fp, r5, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r11, r5, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r5, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r5, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r5, 5 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; move32 r9, r2; move32 r8, r1 }
 ; CHECK-NEXT:    { nop; move32 r11, r4; move32 r10, r3 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; move32 r5, r8 }
-; CHECK-NEXT:    { nop; move32 r6, r9 }
-; CHECK-NEXT:    { nop; st32 r11, sp, 0 }
-; CHECK-NEXT:    { nop; move32 r7, r10 }
-; CHECK-NEXT:    { nop; jal lr, callee_with_many_args }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; move32 r1, r8 }
-; CHECK-NEXT:    { nop; move32 r2, r9 }
-; CHECK-NEXT:    { nop; st32 r11, sp, 0 }
-; CHECK-NEXT:    { nop; move32 r3, r10 }
-; CHECK-NEXT:    { nop; move32 r4, r11 }
-; CHECK-NEXT:    { nop; move32 r5, r8 }
-; CHECK-NEXT:    { nop; move32 r6, r9 }
-; CHECK-NEXT:    { nop; move32 r7, r10 }
-; CHECK-NEXT:    { nop; jal lr, callee_with_many_args }
+; CHECK-NEXT:    { nop; lui fp, callee_with_many_args }
+; CHECK-NEXT:    { st32 r11, sp, 0; move32 r5, r8; move32 r6, r9 }
+; CHECK-NEXT:    { move32 r7, r10; addi32 fp, fp, callee_with_many_args }
+; CHECK-NEXT:    { jalr lr, fp, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { move32 r1, r8; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { st32 r11, sp, 0; move32 r2, r9; move32 r3, r10 }
+; CHECK-NEXT:    { nop; move32 r4, r11; move32 r5, r8 }
+; CHECK-NEXT:    { nop; move32 r6, r9; move32 r7, r10 }
+; CHECK-NEXT:    { jalr lr, fp, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r11, sp, 4 }
-; CHECK-NEXT:    { nop; ld32 r10, sp, 5 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 6 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { ld32 r11, sp, 4; ld32 fp, sp, 3 }
+; CHECK-NEXT:    { ld32 r9, sp, 6; ld32 r10, sp, 5 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

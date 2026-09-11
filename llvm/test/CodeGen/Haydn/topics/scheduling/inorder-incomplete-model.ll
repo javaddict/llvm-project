@@ -51,4 +51,4 @@ define i32 @inorder_seat(i32 %a, i32 %b) {
 ; PASSES: PostRA Machine Instruction Scheduler
 ; PASSES-NOT: InterBlock
 ; PASSES-NOT: PostPipeliner
-; PASSES: Haydn Hardware Loop Fixup
+; PASSES-NOT: Haydn Hardware Loop Fixup

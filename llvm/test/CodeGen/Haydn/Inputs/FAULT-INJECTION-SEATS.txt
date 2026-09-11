@@ -1,7 +1,7 @@
 Haydn all-seat fault injection inventory (policy + QUALIFY seats / T8-HYGIENE)
 =================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 98890c529be9;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 4b6677f8bf87;
   T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 waves stay gated on R13;
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
@@ -13,14 +13,14 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    FAULT seats stay inventory, not a product registry;
    DecisionGuard registry stays absent; DecisionGuard product registry stays absent; M10 never qualified;
    PIPE-30 skipFunction closed; schema surface closed; callback-local repair is T4/T3;
-   MF0 INERT; R15 leftover docs stay outside this code track; product flags stay OFF;
+   MF0 INERT; R15 leftover docs stay outside this code track; product flags stay ON;
    P20(a) LatencyStalls in addPreSched2; late Finalize/Verify after BR at every
-   opt level; containment + PF/JM force-fail
+   opt level; containment + PF/JM W68-deleted provenance-only
    inventories pinned; combined dual-ON G004 matrix qualified 2026-08-22;
    product defaults ON (hwloop 9a1c0a128c7e, SMS cbd39b38437a);
    hwloop-multistage-combined-{matrix,transaction,cfg,trip}.ll are GREEN;
    no DecisionGuard revive; no second format pipeline)
-Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
+Audited backend baseline: 4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 
 R15 provenance: the previous inventory baseline ff42d9ad (`working`) and the eight
@@ -34,15 +34,19 @@ re-verify targets on this branch. Ancestor-of-HEAD examples at this stamp:
 Law (pipeline contract physical multistage mode + post-qualification policy):
 inject failure at every allocation, exact-commit, trip, CFG, liveness, call
 arg/return, late-recommit, and writer seat. Multistage PF-*/JM-* rows are
-executable on the physical host (HaydnMultiStageSMS) — never fake product
-force-fail evidence. Product defaults stay OFF:
-  EnableHaydnHardwareLoops ("-haydn-enable-hwloops") cl::init(false)
-    at HaydnTargetMachine.cpp
-  HaydnMultiStageSMS::productDefaultEnabled() returns false
-    (EnableHaydnMultiStageSMS inits from it)
+W68-deleted provenance-only — the post-RA host HaydnMultiStageSMS and its
+Preflight/Journal force-fail tables were deleted with
+HaydnPostRAMultiStage.cpp; never fake product force-fail evidence against a
+live source file. Product defaults stay ON:
+  EnableHaydnHardwareLoops ("-haydn-enable-hwloops")
+    cl::init(HaydnTargetMachine::hardwareLoopsProductDefaultEnabled())
+    at HaydnTargetMachine.cpp (true since 9a1c0a128c7e)
+  Multi-stage SMS owner is generic pre-RA MachinePipeliner
+    (HaydnTargetMachine.cpp W68.1; HaydnMultiStageSMS deleted)
   productSMSContainmentMaxStageCount = 1
     (HaydnPreRASchedStrategy; -haydn-sms-containment-max is test-only)
-PRODUCT_ON / V1-V5 lifecycle PRODUCT_ON is forbidden on this track.
+Combined dual-ON stays assert-only false. PRODUCT_ON / V1-V5 lifecycle
+PRODUCT_ON as a second SMS/hwloop engine is forbidden on this track.
 DG0 DecisionGuard product registry stays absent by design — ownership
 residual is Inputs/* + check_xfail_ledger.py / parse_lit_summary.py
 policy pins only.
@@ -52,6 +56,7 @@ policy pins only.
 | Retained-loop incomplete LoopStart | G-HWLOOP-ROLE-A     | rejectIncompleteRoleA fatal    | hwloop-rolea-preflight-reject.mir (landed) |
 | Multi-BB TTI overlay; product OFF | G-MULTI-BB-HWLOOP    | innermost latch==exit accept   | hwloop-multibb.ll DEFAULT-NOT; HWON may SET |
 | Fixup range demote fatal     | G-HWLOOP-ROLE-A          | HaydnFixupHwLoops demote       | hwloop-demote-fatal-live.mir (landed)      |
+| Product LoopStart save-pool empty (D1.154) | D1.154 | PEI NumSaveSetups must count LoopStart (twin of D1.88); empty pool fatals save-needing demote. Pools are not MIR-serialized, so Verify-seat probes stay in-process (HaydnHWLoopDemoteTest). | d1154-hwloop-demote-loopstart-savefi-pre-pei.mir + d1154-hwloop-demote-product-save-pool.ll + hwloop-demote-savefi-pre-pei-reserved.mir CHECK-NOT after COUNT |
 | O0 vs optnone ownership      | G-O0-EXACT-PIPELINE      | full-slot pad; GR2.4 mandatory postmisched (forcePostRAScheduling) | authority-o0-vs-optnone-commit.ll + gr24-optnone-mandatory-sched.ll (landed) |
 | Residual SET_HWLOOP leftover | G-O0-EXACT-PIPELINE      | Expand/Verify residual scan    | vf5-residual-set-hwloop-ban.mir (landed)   |
 | Residual SETCBR leftover     | G-O0-EXACT-PIPELINE      | Expand/Verify residual scan    | vf5-residual-setcbr-ban.mir (landed)       |
@@ -60,13 +65,17 @@ policy pins only.
 | Residual bundled-child leftover | G-O0-EXACT-PIPELINE   | Expand/Verify bundled child    | vf5-residual-bundled-child-ban.mir (landed) |
 | Inverse FormatID corruption  | G-E96-END-TO-END         | haydn-verify-bundles           | bundle-corruption-matrix.mir NO-IMM/BAD-ID |
 | Inverse member capacity      | G-E96-END-TO-END         | haydn-verify-bundles           | E2-OVER/OVER-ISSUE (landed)                |
+| Member descriptor arity/kind (D1.54) | freeze contract    | haydn-verify-bundles (pre-inverse) | d154-member-descriptor-laws.mir ARITY (padded excess-metadata shape)/KIND (landed) |
+| Member descriptor tie (D1.54) | freeze contract         | haydn-verify-bundles (pre-inverse) | d154-member-descriptor-laws.mir TIE (implicit-use shape) (landed) |
+| Member implicit closure (D1.54) | freeze contract       | haydn-verify-bundles (pre-inverse) | d154-member-descriptor-laws.mir IMPL (landed) |
+| Member side-effect/MMO closure (D1.54) | freeze contract | haydn-verify-bundles (pre-inverse) | d154-member-descriptor-laws.mir STORE (landed); STALE undeliverable past the parse-time MMO-flag wall — target arm owns in-process producers, d154 pins the front door (landed) |
 | Inverse completion match     | G-E96-END-TO-END         | haydn-verify-bundles           | BAD-COMP (landed)                          |
 | Unexplained XFAIL drift      | G-TEST-EVIDENCE          | ledger vs live XFAIL set       | check_xfail_ledger.py + selfcheck (TOTAL=1 since 2026-08-22 G004) |
 | s96 G_ANYEXT legalizer loop  | G-TEST-EVIDENCE          | HaydnLegalizerInfo custom ANYEXT | phase-firewall-s96-anyext.ll (landed)     |
 | hasFP adjustsStack force     | G-TEST-EVIDENCE          | hasFPImpl + getCallFrameSPAdj  | phase-firewall-hasfp-adjusts-stack.ll (landed) |
 | emitCodeAlignment MaxParcels | G-TEST-EVIDENCE          | HaydnMCELFStreamer idle pad    | phase-firewall-align-maxparcels.ll (landed) |
 | Stale full-gate 28700d57     | G-TEST-EVIDENCE          | manifest git_commit not ancestor | product_coverage_pin refuses 28700d57   |
-| Combined dual-ON XFAIL       | G-MULTISTAGE-HWLOOP      | hwloop-multistage-combined-*   | ledger-owned expected-fail; analysis exhausts II (qualify-or-cut deferred product-off); PF-CFG force-fail does not emit PF-CFG-force |
+| Combined dual-ON GREEN       | G-MULTISTAGE-HWLOOP      | hwloop-multistage-combined-*   | GREEN since 2026-08-22 G004 (ledger TOTAL=1 GE96-09 only); product defaults ON; combined pin stays assert-only false |
 | Hostile disasm / printer OOB | G-DEBUG-OBSERVABILITY    | objdump / InstPrinter          | hostile-byte-surface (C/D2/G/H) + d432/printer-oob |
 | Nested unwind / frame-chain  | G-DEBUG-OBSERVABILITY    | FrameLowering + multi-FDE CIE  | unwind-frame-chain.ll (3-level + FP↔SP)    |
 | CFI / CFA / RA column        | G-DEBUG-OBSERVABILITY    | FrameLowering + CFIFixup       | cfi-*.ll + unwind-frame-chain.ll (landed)  |
@@ -102,7 +111,7 @@ policy pins only.
 | libc strcpy/strncmp residual | G-LIBRARY-COVERAGE       | llvm-libc string exactness     | classified residual (codegen; no libc rebuild) |
 | LLDB return-value write      | G-DEBUG-OBSERVABILITY    | ABISysV_haydn SetReturnValueObject | R1 <=4B / D0 8B; RISC-V ARG1 port; no GPR pair |
 | Product hwloop flag ON       | G-HWLOOP-POLICY          | EnableHaydnHardwareLoops init  | flipped 9a1c0a128c7e 2026-08-22; park tests rebaselined to ON |
-| Product multi-stage flag ON  | G-MULTISTAGE-POLICY      | productDefaultEnabled() true   | flipped cbd39b38437a 2026-08-22; park tests rebaselined to ON |
+| Product multi-stage flag ON  | G-MULTISTAGE-POLICY      | generic pre-RA MachinePipeliner | flipped cbd39b38437a 2026-08-22; W68 deleted post-RA host |
 | F41 product containment=1    | G-MULTISTAGE-POLICY      | productSMSContainmentMaxStageCount | sms-f41-containment-product-pin.ll PRODUCT |
 | F41 ZOL ignores containment knob | G-HWLOOP-POLICY / F41 | ZOL bound pinned to product=1  | sms-f41-zol-containment-knobrefuse.ll ZOL |
 
@@ -119,14 +128,14 @@ law against a live source file.
 
 | ID      | Seat                              | Owning goal           | Status                                              |
 |---------|-----------------------------------|-----------------------|-----------------------------------------------------|
-| PF-CFG  | CFG blocks/edges preflight        | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-PHI  | PHIs / live-ins preflight         | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-TRIP | Trip-count / setup defs preflight | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-STAGE| Prologue/kernel/epilogue MI plan  | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-LIVE | Physical liveness / spills proof  | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-ALT  | Transient alternatives plan       | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-BUNDLE| Bundle roots/members/order/comp  | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
-| PF-LATE | Late layout / relocation facts    | G-MULTISTAGE-DESIGN   | executable force-fail; product default OFF          |
+| PF-CFG  | CFG blocks/edges preflight        | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-PHI  | PHIs / live-ins preflight         | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-TRIP | Trip-count / setup defs preflight | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-STAGE| Prologue/kernel/epilogue MI plan  | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-LIVE | Physical liveness / spills proof  | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-ALT  | Transient alternatives plan       | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-BUNDLE| Bundle roots/members/order/comp  | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
+| PF-LATE | Late layout / relocation facts    | G-MULTISTAGE-DESIGN   | W68-deleted provenance-only          |
 
 Physical multistage journal / rollback seats (W68 DELETED — tombstone)
 --------------------------------------------------------------------------
@@ -136,18 +145,19 @@ the 2026-08-22 qualification evidence only — no executable seat remains.
 
 | ID       | Seat                                  | Owning goal            | Status                                              |
 |----------|---------------------------------------|------------------------|-----------------------------------------------------|
-| JM-ALLOC | Allocate / clone / edge split         | G-MULTISTAGE-QUALIFY   | executable force-fail; product default OFF          |
-| JM-SPLICE| Prologue/kernel/epilogue materialize  | G-MULTISTAGE-QUALIFY   | executable force-fail; product default OFF          |
-| JM-COMMIT| Exact E96 cycle commit                | G-MULTISTAGE-QUALIFY   | executable force-fail; product default OFF          |
-| JM-TRIP  | Trip / setup update                   | G-MULTISTAGE-QUALIFY   | executable force-fail; product default OFF          |
-| JM-LIVE  | Liveness / PHI / live-in update       | G-MULTISTAGE-QUALIFY   | executable force-fail; distinct F5 seam; default OFF |
-| JM-ALT   | Transient alternate clear / stamp     | G-MULTISTAGE-QUALIFY   | executable force-fail; distinct F5 seam; default OFF |
-| JM-META  | Metadata / bundle order / completion  | G-MULTISTAGE-QUALIFY   | executable force-fail; distinct F5 seam; default OFF |
+| JM-ALLOC | Allocate / clone / edge split         | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only          |
+| JM-SPLICE| Prologue/kernel/epilogue materialize  | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only          |
+| JM-COMMIT| Exact E96 cycle commit                | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only          |
+| JM-TRIP  | Trip / setup update                   | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only          |
+| JM-LIVE  | Liveness / PHI / live-in update       | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only; distinct F5 seam |
+| JM-ALT   | Transient alternate clear / stamp     | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only; distinct F5 seam |
+| JM-META  | Metadata / bundle order / completion  | G-MULTISTAGE-QUALIFY   | W68-deleted provenance-only; distinct F5 seam |
 
-Post-qualification policy seats (this track; no default flip)
+Post-qualification policy seats (this track; historical flip table)
 -------------------------------------------------------------
-Each enablement is a separate policy-only patch after independent then
-combined QUALIFY. This track pins the OFF state only.
+Each enablement was a separate policy-only patch after independent then
+combined QUALIFY. Both product defaults are ON (2026-08-22). Combined
+dual-ON stays assert-only false.
 
 | Order | Goal                    | Flip site                                         | Current                                      |
 |-------|-------------------------|---------------------------------------------------|----------------------------------------------|
@@ -155,32 +165,33 @@ combined QUALIFY. This track pins the OFF state only.
 | 2     | Independent multi-stage | evidence only                                     | CLOSED 2026-08-22 — T4 cost-0 + II parity    |
 | 3     | G-MULTISTAGE-HWLOOP     | evidence only (dual-ON artifact)                  | CLOSED 2026-08-22 — G004 matrix green        |
 | 4     | G-HWLOOP-POLICY         | EnableHaydnHardwareLoops cl::init(true)           | FLIPPED 9a1c0a128c7e (2026-08-22)            |
-| 5     | G-MULTISTAGE-POLICY     | HaydnMultiStageSMS::productDefaultEnabled()       | FLIPPED cbd39b38437a (2026-08-22)            |
+| 5     | G-MULTISTAGE-POLICY     | generic pre-RA MachinePipeliner (W68.1; post-RA HaydnMultiStageSMS deleted) | FLIPPED cbd39b38437a (2026-08-22); host deleted |
 
 Combined-interaction QUALIFY matrix (G-MULTISTAGE-HWLOOP)
 ---------------------------------------------------------
 Required evidence with both product paths forced ON on one artifact.
-All seven seats stay OPEN / WAITING on this track. Do not treat
-hwloop-multistage-combined-*.ll dual-ON force-fail cmps as a product
-default flip or as closed combined QUALIFY. Those four files are live
-XFAIL (ledger TOTAL=1 since 2026-08-22 G004) owned by G-MULTISTAGE-HWLOOP / G-TEST-EVIDENCE.
+CLOSED 2026-08-22 G004. hwloop-multistage-combined-*.ll are GREEN
+(ledger TOTAL=1 GE96-09 only since 2026-08-22 G004). Product defaults
+ON; combined dual-ON pin stays assert-only false. PF-*/JM-* seats are
+W68-deleted provenance-only.
 
 | Seat         | Proof with hardware loops + multi-stage both enabled              | Status                         |
 |--------------|--------------------------------------------------------------------|--------------------------------|
-| Trip         | Retained SCEV trip/setup and peel-adjusted COUNT stay exact        | WAITING — analysis exhausts II |
-| CFG          | Preheader owns setup; prologue/kernel/epilogue compose with BEGIN/END | WAITING — T2 SF1-SF3 first  |
-| Prologue     | Setup at/before BEGIN t-3; peels do not break setup floor          | WAITING — no accept / no peel  |
-| Kernel       | Active-loop body is the multi-stage kernel; END is final body parcel | WAITING — no accept / no kernel |
-| Epilogue     | Drain live-outs proven; late fixup/demote still fail-closed        | WAITING — no accept / no drain |
-| Transaction  | Dual-ON PF-*/JM-* restore ordinary baseline byte-identical         | WAITING — PF-CFG exhausts II   |
-| Final oracle | BundleSim + object bytes MATCH host under OFF and dual-ON          | WAITING — T3 then T6 then dual-ON |
+| Trip         | Retained SCEV trip/setup and peel-adjusted COUNT stay exact        | GREEN — G004 2026-08-22        |
+| CFG          | Preheader owns setup; prologue/kernel/epilogue compose with BEGIN/END | GREEN — G004 2026-08-22     |
+| Prologue     | Setup at/before BEGIN t-3; peels do not break setup floor          | GREEN — G004 2026-08-22        |
+| Kernel       | Active-loop body is the multi-stage kernel; END is final body parcel | GREEN — G004 2026-08-22      |
+| Epilogue     | Drain live-outs proven; late fixup/demote still fail-closed        | GREEN — G004 2026-08-22        |
+| Transaction  | Dual-ON PF-*/JM-* restore ordinary baseline byte-identical         | GREEN — G004; PF/JM W68-deleted |
+| Final oracle | BundleSim + object bytes MATCH host under OFF and dual-ON          | GREEN — G004 2026-08-22        |
 
 Goal-9 docs/inventory on this track (P13 / P18 / P19 / P20 / R15)
 -----------------------------------------------------------------
 P13 Wave 1 unblocked (R13 LANDED; live `_S*` FieldSlot census 0). Dead
 `~/haydn-pass-pipeline.md` now names contracts/pipeline.md; deleted
 BitSimplify/PEIPeephole are not listed as live. KEEP SMS/hwloop product
-default OFF. Inventory: HAYDN-STALE-PATH-CLEANUP.md.
+default ON (generic pre-RA MachinePipeliner; combined pin assert-only false).
+Inventory: HAYDN-STALE-PATH-CLEANUP.md.
 
 P18 leftover: TableGen AlternateInsts backfill comment stays outside
 this code track. Owned Haydn TUs do not revive suffix `_S*` discovery.
@@ -208,10 +219,9 @@ product format family. W51 idle-parcel provenance is golden-blocked
 (POS_IDLE_CANONICAL OPEN_BLOCKED); no invent. Full-bundle NOP idle
 remains legal AllEntriesReal.
 
-Scaffolding rule: implement the real AIE-aligned multistage host; do not
-fake it with the retired Stage-0 PostPipeliner/InterBlock path, a pre-RA
-BUNDLE, late physical semantic rediscovery, force-coissue, Fixup semantic
-peel repair, or invented golden padding. The policy flip is an ordered
-follow-on after independent then combined qualification. EXECUTED
-2026-08-22: both defaults ON (see ordered table); combined pin stays
-assert-only false.
+Scaffolding rule: do not revive the deleted post-RA HaydnMultiStageSMS
+host or fake it with the retired Stage-0 PostPipeliner/InterBlock path, a
+pre-RA BUNDLE, late physical semantic rediscovery, force-coissue, Fixup
+semantic peel repair, or invented golden padding. The 2026-08-22 policy
+flip is historical: both defaults ON (hwloop + generic pre-RA
+MachinePipeliner); combined pin stays assert-only false.

@@ -18,10 +18,9 @@
 ;   * Independent multi-op canaries: do not force-coissue; pin the observed
 ;     product shape (co-issued BUNDLE 1, 0 with two generated members).
 
-; After postmisched: single-op plain may still be bare logical (Finalize wraps);
-; independent multi is a scheduler-committed BUNDLE root with generated members
-; (structural proof the scheduler ran: Finalize has not executed at this stop).
-; Do not force-coissue beyond the observed shape.
+; After postmisched: S1 leaveFunction wraps leftover singles as BUNDLE
+; roots (GR1.2 complete packets). Independent multi is a scheduler-
+; committed BUNDLE. Do not force-coissue beyond the observed shape.
 ; POST-O0-LABEL: name: plain_o0
 ; POST-O0: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
 ; POST-O0-LABEL: name: indep_plain
@@ -30,8 +29,8 @@
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; GR2.4: optnone is NO LONGER skipped — same scheduler-committed shapes.
 ; POST-OPTNONE-LABEL: name: optnone_fn
-; POST-OPTNONE: $r{{[0-9]+}} = ADD32{{(_E2_[^ ]+)?}}{{ }}
-; POST-OPTNONE-NOT: BUNDLE
+; POST-OPTNONE: BUNDLE
+; POST-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-OPTNONE-LABEL: name: indep_optnone
 ; POST-OPTNONE: BUNDLE 1, 0
 ; POST-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_

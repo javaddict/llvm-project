@@ -54,11 +54,20 @@ HaydnMCAsmInfo::HaydnMCAsmInfo(const Triple &TargetTriple) {
   MinInstAlignment = haydn::format::MinBundleAddressAlignBytes;
   MaxInstLength = ProductBytes;
 
-  // HasFunctionAlignment=false disables generic AsmPrinter header
-  // emitAlignment(MF, &F). HaydnAsmPrinter owns the function-entry
-  // p2align (user aligned(N) is a language guarantee; Min/Pref stay
-  // Align(4) from HaydnISelLowering). This flag is not a clamp.
-  HasFunctionAlignment = false;
+  // W70.2r function-entry path: generic AsmPrinter header emitAlignment
+  // so HaydnMCELFStreamer::emitCodeAlignment emits whole-parcel idle fill
+  // BEFORE the entry label. That fill is outside every function's committed
+  // stream and aligns mid-section symbols in shared .text. Function sections
+  // remain optional containment. User aligned(N) is a language guarantee;
+  // Min/Pref stay Align(4).
+  //
+  // GR1.9 / D1.166 internal MBB/ZOL alignment is not this flag:
+  // padInternalMBBAlignment inserts complete idle packets and
+  // MF.ensureAlignment(A) so this pre-label fill is the absolute-address
+  // grid for llvm.loop.align. Stamped LBN closer clears MBB metadata
+  // before freeze so emitBasicBlockStart cannot call emitCodeAlignment
+  // for those sites. Min/Pref stay Align(4).
+  HasFunctionAlignment = true;
 }
 
 void HaydnMCAsmInfo::printSpecifierExpr(raw_ostream &OS,

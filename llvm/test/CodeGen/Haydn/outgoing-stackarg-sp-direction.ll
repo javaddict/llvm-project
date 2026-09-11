@@ -19,30 +19,29 @@ declare i64 @sink_i64(i64, i64, i64, i64, i64)
 define i64 @caller_5th_i64_spills(i64 %x) {
 ; CHECK-LABEL: caller_5th_i64_spills:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d4, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 2 }
-; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r1; slli64 d4, d4, 32 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
-; CHECK-NEXT:    { sext32t64 d2, r1; slli64 d4, d4, 32; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { slli64 d2, d2, 32; addi32 r1, r0, 4 }
-; CHECK-NEXT:    { sext32t64 d3, r1; srli64 d4, d4, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; slli64 d3, d3, 32 }
-; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r1; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; addi32 r1, r0, 4 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; srli64 d4, d4, 32; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { srli64 d3, d3, 32; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; st64 d0, sp, 0 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; nop; or64 d0, d4, d4 }
-; CHECK-NEXT:    { nop; jal lr, sink_i64 }
+; CHECK-NEXT:    { nop; lui r1, sink_i64 }
+; CHECK-NEXT:    { or64 d0, d4, d4; addi32 r1, r1, sink_i64 }
+; CHECK-NEXT:    { jalr lr, r1, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

@@ -12,8 +12,7 @@ define i32 @scalar_mul(i32 %a, i32 %b) {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: scalar_mul:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mull r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -28,11 +27,10 @@ entry:
 define i32 @cond_mul(i32 %n, i32 %h, i32 %x) {
 ; CHECK-LABEL: cond_mul:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { andi32 r5, r1, 1; addi32 r4, r0, 0 }
-; CHECK-NEXT:    { nop; mull r1, r2, r3 }
+; CHECK-NEXT:    { nop; addi32 r4, r0, 0 }
+; CHECK-NEXT:    { mull r1, r2, r3; andi32 r5, r1, 1 }
 ; CHECK-NEXT:    { nop; seq32 r3, r5, r4 }
 ; CHECK-NEXT:    { nop; movt32 r1, r2, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

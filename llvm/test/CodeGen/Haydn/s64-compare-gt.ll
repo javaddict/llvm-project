@@ -13,8 +13,7 @@
 define i32 @cmp_sgt_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_sgt_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -34,8 +33,7 @@ define i32 @cmp_sgt_i64(i64 %a, i64 %b) {
 define i32 @cmp_ugt_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_ugt_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -56,8 +54,7 @@ define i32 @cmp_ugt_i64(i64 %a, i64 %b) {
 define i32 @cmp_sle_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_sle_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -78,8 +75,7 @@ define i32 @cmp_sle_i64(i64 %a, i64 %b) {
 define i32 @cmp_ule_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_ule_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -101,8 +97,7 @@ define i32 @cmp_ule_i64(i64 %a, i64 %b) {
 define i32 @cmp_sge_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_sge_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }
@@ -123,8 +118,7 @@ define i32 @cmp_sge_i64(i64 %a, i64 %b) {
 define i32 @cmp_uge_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: cmp_uge_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; move32_dr_h r4, d1; move32_dr_l r3, d1 }

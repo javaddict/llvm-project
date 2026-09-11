@@ -22,8 +22,7 @@
 define ptr @test_chain(ptr %p) {
 ; CHECK-LABEL: test_chain:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 20 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -38,8 +37,7 @@ define ptr @test_chain(ptr %p) {
 define ptr @test_triple_chain(ptr %p) {
 ; CHECK-LABEL: test_triple_chain:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 28 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -55,8 +53,7 @@ define ptr @test_triple_chain(ptr %p) {
 define ptr @test_negative_offset(ptr %p) {
 ; CHECK-LABEL: test_negative_offset:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -71,8 +68,7 @@ define ptr @test_negative_offset(ptr %p) {
 define ptr @test_nonconstant(ptr %p, i32 %off) {
 ; CHECK-LABEL: test_nonconstant:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 4 }

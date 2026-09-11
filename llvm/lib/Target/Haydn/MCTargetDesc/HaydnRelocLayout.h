@@ -71,9 +71,10 @@ enum class RelocKind : uint16_t {
   // Format E LOADSTORE0/LOAD1 RI6 signed imm6 @ parcel bits[33:28].
   // Distinct from LO20 (ALU RI20 / retired WIDE LSOff20 @ bits[31:50]).
   LS_IMM = 21,
-  // Format E JALR RI12 symbolic imm12 (ELF 22). Same field numbers as
-  // WIDE_BranchSImm12_RI but distinct identity. Unresolved external
-  // targets emit R_HAYDN_JALRSImm12.
+  // Format E JALR RI12 imm12 (ELF 22). Same field numbers as
+  // WIDE_BranchSImm12_RI but distinct identity — do not remint. Symbolic
+  // JALR is ISA-69 fail-closed (no golden relocation base); this number
+  // is residual identity, not a qualified object ABI.
   JALRSImm12 = 22,
   // Format E CSR I8 uimm8 (CSRW/CSRR, ELF 23). Absolute unsigned CSR
   // address; table FieldLsb is E2 e0 @ bits[39:32]. E3 windows via
@@ -161,6 +162,18 @@ constexpr bool isEntryQualifiedKind(RelocKind R) {
   return R >= RelocKind::LO20_E1 && R <= RelocKind::CSR_UImm8_E3E2;
 }
 
+/// True for JALRSImm12 and its entry-qualified twins. ELF numbers stay
+/// (do not remint). Symbolic use is ISA-69 fail-closed — not a published
+/// relocation-base ABI and not a reason to return R_PC.
+constexpr bool isSymbolicJalrReloc(RelocKind R) {
+  return baseKindFor(R) == RelocKind::JALRSImm12;
+}
+
+/// Named diagnostic for assembly, object emission, and linking.
+inline constexpr const char *kUnsupportedSymbolicJalrDiag =
+    "Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base); "
+    "refusing silent PC-relative R_HAYDN_JALRSImm12";
+
 // Value transform applied before the field bits are selected. Mirrors the
 // MIPS-style HI/LO split used by the LUI+ADDI32 materialization pairs.
 enum class RelocTrans : uint8_t {
@@ -221,8 +234,10 @@ struct FixupField {
 ///
 /// Returns Invalid when zero or >1 product-ready rows match. JALR is RI12
 /// type-opcode 1 and maps to the dedicated JALRSImm12 row (never borrow
-/// the RI12 branch row); execution stays PC = rs + imm12. I8 type-opcodes
-/// 4/5 (CSRR/CSRW) map to CSR_UImm8; other I8 opcodes have no reloc row.
+/// the RI12 branch row). Execution is golden rs+imm12; symbolic JALR is
+/// ISA-69 fail-closed (this row is schema identity, not a relocation ABI).
+/// I8 type-opcodes 4/5 (CSRR/CSRW) map to CSR_UImm8; other I8 opcodes
+/// have no reloc row.
 /// Unspecified I8 FieldSize defaults to 8 (AIE always supplies Size).
 /// Fields[0].Offset, when set, must be a published window for that kind
 /// (E2 e0 table FieldLsb or a typed E3/e1 member LSB) — AIE looks up by
@@ -245,6 +260,20 @@ bool isPublishedFieldLsb(RelocKind R, unsigned FieldLsb);
 /// Loc bytes — that remains tryResolveFieldLsb for MC applyFixup / lld.
 unsigned resolveFieldLsbForMember(RelocKind R, unsigned Mode, unsigned EntryIdx,
                                   unsigned Unit = ~0u);
+
+/// Entry-qualified RelocKind for base family \p R at generated
+/// (Mode, EntryIdx, Unit). AIE peer: findFixupfromFixupFields looks up the
+/// unique kind whose FixupField Offset matches the translated window
+/// (AIEMCFixupKinds.cpp:36-65; AIEBaseMCCodeEmitter.cpp:189-232). Haydn
+/// overlay: match the generated FieldLsbSites window against RelocFieldInfo
+/// of the 24..42 twins (baseKindFor + unique FieldLsb). No new site struct.
+/// Returns \p R at the base window; the unique twin when FieldLsb matches;
+/// \p R itself when a non-HI12/CSR family has a non-default window with no
+/// minted twin (WIDE_Call E3 e0 keeps the base kind + sniff); Invalid when
+/// HI12/CSR has a non-default window with no twin, or when two twins share
+/// one FieldLsb (uniqueness failure).
+RelocKind qualifyRelocKindForMember(RelocKind R, unsigned Mode,
+                                    unsigned EntryIdx, unsigned Unit = ~0u);
 
 // Read an N-byte little-endian image (N in {1,2,4,6}) as a uint64_t.
 uint64_t readImage(const uint8_t *Loc, unsigned NBytes);

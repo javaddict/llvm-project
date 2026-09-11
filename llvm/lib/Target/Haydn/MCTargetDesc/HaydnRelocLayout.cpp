@@ -128,12 +128,14 @@ constexpr Row Table[] = {
     {RelocKind::LS_IMM, {12, 6, 28, 0, 1, true, false, RelocTrans::None}},
     // Format E JALR RI12 imm12: same golden E2 e0 window as the RI12 branch
     // row (imm @ parcel bits[43:32], FieldLsb=32) but a distinct kind so a
-    // JALR fixup never borrows the branch row. Signed 12-bit byte
-    // displacement from the parcel origin (ValueShift=0, Align=2; no extra
-    // scale; execution stays PC = rs + imm12). Typed windows: E2 e0 @32,
-    // E3 e0 @23, E3 e1 @54 (resolveFieldLsb / resolveFieldLsbForMember).
-    // ELF 22 (R_HAYDN_JALRSImm12).
-    // Call-indirect / JT jalr-with-zero never mint a second ELF number.
+    // JALR fixup never borrows the branch row. ValueShift=0. Execution is
+    // golden rs+imm12. Align=2 / IsPCRel here are residual table geometry,
+    // not a qualified symbolic-JALR ABI (ISA-69 fail-closed). Literal
+    // immediates, including odd, currently encode on the encoder path
+    // (ISA-68 / p18-jalr-rs-rel-odd-imm.s) and never consult this Align.
+    // Typed windows: E2 e0 @32, E3 e0 @23, E3 e1 @54. ELF 22 identity
+    // stays — do not remint. Call-indirect / JT jalr-with-zero never mint
+    // a second ELF number.
     {RelocKind::JALRSImm12, {12, 12, 32, 0, 2, true, true, RelocTrans::None}},
     // Format E CSR I8 uimm8: table FieldLsb is E2 e0 imm @ parcel
     // bits[39:32] (FieldLsb=32). Unsigned 8-bit CSR address, ValueShift=0,
@@ -802,6 +804,40 @@ unsigned resolveFieldLsbForMember(RelocKind R, unsigned Mode, unsigned EntryIdx,
   return I.FieldLsb;
 }
 
+RelocKind qualifyRelocKindForMember(RelocKind R, unsigned Mode,
+                                    unsigned EntryIdx, unsigned Unit) {
+  if (R == RelocKind::Invalid)
+    return RelocKind::Invalid;
+  const RelocKind Base = baseKindFor(R);
+  const unsigned TypedLsb =
+      resolveFieldLsbForMember(Base, Mode, EntryIdx, Unit);
+  if (TypedLsb == getRelocFieldInfo(Base).FieldLsb)
+    return Base;
+
+  RelocKind Match = RelocKind::Invalid;
+  unsigned NMatch = 0;
+  const unsigned First = static_cast<unsigned>(RelocKind::LO20_E1);
+  const unsigned Last = static_cast<unsigned>(RelocKind::CSR_UImm8_E3E2);
+  for (unsigned K = First; K <= Last; ++K) {
+    const RelocKind Q = static_cast<RelocKind>(K);
+    if (baseKindFor(Q) != Base)
+      continue;
+    if (getRelocFieldInfo(Q).FieldLsb != TypedLsb)
+      continue;
+    Match = Q;
+    ++NMatch;
+  }
+  if (NMatch == 1)
+    return Match;
+  if (NMatch > 1)
+    return RelocKind::Invalid;
+  // No minted twin. HI12/CSR fail closed (D1.17); other families keep the
+  // base kind and the Loc sniff (WIDE_Call E3 e0 @17 has no ELF twin).
+  if (Base == RelocKind::HI12 || Base == RelocKind::CSR_UImm8)
+    return RelocKind::Invalid;
+  return Base;
+}
+
 RelocCompute computeRelocValue(RelocKind R, uint64_t Value) {
   const RelocFieldInfo &I = getRelocFieldInfo(R);
   RelocCompute Out;
@@ -1178,7 +1214,8 @@ unsigned mapRelocKindToFixup(RelocKind R) {
 // Generated Format E type → published RelocKind. TypeOpcode ranges are the
 // golden type-opcode column in FormatEMembers (not logical mnemonics).
 // RI12 opcode 1 is JALR: dedicated JALRSImm12 row — never the RI12 branch
-// row; execution stays rs+imm12.
+// row. Execution is rs+imm12; symbolic emission is ISA-69 fail-closed
+// (schema identity only).
 struct TypeFixupSpec {
   const char *TypeName;
   uint16_t OpcodeLo;

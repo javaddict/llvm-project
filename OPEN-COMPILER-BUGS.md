@@ -583,7 +583,11 @@ scripts/run_gcc_torture_lit.sh --filter '920501-8|930513-1|conversion' -j8 -a
 
 # Currently OPEN
 
-## CB-167 — OPEN 2026-08-27: S2 convergence repack flips a legal same-cycle WAR into a wrong sequential order
+## CB-167 — CLOSED 2026-09-11: S2 convergence repack seat deleted (GR1.7 LateConvergence / `-haydn-sms2`)
+
+**Close:** GR1.7 deleted `HaydnLateConvergence` / `-haydn-sms2` / S2 reopen.
+The sequentialize-WAR miscompile seat is gone; one PostMachineScheduler
+remains. Historical filing kept below.
 
 **Class:** miscompile under `-haydn-sms2` (late-convergence driver).
 **Toolchain:** w68-new @ `ad8bbc4ac8c9` (entry-qualified relocs + census fix landed).

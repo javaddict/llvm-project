@@ -1,0 +1,241 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=PRE
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 %s -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=POST
+# REQUIRES: haydn-registered-target
+#
+# D1.141: far conds in an unanalyzable two-cond tail have no Arm A (analyzed
+# TBB/FBB only) or Arm B (trailing uncond only) owner. Generic BR's
+# opcode-only BUNDLE hook is always-in-range without the D1.142 trailing-JALR
+# handshake (BranchRelaxation.cpp:726-740). Pre-stamp defers to BR
+# splitBlockBeforeInstr (d1104 / d164 unanalyzable_far_cond_not_arm_b).
+# Post-stamp is the owner wall — not GR1.8 (Wave 8).
+# Peer: AIEBaseInstrInfo.cpp:191-193 NumTerminators>2 unanalyzable; RISC-V
+# RISCVInstrInfo.cpp:1325-1327 leave indirect unanalyzable; AIE has no BR.
+#
+# Far template (d150 law, buffer=4, parcel=12, window edge 2044):
+#   180 NOPs = 2160B. Two BEQZ_W in bb.0 (24B) so bb.2 starts at 2184.
+#
+--- |
+  define dso_local void @two_far_conds() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    ret void
+  far:
+    ret void
+  }
+...
+---
+name:            two_far_conds
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r8, $r15
+    successors: %bb.1, %bb.2
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    BEQZ_W $r8, %bb.2, implicit-def dead $sfr
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+# PRE-LABEL: name:            two_far_conds
+# PRE: bb.0.entry
+# PRE: BEQZ{{.*}} $r7, %bb.2
+# PRE: BEQZ{{.*}} $r8, %bb.2
+# PRE-NOT: LUI
+# PRE-NOT: JALR
+# PRE: bb.1.near
+#
+# POST: far cond in unanalyzable/one-way cycle has no range owner

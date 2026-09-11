@@ -1,0 +1,124 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:     -misched-postra-direction=topdown \
+# RUN:     -run-pass=postmisched -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=KEEP
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:     -misched-postra-direction=bidirectional \
+# RUN:     -run-pass=postmisched -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=SEAM
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRASchedStrategy.cpp \
+# RUN:   --check-prefix=WALL
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRASchedStrategy.cpp \
+# RUN:   --check-prefix=LAW
+# REQUIRES: haydn-registered-target
+#
+# Role: MIR + source pin — D1.165 ExitReadyCycle pad-cap law.
+#
+# handleRegionConflicts ExitReady Top.bumpCycle must never silently clamp
+# Want to From+HaydnPostRAMaxInterZonePads (17+16=33). AIE
+# AIEMachineScheduler.cpp:1187 bumps ExitReady-BotCurr unclamped; AIE's
+# following while is unbounded (:1192-1195). Haydn's T4 hang-containment
+# still bounds the bump, but over-cap is a named fatal
+# (NumExitReadyPadCapFatals; "Haydn: ExitReadyCycle pad cap would commit
+# an under-stalled cycle") — the D1.26 under-stall class at the
+# SchedBoundary::bumpCycle seat. A silent clamp to exactly the cap would
+# hide the delta from bumpCycleForBundles (`>` is not `>=`).
+#
+# Distinct counter/wall from NumReconstructPadCapFatals (D1.26
+# reconstruction list) and NumInterZonePadCaps (D1.7 residual Top/Bot
+# scoreboard seam).
+#
+# Fatal-arm reachability note (honest, same as D1.26): current golden
+# ExitReady sources are bounded by the published max (ZOL
+# SetupIssueDistance 3; SIN_COS/ARCTAN OperandCycles 17). The fatal wall
+# is pinned textually (WALL/LAW, the d126 / w50-silent-repair-fatal
+# pattern). The two RUN arms pin the positive boundary: under-cap
+# ExitReady pads on a SET region (topdown) and an under-cap inter-zone
+# seam (bidirectional) still commit. No test-only forcing flag (hard
+# constraint #14); the cap is not raised.
+#
+# WALL: ++NumExitReadyPadCapFatals;
+# WALL-NEXT: report_fatal_error(
+# WALL-NEXT: "Haydn: ExitReadyCycle pad cap would commit an under-stalled cycle",
+# WALL-NEXT: /*GenCrashDiag=*/false);
+# WALL: Top.bumpCycle(Want);
+# WALL-NOT: clampForwardCycle(Top.getCurrCycle(), Want)
+# WALL-NOT: return From + HaydnPostRAMaxInterZonePads
+#
+# LAW: if (Want > From && Want - From > HaydnPostRAMaxInterZonePads) {
+#
+# KEEP-LABEL: name: undercap_exitready
+# KEEP: SET_HWLOOP
+# KEEP: NOP
+# KEEP: RET
+#
+# SEAM-LABEL: name: seam_exit_pad_and_guard
+# SEAM: bb.0:
+# SEAM: SIN_COS
+# SEAM: ARCTAN
+# SEAM: BEQ{{.*}} %bb.2
+
+--- |
+  define void @undercap_exitready() { ret void }
+  define void @seam_exit_pad_and_guard() { ret void }
+...
+---
+name:            undercap_exitready
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    successors: %bb.1
+
+    $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+    SET_HWLOOP_W 0, %bb.1, %bb.1, 2, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $r3, $r15
+    successors: %bb.2
+    $r1 = COPY $r3
+    NOP
+    NOP
+    NOP
+
+  bb.2:
+    liveins: $r1, $r15
+    $r1 = COPY $r1
+    RET implicit killed $r15, implicit $r1
+...
+---
+name:            seam_exit_pad_and_guard
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    successors: %bb.1(0x40000000), %bb.2(0x40000000)
+
+    $d1 = SIN_COS $r1, 15
+    $r6 = ARCTAN $d1, 15
+    $r2 = ADD32 $r3, $r4, implicit-def dead $sfr
+    BEQ $r2, $r5, %bb.2, implicit-def dead $sfr
+
+  bb.1:
+    liveins: $d1, $r15
+
+    $d13 = ADD64 $d1, $d1, implicit-def dead $sfr
+    RET implicit $r15
+
+  bb.2:
+    liveins: $d1, $r15
+
+    RET implicit $r15
+...

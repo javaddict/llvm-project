@@ -28,7 +28,7 @@
 ; post-RA emitted-cycle audit; release-visible pre-RA invent counter;
 ; fail-closed per-op resource admission; product StageCount1 SMS containment
 ; pin; post-RA AltDesc clear counter. AR0 phase-firewall inventory closed
-; at 98890c529be9: Inputs/SOURCE-AUTHORITY-ANCHORS.txt (not a product registry).
+; at 4b6677f8bf87: Inputs/SOURCE-AUTHORITY-ANCHORS.txt (not a product registry).
 ; COMMON-NOT: BUNDLE{{.*}}:: (load{{.*}}{
 ; COMMON-NOT: BUNDLE_E96
 ; COMMON-NOT: {{ADD32|ADDI32|OR32|XOR32|LD32|ST32}}_S{{[0-9]}}

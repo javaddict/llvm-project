@@ -27,20 +27,22 @@ declare i32 @extern(i32)
 
 define i32 @leaf_no_call(i32 %x) {
 ; CHECK-LABEL: leaf_no_call:
-; CHECK:       { nop; xor32 r0, r0, r0 }
+; CHECK:       xor32 r0, r0, r0
 ; CHECK-NOT:   xor32 r0, r0, r0
-; CHECK:       { nop; jalr r0, lr, 0 }
+; CHECK:       jalr r0, lr, 0
   %r = add i32 %x, 1
   ret i32 %r
 }
 
 define i32 @has_call(i32 %x) {
 ; CHECK-LABEL: has_call:
-; CHECK:       { nop; xor32 r0, r0, r0 }
-; CHECK:       { nop; jal lr, extern }
+; CHECK:       xor32 r0, r0, r0
+; CHECK:       lui r{{[0-9]+}}, extern
+; CHECK:       addi32 r{{[0-9]+}}, r{{[0-9]+}}, extern
+; CHECK:       jalr{{.*}}lr
 ; CHECK:       xor32 r0, r0, r0
 ; CHECK:       xor32 r0, r0, r0
-; CHECK:       { nop; jalr r0, lr, 0 }
+; CHECK:       jalr r0, lr, 0
   %v = call i32 @extern(i32 %x)
   %r = add i32 %v, 1
   ret i32 %r
@@ -48,13 +50,13 @@ define i32 @has_call(i32 %x) {
 
 define void @leaf_csr() {
 ; CHECK-LABEL: leaf_csr:
-; CHECK:       { nop; xor32 r0, r0, r0 }
-; CHECK:       { nop; st32 lr, sp,
+; CHECK:       xor32 r0, r0, r0
+; CHECK:       st32 lr, sp,
 ; CHECK:       {{//|#}}APP
 ; CHECK:       {{//|#}}NO_APP
 ; CHECK:       xor32 r0, r0, r0
-; CHECK:       { nop; ld32 lr, sp,
-; CHECK:       { nop; jalr r0, lr, 0 }
+; CHECK:       ld32 lr, sp,
+; CHECK:       jalr r0, lr, 0
   call void asm sideeffect "", "~{lr}"()
   ret void
 }

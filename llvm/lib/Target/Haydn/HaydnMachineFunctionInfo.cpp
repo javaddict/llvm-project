@@ -8,7 +8,6 @@
 
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnSubtarget.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -43,12 +42,24 @@ MachineFunctionInfo *HaydnMachineFunctionInfo::clone(
   Copy->PostCommitCfg.LiveCount = 0;
   Copy->PostCommitCfg.BlockIDHighWater = 0;
   Copy->PostCommitCfg.NumberingEpoch = 0;
+  Copy->PostCommitCfg.CreationHighWater = 0;
   Copy->PostCommitCfg.Tokens.clear();
   Copy->PostCommitCfg.SuccPositions.clear();
-  // L5 admissions are per-function lifecycle state: the clone never
-  // inherits the source's admitted demote transitions (it stamps and
-  // enforces its own snapshot).
-  Copy->PostCommitAdmittedEdgeSources.clear();
+  // D1.102 / D1.150 latch→FI keys point into the source MF.
+  Copy->HwLoopStackCounterByLatch.clear();
+  for (const auto &KV : HwLoopStackCounterByLatch) {
+    MachineBasicBlock *Src = const_cast<MachineBasicBlock *>(KV.first);
+    auto It = Src2DstMBB.find(Src);
+    if (It != Src2DstMBB.end() && It->second)
+      Copy->HwLoopStackCounterByLatch[It->second] = KV.second;
+  }
+  Copy->HwLoopDemoteSaveByLatch.clear();
+  for (const auto &KV : HwLoopDemoteSaveByLatch) {
+    MachineBasicBlock *Src = const_cast<MachineBasicBlock *>(KV.first);
+    auto It = Src2DstMBB.find(Src);
+    if (It != Src2DstMBB.end() && It->second)
+      Copy->HwLoopDemoteSaveByLatch[It->second] = KV.second;
+  }
   return Copy;
 }
 
@@ -72,7 +83,7 @@ HaydnMachineFunctionInfo::HaydnMachineFunctionInfo(const Function &F,
 }
 
 std::string HaydnMachineFunctionInfo::postCommitCfgCreationViolation(
-    const MachineFunction &MF) {
+    const MachineFunction &MF) const {
   if (!PostCommitCfgStamped)
     return {};
   const unsigned L1 = static_cast<unsigned>(MF.size());
@@ -103,10 +114,12 @@ std::string HaydnMachineFunctionInfo::postCommitCfgCreationViolation(
             " (postcommit CFG is identity-frozen; block removal/reassignment "
             "must be normalized before the commit)");
   // L4 law (equal-count identity): compare the ordered token sequence.
-  // Tokens are renumber-stable (BasicBlock identity + BBID, never MBB
-  // numbers/pointers), so a legal RenumberBlocks cannot fire this law;
-  // erase+re-add or split-and-merge at equal MF.size() changes the sequence.
-  // Length is guaranteed equal here by L1/L2 above.
+  // Tokens are renumber-stable (BasicBlock identity + BBID, or CreationID
+  // for null-BB/no-BBID, never MBB numbers/pointers), so a legal
+  // RenumberBlocks cannot fire this law; erase+re-add or split-and-merge
+  // at equal MF.size() changes the sequence. Null-BB/no-BBID replacement
+  // no longer shares NoBBIDSentinel. Length is guaranteed equal here by
+  // L1/L2 above.
   unsigned I = 0;
   for (const MachineBasicBlock &MBB : MF) {
     const auto &Stamped = PostCommitCfg.Tokens[I++];
@@ -137,30 +150,34 @@ std::string HaydnMachineFunctionInfo::postCommitCfgCreationViolation(
             std::to_string(H1 - L1) +
             " (create-then-delete or erase+replace left a numbering trace; "
             "postcommit CFG is identity-frozen)");
-  // L5 law (edge digest, D1.40 Phase 2): block identity is proven unchanged
-  // by L1/L2/L4 above, so compare every MBB's successor list (digested as
-  // successor LAYOUT POSITIONS — the same renumber-stable domain as the
-  // token vector; successor order is preserved by add/remove/replace). An
-  // edge-only mutation — successor rewrite with unchanged block identity —
-  // is refused unless one admission was recorded for its SOURCE position
-  // by the single admitted-transition site
-  // (recordPostCommitAdmittedEdgeTransition, the demote latch rewrite in
-  // llvm::demoteHardwareLoopToSoftware). One record admits exactly ONE
-  // divergence of its source position and is CONSUMED by that admission
-  // (erased from the persistent record): a second, unrecorded rewrite of
-  // an already-admitted source still fires, and nesting order never
-  // matters because matching is by position.
-  // Consume-matching: a spent admission is erased from the PERSISTENT
-  // record (not a per-call copy), so one record admits exactly ONE
-  // divergence across the whole post-stamp lifecycle — every later seat
-  // (closure iteration, Verify, freeze) re-checks with the record gone.
-  SmallVector<unsigned, 4> &UnspentAdmissions =
-      PostCommitAdmittedEdgeSources;
+  // L6 law (creation high-water): L3 is epoch-guarded so BR-entry
+  // RenumberBlocks stays legal and retires the numbering-slot trace. A
+  // later CreateMachineBasicBlock — including create-then-delete that
+  // restores live count and tokens — is still visible as a monotone
+  // CreationID high-water advance. Keyed on the HC#0 serial, never on
+  // numbering slack/epoch, so the entry renumber cannot false-fire and
+  // cannot launder a later create. Additive after L3; L1 already names
+  // live growth. L4 already names equal-count identity replacement.
+  const unsigned C1 = MF.getMBBCreationHighWater();
+  const unsigned C0 = PostCommitCfg.CreationHighWater;
+  if (C1 > C0)
+    return ("postcommit CFG high-water: MBB creation serial advanced from "
+            "the first-Finalize stamp " +
+            std::to_string(C0) + " to " + std::to_string(C1) +
+            " (CreateMachineBasicBlock after the stamp, including "
+            "create-then-delete after RenumberBlocks, is refused — "
+            "postcommit CFG is identity-frozen)");
+  // L5 law (edge digest): block identity is proven unchanged by L1/L2/L4
+  // above, so compare every MBB's successor list (digested as successor
+  // LAYOUT POSITIONS — the same renumber-stable domain as the token
+  // vector; successor order is preserved by add/remove/replace). Any
+  // successor-digest mismatch is a hard freeze. Wave 4 H: product demote
+  // refuses while stamped (SET/CFG untouched). GR2.10: no admitted-
+  // transition exception and no consume-and-advance.
   I = 0;
   for (const MachineBasicBlock &MBB : MF) {
     const SmallVectorImpl<unsigned> &StampedSucc =
         PostCommitCfg.SuccPositions[I];
-    ++I;
     bool Diverged = false;
     if (MBB.succ_size() != StampedSucc.size()) {
       Diverged = true;
@@ -173,20 +190,12 @@ std::string HaydnMachineFunctionInfo::postCommitCfgCreationViolation(
         }
       }
     }
-    if (!Diverged)
-      continue;
-    const auto It = llvm::find(UnspentAdmissions, I - 1);
-    if (It != UnspentAdmissions.end())
-      UnspentAdmissions.erase(It);
-    else
+    if (Diverged)
       return ("postcommit CFG edges: successor sequence of layout position " +
-              std::to_string(I - 1) +
+              std::to_string(I) +
               " changed after the first-Finalize stamp (edge-only mutation "
-              "is refused unless covered by the single admitted demote "
-              "transition — postcommit CFG is identity-frozen)");
+              "is refused — postcommit CFG is identity-frozen)");
+    ++I;
   }
-  // Records with no matching divergence (e.g. a recorded rewrite that
-  // restored the stamped successor list) are inert: an admission can never
-  // legitimize a divergence it did not match one-to-one above.
   return {};
 }

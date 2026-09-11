@@ -1,0 +1,253 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# GR1.3 B: LBN consults the transient LayoutSite table. Far uncond FitPatch
+# promotes through the in-block LUI+ADDI32_W+JALR_W template (LongTemplate).
+# Near short stays FitPatch (no promotion). No RestoreBB / new MBB / root
+# splice. ARM ImmBranch is MI+MaxDisp only; Haydn overlay is
+# root/member+RelocFieldInfo+rank (HaydnLayoutSite.h).
+#
+# Far template (d150/d1142 law, buffer=4, parcel=12, window 2044):
+#   bb.0 B is 12B; bb.1 = 170 NOPs + RET = 2052B; bb.2 starts at 2064.
+#
+--- |
+  define dso_local void @far_uncond() {
+  entry:
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+
+  define dso_local void @near_short() {
+  entry:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            far_uncond
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r15
+    successors: %bb.2
+    B %bb.2
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+---
+name:            near_short
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r15
+    successors: %bb.1
+    B %bb.1
+
+  bb.1.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name:            far_uncond
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.2{{$}}
+# CHECK: ADDI32{{.*}}%bb.2{{$}}
+# CHECK-NOT: B %bb.
+# CHECK: JALR
+# CHECK-NOT: B %bb.
+# CHECK: bb.1.pad
+# CHECK: bb.2.far
+# CHECK-NOT: bb.3
+#
+# CHECK-LABEL: name:            near_short
+# CHECK: bb.0.entry
+# CHECK: B %bb.1
+# CHECK-NOT: JALR
+# CHECK-NOT: bb.2

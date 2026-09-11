@@ -16,8 +16,7 @@
 define <2 x i32> @test_x2seq32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2seq32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2seq32 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -30,8 +29,7 @@ define <2 x i32> @test_x2seq32(<2 x i32> %a, <2 x i32> %b) {
 define <2 x i32> @test_x2slt32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2slt32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2slt32 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -44,8 +42,7 @@ define <2 x i32> @test_x2slt32(<2 x i32> %a, <2 x i32> %b) {
 define <2 x i32> @test_x2sle32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: test_x2sle32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2sle32 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -62,8 +59,7 @@ define <2 x i32> @test_x2sle32(<2 x i32> %a, <2 x i32> %b) {
 define <2 x i32> @test_x2movf32(<2 x i32> %fallthrough, <2 x i32> %cond_val) {
 ; CHECK-LABEL: test_x2movf32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2movf32 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -76,8 +72,7 @@ define <2 x i32> @test_x2movf32(<2 x i32> %fallthrough, <2 x i32> %cond_val) {
 define <2 x i32> @test_x2movt32(<2 x i32> %fallthrough, <2 x i32> %cond_val) {
 ; CHECK-LABEL: test_x2movt32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2movt32 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -94,8 +89,7 @@ define <2 x i32> @test_x2movt32(<2 x i32> %fallthrough, <2 x i32> %cond_val) {
 define <4 x i16> @test_x4seq16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: test_x4seq16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4seq16 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -108,8 +102,7 @@ define <4 x i16> @test_x4seq16(<4 x i16> %a, <4 x i16> %b) {
 define <4 x i16> @test_x4slt16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: test_x4slt16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4slt16 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -122,8 +115,7 @@ define <4 x i16> @test_x4slt16(<4 x i16> %a, <4 x i16> %b) {
 define <4 x i16> @test_x4sle16(<4 x i16> %a, <4 x i16> %b) {
 ; CHECK-LABEL: test_x4sle16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4sle16 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -140,8 +132,7 @@ define <4 x i16> @test_x4sle16(<4 x i16> %a, <4 x i16> %b) {
 define <4 x i16> @test_x4movf16(<4 x i16> %fallthrough, <4 x i16> %cond_val) {
 ; CHECK-LABEL: test_x4movf16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4movf16 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -154,8 +145,7 @@ define <4 x i16> @test_x4movf16(<4 x i16> %fallthrough, <4 x i16> %cond_val) {
 define <4 x i16> @test_x4movt16(<4 x i16> %fallthrough, <4 x i16> %cond_val) {
 ; CHECK-LABEL: test_x4movt16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4movt16 d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -172,8 +162,7 @@ define <4 x i16> @test_x4movt16(<4 x i16> %fallthrough, <4 x i16> %cond_val) {
 define i64 @test_slt64(i64 %a) {
 ; CHECK-LABEL: test_slt64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; slt64 d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -186,8 +175,7 @@ define i64 @test_slt64(i64 %a) {
 define i64 @test_sle64(i64 %a) {
 ; CHECK-LABEL: test_sle64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; sle64 d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -200,8 +188,7 @@ define i64 @test_sle64(i64 %a) {
 define i64 @test_movt64(i64 %a) {
 ; CHECK-LABEL: test_movt64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; movt64 d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -214,8 +201,7 @@ define i64 @test_movt64(i64 %a) {
 define i64 @test_movf64(i64 %a) {
 ; CHECK-LABEL: test_movf64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; movf64 d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -232,8 +218,7 @@ define i64 @test_movf64(i64 %a) {
 define i32 @test_movesfr2gpr() {
 ; CHECK-LABEL: test_movesfr2gpr:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; movesfr2gpr r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -246,8 +231,7 @@ define i32 @test_movesfr2gpr() {
 define void @test_movegpr2sfr(i32 %val) {
 ; CHECK-LABEL: test_movegpr2sfr:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; movegpr2sfr r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -260,8 +244,7 @@ define void @test_movegpr2sfr(i32 %val) {
 define void @test_zero_sfr() {
 ; CHECK-LABEL: test_zero_sfr:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; zero_sfr }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -283,8 +266,7 @@ define void @test_zero_sfr() {
 define <2 x i32> @test_x2cmp_gt_synthesized(<2 x i32> %a, <2 x i32> %b, <2 x i32> %src) {
 ; CHECK-LABEL: test_x2cmp_gt_synthesized:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x2slt32 d1, d0 }
 ; CHECK-NEXT:    { nop; x2movt32 d0, d2 }
@@ -299,8 +281,7 @@ define <2 x i32> @test_x2cmp_gt_synthesized(<2 x i32> %a, <2 x i32> %b, <2 x i32
 define <4 x i16> @test_x4cmp_gt_synthesized(<4 x i16> %a, <4 x i16> %b, <4 x i16> %src) {
 ; CHECK-LABEL: test_x4cmp_gt_synthesized:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; x4slt16 d1, d0 }
 ; CHECK-NEXT:    { nop; x4movt16 d0, d2 }

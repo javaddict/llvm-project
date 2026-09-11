@@ -1,0 +1,257 @@
+# D1.103: retargetJalrAddrDest rewrites only the complete typed LUI+ADDI
+# pair from getJalrAddrMaterializeChain (D1.117). An earlier same-rs LUI
+# (mid-block read) must keep its %bb. The retired walk rewrote every
+# same-rs materialize back to block start.
+#
+# Layout (d1124 complete_retarget): 180 NOP parcels in bb.1 put TBB %bb.2
+# past WIDE_BranchSImm12 (buffer=4); FBB %bb.1 stays near. Invert+retarget
+# moves the pair to %bb.2.
+#
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+--- |
+  define void @earlier_same_rs_untouched(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    ret void
+  far:
+    ret void
+  other:
+    ret void
+  }
+...
+---
+name:            earlier_same_rs_untouched
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r5, $r6, $r15
+    ; CHECK-LABEL: name: earlier_same_rs_untouched
+    ; CHECK: bb.0.entry
+    ; CHECK: $r6 = LUI %bb.3
+    ; CHECK: $r5 = ADD32
+    ; CHECK: $r6 = LUI %bb.2
+    ; CHECK: $r6 = ADDI32{{.*}}%bb.2
+    ; CHECK: BEQZ{{.*}}%bb.1
+    ; CHECK: JALR
+    $r6 = LUI %bb.3
+    $r5 = ADD32 $r6, $r6, implicit-def dead $sfr
+    $r6 = LUI %bb.1
+    $r6 = ADDI32_W $r6, %bb.1
+    BNEZ_W $r1, %bb.2
+    $r6 = JALR_W $r6, 0
+
+  bb.1.near:
+    liveins: $r5, $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...

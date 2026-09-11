@@ -8,7 +8,7 @@
 # first fail-closed diagnostic stays the ST64/SRLI64 membership one (under
 # the default-ON convergence driver, the driver itself re-expands RET
 # first and the printer fatals on the residual RET instead).
-# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues -haydn-sms2=0 \
+# RUN: not llc -mtriple=haydn-unknown-elf -start-after=livedebugvalues \
 # RUN:   -filetype=obj %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=SKIP
 # REQUIRES: haydn-registered-target
 #

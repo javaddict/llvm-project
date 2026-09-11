@@ -1,0 +1,90 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPostRASchedStrategy.cpp --check-prefix=SEED
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -misched-postra-direction=bidirectional \
+# RUN:     -debug-only=haydn-post-ra-sched %s -o /dev/null 2>&1 \
+# RUN:     | FileCheck %s --check-prefix=DBG
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=postmisched,postmisched \
+# RUN:     -verify-machineinstrs -haydn-postra-interblock \
+# RUN:     -misched-postra-direction=bidirectional %s -o - \
+# RUN:     | FileCheck %s --check-prefix=S2
+# REQUIRES: asserts, haydn-registered-target
+#
+# D1.163: initializeBotScoreBoard must self-wrap-replay a latch that also
+# has a scheduled real exit successor. AIE initializeBotScoreBoard
+# (AIEMachineScheduler.cpp:339-387) walks every PerSuccEdge, including a
+# self-successor; Haydn overlay keeps unscheduled real successors at full
+# latency (no static-depth fill) but still owes wrap occupancy. Gating wrap
+# seed on ReplaySuccs.empty() dropped wrap demand when bottom-up MBB order
+# scheduled the exit first — multi-cycle occupancy under-constraint.
+# Hexagon packetizes last and has no Bot scoreboard wrap-replay peer.
+#
+# SEED: if (SelfSucc && !llvm::is_contained(ReplaySuccs, CurrentMBB))
+# SEED: (with scheduled exit)
+# SEED: ReplaySuccs.push_back(CurrentMBB)
+#
+# Shape: bb.1 is a self-latch with a real exit bb.2. bb.2 has enough real
+# MIs that S1 records depths (not a skipped single-MI region). S2 then
+# sees bb.2 as a scheduled real exit; DBG must still wrap-replay bb.1
+# (with scheduled exit) rather than gating wrap on ReplaySuccs.empty().
+#
+# DBG: Bot scoreboard wrap-only replay bb.{{[0-9]+}} (unscheduled successor bb.{{[0-9]+}} keeps full latency)
+
+# S2-LABEL: name: latch_wrap_with_scheduled_exit
+# S2:       bb.1:
+# S2:         successors: %bb.1{{.*}}, %bb.2
+# S2:         $d1 = SIN_COS{{.*}} $r0, 2
+# S2:       bb.2:
+
+--- |
+  define void @latch_wrap_with_scheduled_exit() { ret void }
+...
+---
+name:            latch_wrap_with_scheduled_exit
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:           true
+isSSA:            false
+noVRegs:          true
+registers:        []
+liveins:
+  - { reg: '$d0', virtual-reg: '' }
+  - { reg: '$r0', virtual-reg: '' }
+  - { reg: '$r5', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 4294967295
+fixedStack:       []
+stack:            []
+constants:        []
+machineFunctionInfo: {}
+body:             |
+
+  bb.0:
+    successors: %bb.1(0x80000000)
+    liveins: $d0, $r0, $r5
+
+    $r3 = ADD32 $r0, $r0, implicit-def dead $sfr
+
+  bb.1:
+    successors: %bb.1(0x7c000000), %bb.2(0x04000000)
+    liveins: $d0, $r0, $r5
+
+    $d1 = SIN_COS $r0, 2
+    $d0 = ADD64 $d1, $d0, implicit-def dead $sfr
+    BNEZ $r5, %bb.1
+
+  bb.2:
+    liveins: $d1, $r15
+
+    ; Enough real MIs that S1 does not skip the region (single-MI skip
+    ; leaves no BUNDLEs / no recorded S1 depths). S2 then sees bb.2 as a
+    ; scheduled real exit of the latch.
+    $r6 = ADD32 $r15, $r15, implicit-def dead $sfr
+    $r7 = ADD32 $r6, $r15, implicit-def dead $sfr
+    $r8 = ADD32 $r7, $r15, implicit-def dead $sfr
+    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+...

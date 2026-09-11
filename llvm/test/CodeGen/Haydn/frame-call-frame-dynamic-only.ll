@@ -32,7 +32,9 @@ declare i32 @nine(i32, i32, i32, i32, i32, i32, i32, i32, i32)
 define i32 @reg_only_call() {
 ; CHECK-LABEL: reg_only_call:
 ; CHECK:       .cfi_def_cfa_offset 16
-; CHECK:       { nop; jal lr, seven }
+; CHECK-DAG:   lui{{.*}}seven
+; CHECK-DAG:   addi32{{.*}}seven
+; CHECK-DAG:   jalr{{.*}}lr
 ; CHECK:       { nop; jalr r0, lr, 0 }
   %r = call i32 @seven(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7)
   ret i32 %r
@@ -45,7 +47,9 @@ define i32 @stack_overflow_call() {
 ; CHECK:       .cfi_def_cfa_offset 24
 ; CHECK-NOT:   .cfi_def_cfa_offset 32
 ; CHECK:       subi32{{(_w)?}}{{.*}}sp{{.*}}, 16
-; CHECK:       { nop; jal lr, nine }
+; CHECK-DAG:   lui{{.*}}nine
+; CHECK-DAG:   addi32{{.*}}nine
+; CHECK:       { {{.*}}jalr{{.*}}lr{{.*}} }
 ; CHECK:       addi32{{(_w)?}}{{.*}}sp{{.*}}, 16
 ; CHECK:       { nop; jalr r0, lr, 0 }
   %r = call i32 @nine(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,

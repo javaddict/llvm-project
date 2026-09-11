@@ -129,14 +129,14 @@ define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) 
 ; PREPOST: bb.0.entry:
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r0
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; PREPOST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; PREPOST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
+; PREPOST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r2
-; PREPOST-NEXT:   $r2 = XOR32{{(_E[0-9]_[^ ]+)?}} killed $r3, killed $r4
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r2
+; PREPOST-NEXT:   $r2 = XOR32 killed $r3, killed $r4
 ; PREPOST-NEXT:   $r3 = OR32 killed $r5, killed $r6
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r2
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r3
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r2
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r3
 ; PREPOST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
 ; PREPOST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
 ; PREPOST-NEXT:   $r0 = JALR_W $r15, 0, implicit $r1
@@ -145,8 +145,10 @@ define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) 
 ; POST: bb.0.entry:
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r0
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit-def $r13, implicit-def $r0, implicit $r13, implicit $r0 {
+; POST-NEXT:     $r13 = frame-setup SUBI32_E2_E1_ALU1_RI20 $r13, 8
+; POST-NEXT:     $r0 = frame-setup XOR32_E2_E0_ALU0_RR $r0, $r0
+; POST-NEXT:   }
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r2, implicit killed $r1, implicit killed $r2, implicit killed $r3, implicit killed $r4 {
 ; POST-NEXT:     $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
@@ -156,10 +158,16 @@ define i32 @base_pack_three_alu(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f) 
 ; POST-NEXT:     $r3 = OR32_E3_E2_ALU2_RR killed $r5, killed $r6
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR killed $r1, killed $r2
 ; POST-NEXT:   }
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r3
-; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1, implicit killed $r3 {
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r3
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r13, implicit $r13 {
+; POST-NEXT:     $r13 = frame-destroy ADDI32_E2_E0_ALU0_RI20 $r13, 8
+; POST-NEXT:   }
 ; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
-; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit killed $r1
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+; POST-NEXT:     $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0, implicit killed $r1
+; POST-NEXT:   }
 entry:
   %x = add i32 %a, %b
   %y = xor i32 %c, %d
@@ -191,14 +199,14 @@ define i32 @base_three_write_port_floor(ptr nocapture readonly %p,
 ; PREPOST: bb.0.entry:
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; PREPOST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; PREPOST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
+; PREPOST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; PREPOST-NEXT:   $r1 = LD32 killed $r1, 0 :: (load (s32) from %ir.p)
 ; PREPOST-NEXT:   $r2 = LD32 killed $r2, 0 :: (load (s32) from %ir.q)
 ; PREPOST-NEXT:   $r3 = LD32 killed $r3, 0 :: (load (s32) from %ir.r)
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r2
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r3
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r2
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r3
 ; PREPOST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
 ; PREPOST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
 ; PREPOST-NEXT:   $r0 = JALR_W $r15, 0, implicit $r1
@@ -207,19 +215,35 @@ define i32 @base_three_write_port_floor(ptr nocapture readonly %p,
 ; POST: bb.0.entry:
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit-def $r13, implicit-def $r0, implicit $r13, implicit $r0 {
+; POST-NEXT:     $r13 = frame-setup SUBI32_E2_E1_ALU1_RI20 $r13, 8
+; POST-NEXT:     $r0 = frame-setup XOR32_E2_E0_ALU0_RR $r0, $r0
+; POST-NEXT:   }
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit-def $r2, implicit killed $r1, implicit killed $r2 :: (load (s32) from %ir.p), (load (s32) from %ir.q) {
 ; POST-NEXT:     $r1 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 killed $r1, 0 :: (load (s32) from %ir.p)
 ; POST-NEXT:     $r2 = S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r2, 0 :: (load (s32) from %ir.q)
 ; POST-NEXT:   }
-; POST-NEXT:   $r3 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 killed $r3, 0 :: (load (s32) from %ir.r)
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r3
-; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
+; POST-NEXT:   BUNDLE 0, 0 {
+; POST-NEXT:     nomerge NOP
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r3, implicit-def $r1, implicit killed $r3, implicit killed $r1, implicit killed $r2 :: (load (s32) from %ir.r) {
+; POST-NEXT:     $r3 = S_LW_WITH_IMM_E2_E1_LOAD1_RI6 killed $r3, 0 :: (load (s32) from %ir.r)
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r2
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0 {
+; POST-NEXT:     nomerge NOP
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1, implicit killed $r3 {
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r3
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r13, implicit $r13 {
+; POST-NEXT:     $r13 = frame-destroy ADDI32_E2_E0_ALU0_RI20 $r13, 8
+; POST-NEXT:   }
 ; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
-; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit killed $r1
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+; POST-NEXT:     $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0, implicit killed $r1
+; POST-NEXT:   }
                                         ptr nocapture readonly %q,
                                         ptr nocapture readonly %r) {
 entry:
@@ -253,14 +277,14 @@ define i32 @base_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; PREPOST: bb.0.entry:
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; PREPOST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; PREPOST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
+; PREPOST-NEXT:   $r13 = frame-setup SUBI32 $r13, 8
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; PREPOST-NEXT:   $r4 = XOR32 $r2, $r3
 ; PREPOST-NEXT:   $r2 = OR32 killed $r2, killed $r3
-; PREPOST-NEXT:   $r2 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r4, killed $r2
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r2
-; PREPOST-NEXT:   $r1 = ADDI32{{(_W|_E2_[^ ]+)?}} killed $r1, 6
+; PREPOST-NEXT:   $r2 = ADD32 killed $r4, killed $r2
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r2
+; PREPOST-NEXT:   $r1 = ADDI32 killed $r1, 6
 ; PREPOST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
 ; PREPOST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
 ; PREPOST-NEXT:   $r0 = JALR_W $r15, 0, implicit $r1
@@ -269,19 +293,31 @@ define i32 @base_critical_and_side(i32 %a, i32 %b, i32 %c) {
 ; POST: bb.0.entry:
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit-def $r13, implicit-def $r0, implicit $r13, implicit $r0 {
+; POST-NEXT:     $r13 = frame-setup SUBI32_E2_E1_ALU1_RI20 $r13, 8
+; POST-NEXT:     $r0 = frame-setup XOR32_E2_E0_ALU0_RR $r0, $r0
+; POST-NEXT:   }
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
 ; POST-NEXT:   BUNDLE 1, 0, implicit-def $r4, implicit-def $r2, implicit killed $r2, implicit killed $r3 {
 ; POST-NEXT:     $r4 = XOR32_E3_E2_ALU2_RR $r2, $r3
 ; POST-NEXT:     $r2 = OR32_E3_E1_ALU1_RR killed $r2, killed $r3
 ; POST-NEXT:   }
-; POST-NEXT:   $r2 = ADD32_E3_E2_ALU2_RR killed $r4, killed $r2
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r2
-; POST-NEXT:   $r1 = ADDI32_E2_E1_ALU1_RI20 killed $r1, 6
-; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 8
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r2, implicit killed $r4, implicit killed $r2 {
+; POST-NEXT:     $r2 = ADD32_E2_E0_ALU0_RR killed $r4, killed $r2
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1, implicit killed $r2 {
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r2
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1 {
+; POST-NEXT:     $r1 = ADDI32_E2_E1_ALU1_RI20 killed $r1, 6
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r13, implicit $r13 {
+; POST-NEXT:     $r13 = frame-destroy ADDI32_E2_E0_ALU0_RI20 $r13, 8
+; POST-NEXT:   }
 ; POST-NEXT:   frame-destroy CFI_INSTRUCTION def_cfa $r13, 0
-; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit killed $r1
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+; POST-NEXT:     $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0, implicit killed $r1
+; POST-NEXT:   }
 entry:
   %a1 = add i32 %a, 1
   %a2 = add i32 %a1, 2
@@ -318,29 +354,14 @@ exit:
   ret i32 %r
 }
 ; POST-LABEL: name: base_dual_load_mac_stream
-; GR2.1 Kind-A restamp: ResMII 3->2 accepts a two-stage peel; bb.0 guards
-; n>=2 directly, bb.1.loop is the guarded prologue, bb.2.loop the kernel
-; (soft path - no SET_HWLOOP preheader), and bb.3 drains the tail MULL+ADD.
+; Wave 6 GR1.4: formation SET-sink + Header splice keep a hwloop (SET +
+; PseudoLoopEnd). Two-stage peel remains; kernel is ZOL not a BNEZ back-edge.
 ; POST: bb.0.entry:
-; POST-NEXT:   successors: {{.*}}
-; POST-NEXT:   liveins: $r1, $r2, $r3, $r0
-; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 8
-; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 8
-; POST-NEXT:   $r4 = MOVE32{{(_E[0-9]_[^ ]+)?}} killed $r1
-; POST-NEXT:   $r1 = ADDI32{{(_E[0-9]_[^ ]+)?}} $r0, 0
-; POST-NEXT:   $r5 = SLT32{{(_E[0-9]_[^ ]+)?}} $r1, $r3
-; POST-NEXT:   $r5 = XORI32{{(_E[0-9]_[^ ]+)?}} killed $r5, 1
-; POST-NEXT:   BNEZ_W killed $r5, %bb.{{[0-9]+}}
-; Kernel (distinctive shape): {MULL + LD} co-issued in one BUNDLE.
-; POST:       $r{{[0-9]+}} = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[0-9]+}}, killed $r{{[0-9]+}}
-; POST:        $r{{[0-9]+}} = S_LW_WITH_IMM{{(_E[0-9]_[^ ]+)?}} $r{{[0-9]+}}, 0
-; POST:       BNEZ_W killed $r{{[0-9]+}}, %bb.{{[0-9]+}}
-; Epilog drain (after the kernel): tail MULL + acc ADD scalar, then return.
-; POST:       $r{{[0-9]+}} = MULL{{(_E[0-9]_[^ ]+)?}} killed $r{{[0-9]+}}, killed $r{{[0-9]+}}
-; POST:       $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r{{[0-9]+}}
-; POST:       $r0 = JALR_W $r15, 0, implicit killed $r1
+; POST: SET_HWLOOP
+; POST: PseudoLoopEnd
+; POST: $r{{[0-9]+}} = MULL{{(_E[0-9]_[^ ]+)?}}
+; POST: $r1 = ADD32{{(_E[0-9]_[^ ]+)?}}
+; POST: JALR
 
 ; Mid-pressure live-across-call: dual-run spill/reload counters must stay
 ; silent (zero) on this corpus — ranking residual must not invent spills.
@@ -355,7 +376,8 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; PREGREEDY-NEXT:   [[ADD32_:%[0-9]+]]:gpr32 = ADD32 [[COPY]], [[COPY1]]
 ; PREGREEDY-NEXT:   [[ADD32_1:%[0-9]+]]:gpr32 = ADD32 [[ADD32_]], [[COPY2]]
 ; PREGREEDY-NEXT:   ADJCALLSTACKDOWN 0, 0, implicit-def $r13, implicit $r13
-; PREGREEDY-NEXT:   $r15 = JAL_W @get_value, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
+; PREGREEDY-NEXT:   [[LOAD_ADDR:%[0-9]+]]:gpr32 = LOAD_ADDR @get_value
+; PREGREEDY-NEXT:   $r15 = JALR_CALL [[LOAD_ADDR]], 0, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
 ; PREGREEDY-NEXT:   ADJCALLSTACKUP 0, 0, implicit-def $r13, implicit $r13
 ; PREGREEDY-NEXT:   [[COPY3:%[0-9]+]]:gpr32 = COPY $r1
 ; PREGREEDY-NEXT:   [[ADD32_2:%[0-9]+]]:gpr32 = ADD32 [[ADD32_1]], [[COPY3]]
@@ -369,14 +391,14 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; PREPOST: bb.0.entry:
 ; PREPOST-NEXT:   liveins: $r1, $r2, $r3, $r8, $r9, $r10, $r11, $r0
 ; PREPOST-NEXT: {{  $}}
-; PREPOST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; PREPOST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 32
+; PREPOST-NEXT:   $r0 = frame-setup XOR32 $r0, $r0
+; PREPOST-NEXT:   $r13 = frame-setup SUBI32 $r13, 32
 ; PREPOST-NEXT:   $r4 = frame-setup ADDI32_W $r13, 12
-; PREPOST-NEXT:   frame-setup ST32 $r15, $r4, 0
-; PREPOST-NEXT:   frame-setup ST32 $r11, $r4, 1
-; PREPOST-NEXT:   frame-setup ST32 $r10, $r4, 2
-; PREPOST-NEXT:   frame-setup ST32 $r9, $r4, 3
-; PREPOST-NEXT:   frame-setup ST32 $r8, $r4, 4
+; PREPOST-NEXT:   frame-setup ST32 $r15, $r4, 0 :: (store (s32) into %stack.5)
+; PREPOST-NEXT:   frame-setup ST32 $r11, $r4, 1 :: (store (s32) into %stack.4)
+; PREPOST-NEXT:   frame-setup ST32 $r10, $r4, 2 :: (store (s32) into %stack.3)
+; PREPOST-NEXT:   frame-setup ST32 $r9, $r4, 3 :: (store (s32) into %stack.2)
+; PREPOST-NEXT:   frame-setup ST32 $r8, $r4, 4 :: (store (s32) into %stack.1)
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 32
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION offset $r8, -4
 ; PREPOST-NEXT:   frame-setup CFI_INSTRUCTION offset $r9, -8
@@ -386,14 +408,16 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; PREPOST-NEXT:   $r8 = MOVE32 $r1
 ; PREPOST-NEXT:   $r9 = MOVE32 $r2
 ; PREPOST-NEXT:   $r10 = MOVE32 $r3
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} $r8, $r9
-; PREPOST-NEXT:   $r11 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, $r10
-; PREPOST-NEXT:   $r15 = JAL_W @get_value, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
+; PREPOST-NEXT:   $r1 = ADD32 $r8, $r9
+; PREPOST-NEXT:   $r11 = ADD32 killed $r1, $r10
+; PREPOST-NEXT:   $r1 = LUI @get_value
+; PREPOST-NEXT:   $r1 = ADDI32_W $r1, @get_value
+; PREPOST-NEXT:   $r15 = JALR_CALL killed $r1, 0, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
 ; PREPOST-NEXT:   $r0 = XOR32 $r0, $r0
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r11, killed $r1
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r8
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r9
-; PREPOST-NEXT:   $r1 = ADD32{{(_E[0-9]_[^ ]+)?}} killed $r1, killed $r10
+; PREPOST-NEXT:   $r1 = ADD32 killed $r11, killed $r1
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r8
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r9
+; PREPOST-NEXT:   $r1 = ADD32 killed $r1, killed $r10
 ; PREPOST-NEXT:   $r0 = frame-destroy XOR32 $r0, $r0
 ; PREPOST-NEXT:   $r15 = frame-destroy LD32 $r13, 3
 ; PREPOST-NEXT:   $r11 = frame-destroy LD32 $r13, 4
@@ -407,14 +431,28 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; POST: bb.0.entry:
 ; POST-NEXT:   liveins: $r1, $r2, $r3, $r8, $r9, $r10, $r11, $r0
 ; POST-NEXT: {{  $}}
-; POST-NEXT:   $r0 = frame-setup XOR32{{(_E[0-9]_[^ ]+)?}} $r0, $r0
-; POST-NEXT:   $r13 = frame-setup SUBI32{{(_E[0-9]_[^ ]+)?}} $r13, 32
-; POST-NEXT:   $r4 = frame-setup ADDI32_W $r13, 12
-; POST-NEXT:   frame-setup ST32 $r15, $r4, 0
-; POST-NEXT:   frame-setup ST32 killed $r11, $r4, 1
-; POST-NEXT:   frame-setup ST32 killed $r10, $r4, 2
-; POST-NEXT:   frame-setup ST32 killed $r9, $r4, 3
-; POST-NEXT:   frame-setup ST32 killed $r8, killed $r4, 4
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit-def $r13, implicit-def $r0, implicit $r13, implicit $r0 {
+; POST-NEXT:     $r13 = frame-setup SUBI32_E2_E1_ALU1_RI20 $r13, 32
+; POST-NEXT:     $r0 = frame-setup XOR32_E2_E0_ALU0_RR $r0, $r0
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit-def $r4, implicit $r13 {
+; POST-NEXT:     $r4 = frame-setup ADDI32_E2_E0_ALU0_RI20 $r13, 12
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit $r15, implicit $r4 :: (store (s32) into %stack.5) {
+; POST-NEXT:     frame-setup S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r15, $r4, 0 :: (store (s32) into %stack.5)
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit killed $r11, implicit $r4 :: (store (s32) into %stack.4) {
+; POST-NEXT:     frame-setup S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r11, $r4, 1 :: (store (s32) into %stack.4)
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit killed $r10, implicit $r4 :: (store (s32) into %stack.3) {
+; POST-NEXT:     frame-setup S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r10, $r4, 2 :: (store (s32) into %stack.3)
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit killed $r9, implicit $r4 :: (store (s32) into %stack.2) {
+; POST-NEXT:     frame-setup S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r9, $r4, 3 :: (store (s32) into %stack.2)
+; POST-NEXT:   }
+; POST-NEXT:   frame-setup BUNDLE 0, 0, implicit killed $r8, implicit killed $r4 :: (store (s32) into %stack.1) {
+; POST-NEXT:     frame-setup S_SW_WITH_IMM_E2_E0_LOADSTORE0_RI6 killed $r8, killed $r4, 4 :: (store (s32) into %stack.1)
+; POST-NEXT:   }
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION def_cfa_offset 32
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION offset $r8, -4
 ; POST-NEXT:   frame-setup CFI_INSTRUCTION offset $r9, -8
@@ -429,21 +467,47 @@ define i32 @base_mid_pressure_call(i32 %a, i32 %b, i32 %c) nounwind {
 ; POST-NEXT:     $r10 = MOVE32_E3_E2_ALU2_R killed $r3
 ; POST-NEXT:     $r1 = ADD32_E3_E1_ALU1_RR $r8, $r9
 ; POST-NEXT:   }
-; POST-NEXT:   $r11 = ADD32_E3_E2_ALU2_RR killed $r1, $r10
-; POST-NEXT:   $r15 = JAL_W @get_value, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r11, killed $r1
-; POST-NEXT:   $r0 = XOR32_E3_E1_ALU1_RR $r0, $r0
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r8
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r9
-; POST-NEXT:   $r1 = ADD32_E3_E2_ALU2_RR killed $r1, killed $r10
-; POST-NEXT:   $r0 = frame-destroy XOR32 $r0, $r0
-; POST-NEXT:   $r15 = frame-destroy LD32 $r13, 3
-; POST-NEXT:   $r11 = frame-destroy LD32 $r13, 4
-; POST-NEXT:   $r10 = frame-destroy LD32 $r13, 5
-; POST-NEXT:   $r9 = frame-destroy LD32 $r13, 6
-; POST-NEXT:   $r8 = frame-destroy LD32 $r13, 7
-; POST-NEXT:   $r13 = frame-destroy ADDI32_W $r13, 32
-; POST-NEXT:   $r0 = JALR_W $r15, 0, implicit killed $r1
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r11, implicit killed $r1, implicit $r10 {
+; POST-NEXT:     $r11 = ADD32_E2_E0_ALU0_RR killed $r1, $r10
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1 {
+; POST-NEXT:     $r1 = LUI_E2_E0_ALU0_I12 @get_value
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1 {
+; POST-NEXT:     $r1 = ADDI32_E2_E0_ALU0_RI20 killed $r1, @get_value
+; POST-NEXT:   }
+; POST-NEXT:   $r15 = JALR_CALL killed $r1, 0, csr_haydn, implicit-def $r1, implicit-def dead $r2, implicit-def dead $r3, implicit-def dead $r4, implicit-def dead $r5, implicit-def dead $r6, implicit-def dead $r7, implicit-def dead $r12, implicit-def dead $d0, implicit-def dead $d1, implicit-def dead $d2, implicit-def dead $d3, implicit-def dead $d4, implicit-def dead $d5, implicit-def dead $d6, implicit-def dead $d7, implicit-def $r1
+; POST-NEXT:   BUNDLE 1, 0, implicit-def $r1, implicit-def $r0, implicit killed $r11, implicit killed $r1, implicit $r0 {
+; POST-NEXT:     $r1 = ADD32_E3_E2_ALU2_RR killed $r11, killed $r1
+; POST-NEXT:     $r0 = XOR32_E3_E1_ALU1_RR $r0, $r0
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1, implicit killed $r8 {
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r8
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r1, implicit killed $r1, implicit killed $r9 {
+; POST-NEXT:     $r1 = ADD32_E2_E0_ALU0_RR killed $r1, killed $r9
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 1, 0, implicit-def $r0, implicit-def $r1, implicit $r0, implicit killed $r1, implicit killed $r10 {
+; POST-NEXT:     $r0 = frame-destroy XOR32_E3_E1_ALU1_RR $r0, $r0
+; POST-NEXT:     $r1 = ADD32_E3_E0_ALU2_RR killed $r1, killed $r10
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r15, implicit-def $r11, implicit $r13 {
+; POST-NEXT:     $r15 = frame-destroy S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r13, 3
+; POST-NEXT:     $r11 = frame-destroy S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r13, 4
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r10, implicit-def $r9, implicit $r13 {
+; POST-NEXT:     $r10 = frame-destroy S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r13, 5
+; POST-NEXT:     $r9 = frame-destroy S_LW_WITH_IMM_E2_E0_LOADSTORE0_RI6 $r13, 6
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r8, implicit $r13 {
+; POST-NEXT:     $r8 = frame-destroy S_LW_WITH_IMM_E2_E1_LOAD1_RI6 $r13, 7
+; POST-NEXT:   }
+; POST-NEXT:   frame-destroy BUNDLE 0, 0, implicit-def $r13, implicit $r13 {
+; POST-NEXT:     $r13 = frame-destroy ADDI32_E2_E0_ALU0_RI20 $r13, 32
+; POST-NEXT:   }
+; POST-NEXT:   BUNDLE 0, 0, implicit-def $r0, implicit $r15 {
+; POST-NEXT:     $r0 = JALR_E2_E0_ALU0_RI12 $r15, 0, implicit killed $r1
+; POST-NEXT:   }
 entry:
   %t0 = add i32 %a, %b
   %t1 = add i32 %t0, %c

@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "HaydnInterBlockScheduling.h"
+#include "HaydnInstrInfo.h"
 #include "HaydnResourceRestrictionClasses.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -26,6 +27,7 @@
 #include "llvm/CodeGen/TargetSchedule.h"
 #include "llvm/MC/MCInstrItineraries.h"
 #include <functional>
+#include <optional>
 
 using namespace llvm;
 
@@ -104,21 +106,22 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
   // consumer.
   auto MIFor = [&](const SUnit &SU) -> MachineInstr & { return *SU.getInstr(); };
 
-  // Published Data_Latency for a cross-boundary producer. getInstrLatency
-  // answers the STAGE latency (every product InstrStage is single-cycle);
-  // the memory Data_Latency=2 scaffold lives in OperandCycles (the same
-  // source MaxLatencyFinder::maxOperandCycles reads). Guard on the
+  // Dest writeback Data_Latency for a cross-boundary register Data edge.
+  // getInstrLatency is STAGE latency (every product InstrStage is
+  // single-cycle). Dest writeback lives in OperandCycles (loads [2], ALU
+  // [1], Slot0_LS_WbLat writeback [1]). Memory-edge spacing is
+  // EdgeMemoryLatency / getMemoryLatency — not this number. Golden store
+  // Data_Latency is 0 (no dest); using max OperandCycles as a store→store
+  // price under-pads when that vector is [1] or empty. Guard on the
   // itinerary itself, NOT hasInstrSchedModel: Haydn publishes
-  // ProcessorItineraries with CompleteModel=0, so the MachineScheduler
-  // level model is absent and the hasInstrSchedModel gate is always false
-  // here. Clamped so the conservative SIN_COS/ARCTAN OperandCycles-17
-  // scaffold cannot size the edge either (clampPublishedDataLatency law;
-  // those windows are HR-reserved instead).
+  // ProcessorItineraries with CompleteModel=0. Clamped so the conservative
+  // SIN_COS/ARCTAN OperandCycles-17 scaffold cannot size the edge
+  // (clampPublishedDataLatency; those windows are HR-reserved).
   auto EdgeDataLatency = [&](const MachineInstr &MI) -> unsigned {
     const InstrItineraryData *Itin =
         TSM ? TSM->getInstrItineraries() : nullptr;
     if (!Itin || Itin->isEmpty())
-      return MI.mayLoad() || MI.mayStore() ? 2 : 1;
+      return MI.mayLoad() ? 2 : 1;
     const unsigned SchedClass = MI.getDesc().getSchedClass();
     unsigned Lat = 0;
     for (unsigned I = 0;; ++I) {
@@ -129,6 +132,33 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
     }
     return std::max(
         1u, haydn::restriction::clampPublishedDataLatency(std::max(Lat, 1u)));
+  };
+
+  // Memory-edge latency is the published MemoryCycle pair
+  // (getMemoryLatency = LastSrc - FirstDst + 1). AIE peer:
+  // MemInstrItinData First/Last (AIETarget.td:39-47),
+  // getMemoryLatency (AIEBaseInstrInfo.cpp:1038-1049), MemoryEdges
+  // mutation (AIEBaseSubtarget.cpp:805-844). Intra-block Haydn
+  // MemoryEdges already uses this API (HaydnSchedMutations.cpp).
+  // Slot0_LS Last=1, First=0 → last-first+1=2. Do not copy AIE II_ST
+  // MemoryCycles[5]; Haydn last is the LoadLatency=2 scaffold.
+  auto EdgeMemoryLatency = [&](const MachineInstr &Src,
+                               const MachineInstr &Dst) -> unsigned {
+    const auto *HII = static_cast<const HaydnInstrInfo *>(TII);
+    if (HII) {
+      const unsigned SrcSC = Src.getDesc().getSchedClass();
+      const unsigned DstSC = Dst.getDesc().getSchedClass();
+      if (auto MemLat = HII->getMemoryLatency(SrcSC, DstSC))
+        return std::max(1u, static_cast<unsigned>(*MemLat));
+      // Dest class is not table-driven (calls). Keep the writer's
+      // conservative window: AIE getConservativeMemoryLatency
+      // (AIEBaseInstrInfo.cpp:1026-1034).
+      if (auto Last = HII->getLastMemoryCycle(SrcSC)) {
+        int WorstDst = HII->getMinFirstMemoryCycle();
+        return std::max(1u, static_cast<unsigned>(*Last - WorstDst + 1));
+      }
+    }
+    return Src.mayLoad() || Src.mayStore() ? 2 : 1;
   };
 
   // Register dependences, pre -> post: for each post node's operands,
@@ -252,11 +282,11 @@ void HaydnInterBlockEdges::buildCrossBoundaryEdges(AAResults *AA,
       // classes (MachineInstr.cpp:1531-1577); null AA ⇒ conservative true.
       if (AA && !MIFor(*PreSU).mayAlias(AA, Post, /*UseTBAA=*/false))
         continue;
-      // Memory edges carry the writer's published Data_Latency (memory
-      // scaffold OperandCycles=2). The 3-arg SDep constructor binds a
-      // REGISTER, not a latency (Data hardcodes Latency=1); stamp it.
+      // Memory edges carry getMemoryLatency, not dest OperandCycles.
+      // The 3-arg SDep constructor binds a REGISTER, not a latency
+      // (Data hardcodes Latency=1); stamp the MemoryCycle price.
       SDep MemEdge(const_cast<SUnit *>(PreSU), SDep::Data, /*Reg=*/0);
-      MemEdge.setLatency(EdgeDataLatency(MIFor(*PreSU)));
+      MemEdge.setLatency(EdgeMemoryLatency(MIFor(*PreSU), Post));
       const_cast<SUnit &>(PostSU).addPred(MemEdge);
     }
   }

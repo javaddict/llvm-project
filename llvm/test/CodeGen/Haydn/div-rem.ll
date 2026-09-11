@@ -9,14 +9,18 @@
 
 define i32 @sdiv_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: sdiv_i32:
-; CHECK: jal{{(\.s[012])?}} lr, __divsi3
+; CHECK: lui{{.*}}__divsi3
+; CHECK: addi32{{.*}}__divsi3
+; CHECK: jalr{{.*}}lr
   %r = sdiv i32 %a, %b
   ret i32 %r
 }
 
 define i32 @udiv_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: udiv_i32:
-; CHECK: jal{{(\.s[012])?}} lr, __udivsi3
+; CHECK: lui{{.*}}__udivsi3
+; CHECK: addi32{{.*}}__udivsi3
+; CHECK: jalr{{.*}}lr
   %r = udiv i32 %a, %b
   ret i32 %r
 }
@@ -24,14 +28,18 @@ define i32 @udiv_i32(i32 %a, i32 %b) {
 ;i32 remainder
 define i32 @srem_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: srem_i32:
-; CHECK: jal{{(\.s[012])?}} lr, __modsi3
+; CHECK: lui{{.*}}__modsi3
+; CHECK: addi32{{.*}}__modsi3
+; CHECK: jalr{{.*}}lr
   %r = srem i32 %a, %b
   ret i32 %r
 }
 
 define i32 @urem_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: urem_i32:
-; CHECK: jal{{(\.s[012])?}} lr, __umodsi3
+; CHECK: lui{{.*}}__umodsi3
+; CHECK: addi32{{.*}}__umodsi3
+; CHECK: jalr{{.*}}lr
   %r = urem i32 %a, %b
   ret i32 %r
 }
@@ -39,14 +47,18 @@ define i32 @urem_i32(i32 %a, i32 %b) {
 ;i64 division (should also lower to libcalls)
 define i64 @sdiv_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: sdiv_i64:
-; CHECK: jal{{(\.s[012])?}} lr, __divdi3
+; CHECK: lui{{.*}}__divdi3
+; CHECK: addi32{{.*}}__divdi3
+; CHECK: jalr{{.*}}lr
   %r = sdiv i64 %a, %b
   ret i64 %r
 }
 
 define i64 @udiv_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: udiv_i64:
-; CHECK: jal{{(\.s[012])?}} lr, __udivdi3
+; CHECK: lui{{.*}}__udivdi3
+; CHECK: addi32{{.*}}__udivdi3
+; CHECK: jalr{{.*}}lr
   %r = udiv i64 %a, %b
   ret i64 %r
 }
@@ -54,14 +66,18 @@ define i64 @udiv_i64(i64 %a, i64 %b) {
 ;i64 remainder
 define i64 @srem_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: srem_i64:
-; CHECK: jal{{(\.s[012])?}} lr, __moddi3
+; CHECK: lui{{.*}}__moddi3
+; CHECK: addi32{{.*}}__moddi3
+; CHECK: jalr{{.*}}lr
   %r = srem i64 %a, %b
   ret i64 %r
 }
 
 define i64 @urem_i64(i64 %a, i64 %b) {
 ; CHECK-LABEL: urem_i64:
-; CHECK: jal{{(\.s[012])?}} lr, __umoddi3
+; CHECK: lui{{.*}}__umoddi3
+; CHECK: addi32{{.*}}__umoddi3
+; CHECK: jalr{{.*}}lr
   %r = urem i64 %a, %b
   ret i64 %r
 }
@@ -69,8 +85,12 @@ define i64 @urem_i64(i64 %a, i64 %b) {
 ;Combined div and mod
 define i32 @divmod_i32(i32 %a, i32 %b) {
 ; CHECK-LABEL: divmod_i32:
-; CHECK: jal{{(\.s[012])?}} lr, __divsi3
-; CHECK: jal{{(\.s[012])?}} lr, __modsi3
+; CHECK: lui{{.*}}__divsi3
+; CHECK: addi32{{.*}}__divsi3
+; CHECK: jalr{{.*}}lr
+; CHECK: lui{{.*}}__modsi3
+; CHECK: addi32{{.*}}__modsi3
+; CHECK: jalr{{.*}}lr
   %div = sdiv i32 %a, %b
   %rem = srem i32 %a, %b
   %r = add i32 %div, %rem

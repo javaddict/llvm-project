@@ -1,68 +1,61 @@
 //===- HaydnMachineAlignment.h ----------------------------------*- C++ -*-===//
 //
-// Part of the LLVM Project, under the Apache License, v2.0 with LLVM
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM
 // Exceptions. See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
-// Port of AIEMachineAlignment (AIEMachineAlignment.cpp:370-424; seat
-// AIE2TargetMachine.cpp:247 after createAIEFinalizeBundle).
+// Internal MBB/ZOL alignment as complete generated packets (GR1.9 / GR1.4).
+// Library, not a MachineFunctionPass. Stamped LBN calls padInternalMBBAlignment
+// with ClearMetadata=false at each closer wave and ClearMetadata=true after
+// the loop so EncodedBytes pads and MBB metadata clear finish in
+// addPreEmitPass.
 //
-// W70.2 law (GOALS / contracts/pipeline.md "function-alignment is ruled
-// post-Kind-B"): function-entry alignment is written here, on committed
-// Format E parcels, not grown by the AsmPrinter label. The pass pads the
-// function's committed byte extent to a multiple of the required entry
-// alignment by inserting legal generated idle-parcel BUNDLEs at the entry
-// block. Prefix budgets (BranchRelaxation, HWLoop Off1/Off2 distance walks
-// via getInstSizeInBytes) charge the same pad because the parcels are real
-// committed BUNDLEs.
+// Function-entry alignment is pre-label MC fill (W70.2r):
+// HasFunctionAlignment=true → AsmPrinter::emitAlignment →
+// HaydnMCELFStreamer::emitCodeAlignment. That fill sits outside every
+// function's committed stream. Do not reintroduce a post-label function
+// extent pad here. llvm.loop.align / internal MBB alignment raise
+// MF.ensureAlignment so that pre-label fill is an absolute-address grid.
 //
-// AIE pads AND elongates (variable 2^n bundle formats). Haydn's product
-// frontier is a single EncodedBytes parcel for both rows, and golden admits
-// no underfill/top-pad, so elongation does not exist: pad-only is the whole
-// mechanism. Each idle parcel is the full-slot architectural NOP row
-// (E96TwoEntry + AllEntriesReal with a pad-NOP child) — the same committed
-// idle object LatencyStalls+Finalize produce, not a new NOP form.
-//
-// Pipeline: addPostBBSections, immediately after the closure
-// Finalize+Verify (i.e. after the first Finalize AND after the S2
-// closure), before the addPreEmitPass2 freeze verifier. Runs at every opt
-// level including optnone — alignment is layout, not optimization. No
-// skipFunction.
+// Peer: AIEMachineAlignment.cpp:370-424 (padRegions after Finalize).
+// Overlay vs AIE elongation (AIEMachineAlignment.cpp:53-208): EncodedBytes
+// is a fixed 12-byte parcel, so padding is insertNoop + exact-late singleton
+// wrap (HexagonInstrInfo.cpp:1667-1671 / HaydnLatencyStalls stall parcels),
+// never format growth. Consumed MBB alignment metadata is cleared so
+// generic AsmPrinter::emitBasicBlockStart cannot add bytes after freeze.
 //
 //===----------------------------------------------------------------------===//
 
 #ifndef LLVM_LIB_TARGET_HAYDN_HAYDNMACHINEALIGNMENT_H
 #define LLVM_LIB_TARGET_HAYDN_HAYDNMACHINEALIGNMENT_H
 
-#include "llvm/CodeGen/MachineFunctionPass.h"
-
 namespace llvm {
 
-class HaydnMachineAlignment : public MachineFunctionPass {
-public:
-  static char ID;
+class HaydnInstrInfo;
+class MachineFunction;
 
-  HaydnMachineAlignment();
+namespace haydn {
 
-  StringRef getPassName() const override {
-    return "Haydn Machine Alignment";
-  }
+/// Insert complete EncodedBytes idle packets so each MBB with alignment A
+/// starts at 0 mod lcm(A, EncodedBytes) from function start. Raises
+/// MF.ensureAlignment(A) per site with A > 1 so W70.2r pre-label fill +
+/// HaydnAsmPrinter::ensureMinAlignment honor llvm.loop.align as an absolute
+/// address. Does not change Min/Pref Align(4).
+///
+/// \p ClearMetadata: stamped closer waves pass false at the start of each
+/// wave (alignment, then inner-first HWLoop, then branches) so later range
+/// growth can re-pad. Stamped LBN passes true after the closer loop so
+/// freeze cannot emit residual emitCodeAlignment.
+bool padInternalMBBAlignment(MachineFunction &MF, const HaydnInstrInfo &TII,
+                             bool ClearMetadata);
 
-  void getAnalysisUsage(AnalysisUsage &AU) const override;
+} // namespace haydn
 
-  MachineFunctionProperties getRequiredProperties() const override {
-    // Post-RA committed-bundle state (same tolerance as Finalize).
-    return MachineFunctionProperties();
-  }
-
-  bool runOnMachineFunction(MachineFunction &MF) override;
-};
-
-FunctionPass *createHaydnMachineAlignmentPass();
-
-void initializeHaydnMachineAlignmentPass(PassRegistry &);
+/// Convenience wrapper that looks up TII. Stamped LBN calls this with
+/// ClearMetadata=false at the start of each closer wave and true after.
+bool padHaydnInternalAlignment(MachineFunction &MF, bool ClearMetadata);
 
 } // namespace llvm
 

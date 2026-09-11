@@ -36,7 +36,7 @@ SCHEMA_NAME = "haydn-ci-verdict-v1"
 OVERALL_PASS = "PASS"
 OVERALL_FAIL = "FAIL"
 STALE_FULL_GATE_COMMIT = "28700d57"
-REBIND_ANCESTOR = "98890c529be9"
+REBIND_ANCESTOR = "4b6677f8bf87"
 # CI overall is a phase-gate label. It is never semantic QUALIFY.
 # CoreMark/Dhrystone TARGET_BUILD_FAILED (status -15) is a consumer-C
 # residual, not a QUALIFY bit.
@@ -260,7 +260,7 @@ def _self_test() -> int:
     )
     assert validate_verdict(stale)
     rebound = fixture_verdict(
-        green, "98890c529be92fa35b3a1bc39270bf919eee395e", "2026-08-13T00:00:00Z"
+        green, "4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f", "2026-08-13T00:00:00Z"
     )
     rerr = validate_verdict(rebound)
     assert not rerr, rerr

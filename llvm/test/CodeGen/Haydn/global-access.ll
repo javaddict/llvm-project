@@ -20,8 +20,7 @@ declare void @use_i32(i32)
 define i32 @load_global() nounwind {
 ; CHECK-LABEL: load_global:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, g_int }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
@@ -35,8 +34,7 @@ define i32 @load_global() nounwind {
 define void @store_global(i32 %v) nounwind {
 ; CHECK-LABEL: store_global:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r2, g_int }
 ; CHECK-NEXT:    { nop; addi32 r2, r2, g_int }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
@@ -50,8 +48,7 @@ define void @store_global(i32 %v) nounwind {
 define ptr @gep_global() nounwind {
 ; CHECK-LABEL: gep_global:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, g_int }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 20 }
@@ -65,15 +62,14 @@ define ptr @gep_global() nounwind {
 define i64 @load_global_i64() nounwind {
 ; CHECK-LABEL: load_global_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    { nop; lui r1, g_long }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, g_long }
-; CHECK-NEXT:    { ld32 r1, r1, 0; addi32 r2, r1, 4 }
+; CHECK-NEXT:    { nop; addi32 r2, r1, 4 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { st32 r1, sp, 2; ld32 r2, r2, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
@@ -89,8 +85,7 @@ define i64 @load_global_i64() nounwind {
 define void @store_global_i64(i64 %v) nounwind {
 ; CHECK-LABEL: store_global_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, g_long }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, g_long }
 ; CHECK-NEXT:    { d_sw_l_with_imm d0, r1, 0; addi32 r2, r1, 4 }
@@ -105,8 +100,7 @@ define void @store_global_i64(i64 %v) nounwind {
 define void @rmw_global() nounwind {
 ; CHECK-LABEL: rmw_global:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, g_int }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, g_int }
 ; CHECK-NEXT:    { nop; ld32 r2, r1, 0 }
@@ -125,14 +119,13 @@ define void @rmw_global() nounwind {
 define i32 @two_globals() nounwind {
 ; CHECK-LABEL: two_globals:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, g_int }
 ; CHECK-NEXT:    { nop; lui r2, g_int2 }
 ; CHECK-NEXT:    { addi32 r2, r2, g_int2; addi32 r1, r1, g_int }
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %v1 = load i32, ptr @g_int
@@ -147,8 +140,7 @@ define i32 @two_globals() nounwind {
 define i32 @load_local_const() nounwind {
 ; CHECK-LABEL: load_local_const:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, local_const }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, local_const }
 ; CHECK-NEXT:    { nop; ld32 r1, r1, 0 }
@@ -164,8 +156,7 @@ define i32 @load_local_const() nounwind {
 define i32 @load_global_array(i32 %idx) nounwind {
 ; CHECK-LABEL: load_global_array:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r2, g_array }
 ; CHECK-NEXT:    { slli32 r1, r1, 2; addi32 r2, r2, g_array }
 ; CHECK-NEXT:    { nop; add32 r1, r2, r1 }

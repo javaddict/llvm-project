@@ -30,7 +30,7 @@
 ; ASM: mul64.ulul
 ; ASM: mul64.ulul
 ; ASM: mul64.ulul
-; ASM-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; ASM-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 
 define i64 @mul_splat_const_high_bits(i64 %x) {
   %y = or i64 %x, 4294967296

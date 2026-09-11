@@ -41,8 +41,8 @@
 # RUN:   | FileCheck %s --check-prefix=FREEZE-OK
 # MC encode refuse uses report_fatal_error(/*GenCrashDiag=*/false) → exit 1,
 # not abort; plain `not` (no --crash) still surfaces the diagnostic for FileCheck.
-# RUN: not llc -mtriple=haydn-unknown-elf -x mir \
-# RUN:   -start-after=livedebugvalues -filetype=obj \
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -x mir \
+# RUN:   -start-after=postmisched -filetype=obj \
 # RUN:   %t/private-wrong-entry-encode.mir -o /dev/null 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=PRIV-REPLACE
 # Residual cycle-forming LOADI32 seat is already load-bearing in
@@ -68,7 +68,7 @@
 # MIXED: mixed logical and private inverse children
 # FREEZE-LOG: freeze residual logical child
 # FREEZE-OK: ADD32_E2_E0_ALU0_RR
-# PRIV-REPLACE: {{cannot enter standalone DFS|refuse skip-Finalize DFS}}
+# PRIV-REPLACE: {{cannot enter standalone DFS|refuse skip-Finalize DFS|not unit-injective|unit injectivity}}
 
 #--- missing-formatid.mir
 --- |

@@ -1,11 +1,12 @@
 Haydn source / golden authority anchor inventory (G-SOURCE-ALIGNMENT / T1-ALIGN)
 ==========================================================================================
 Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual is docs/hygiene only;
-  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 98890c529be9;
+  T1-ALIGN AR0 phase-firewall inventory closed; T7-ALIGN W55 Inputs closed at 4b6677f8bf87;
   T7-ALIGN residual hygiene: R15 leftover (orphan gaps/ + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed;
   W54 D1000 and W55 nine-file stay LANDED; P13 Wave 1 unblocked (R13 LANDED);
   Goal 8 folds G-HWLOOP-POLICY/G-MULTISTAGE-POLICY/G-MULTISTAGE-HWLOOP:
-  flip sites stay false until independent T2+T4 QUALIFY then combined matrix;
+  D1.45 restamp: hwloop product default ON; SMS is generic pre-RA MachinePipeliner
+  (post-RA host + flags DELETED); independent T2+T4 QUALIFY then combined matrix GREEN (G004);
   T8-EVID leftover retained; T8-DEBUG-EVIDENCE leftover retained)
   (AR0 leftovers are inventory, not a product registry: PIPE-20 phase-firewall
    inventory closed — no pre-RA BUNDLE / private member / setDesc / row;
@@ -16,9 +17,9 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    callback-local repair is T4/T3, not a second format pipeline;
    MF0 multi-bundle proof INERT; P19 CMake leftover closed (env/-D only);
    R15 leftover docs stay outside this code track;
-   ledger TOTAL=5: GE96-09 + hwloop-multistage-combined-{matrix,transaction,cfg,trip};
-   product hwloop/SMS defaults stay OFF; P20(a) LatencyStalls in addPreSched2;
-   late Finalize/Verify after BR at every opt level (same Finalize/Verify);
+   ledger TOTAL=1: GE96-09 only (XFAIL-OWNER-LEDGER.txt);
+   product hwloop default ON; SMS is generic pre-RA MachinePipeliner; P20(a) LatencyStalls in addPreSched2;
+   Mid Finalize/Verify at every opt level (wrap-only; generic BR not after S1);
    T7/T8 artifact seats retained;
    M1 NatureDSP compile pin past add16/add32 (scale32/shift32);
    M10 step-inst parcel12 preferred / same-PC residual never qualified;
@@ -28,7 +29,7 @@ Stamp: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY (Goal 1 residual i
    SF1-SF3 (no coverage-fuzzer / perf-baseline invent);
    no pre-RA BUNDLE / private member / setDesc;
    no DecisionGuard revive; no PRODUCT_ON; no second format pipeline)
-Audited backend baseline: 98890c529be92fa35b3a1bc39270bf919eee395e
+Audited backend baseline: 4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f
   (new_gerrit HEAD; `git merge-base --is-ancestor <stamp> HEAD` must succeed)
 R15 provenance: ff42d9ad (`working`) is not an ancestor of this HEAD;
   1139639c5574, 1851c7541ab1, 2a82c904c023, 59b03784ebc7,
@@ -55,25 +56,25 @@ Pipeline ownership anchors (current implementation)
 | PostRA + Finalize + Verify inserted all opt levels | HaydnTargetMachine.cpp addPreSched2 | llc-pipeline-haydn.ll + phase-firewall-latencystalls-presched2.ll |
 | Early Finalize/Verify after postmisched (no skip) | HaydnTargetMachine.cpp addPreSched2 | llc-pipeline-haydn.ll O0/O123-NEXT |
 | LatencyStalls then first Finalize/Verify (addPreSched2) | HaydnTargetMachine.cpp addPreSched2 | phase-firewall-latencystalls-presched2.ll O0/O2 |
-| Late Finalize/Verify after BR at every opt level | HaydnTargetMachine.cpp addPreEmitPass | phase-firewall-late-finalize-after-br.ll; llc-pipeline-haydn.ll |
-| Late Fixup + second BR only when hwloops ON | HaydnTargetMachine.cpp addPreEmitPass | phase-firewall-latencystalls-presched2.ll HWON |
+| Late Finalize/Verify after post-stamp LBN at every opt level | HaydnTargetMachine.cpp addPreEmitPass | phase-firewall-late-finalize-after-br.ll; llc-pipeline-haydn.ll |
+| Late Fixup + second LBN only when hwloops ON | HaydnTargetMachine.cpp addPreEmitPass | phase-firewall-latencystalls-presched2.ll HWON |
 | P20(d) R0 restore in PostRAScratch; product SET _W at HardwareLoops | HaydnPostRAScratch + HaydnHardwareLoops.cpp:701; leftover SET rewrite is Expand MIR last-chance | expand-owned-residual-matrix.mir HWLOOP/HWLOOPR |
-| Product pass-insert inventory (hwloop/SMS OFF) | HaydnTargetMachine.cpp addPreSched2/addPreEmitPass | llc-pipeline-haydn.ll O0/O123 (+ HWON lane) |
+| Product pass-insert inventory (hwloop ON; SMS generic pre-RA MachinePipeliner) | HaydnTargetMachine.cpp addPreSched2/addPreEmitPass | llc-pipeline-haydn.ll O0/O123 (+ HWON lane) |
 | PostMachineScheduler skipFunction (quality only) | MachineScheduler.cpp PostMachineSchedulerLegacy | authority-o0-vs-optnone-commit.ll SKIP-OPTNONE |
 | FinalizeBundle NO skipFunction (commit ownership) | HaydnFinalizeBundle.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
 | VerifyBundles NO skipFunction (emission gate) | HaydnVerifyBundles.cpp::runOnMachineFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT |
 | PIPE-30 skipFunction closed | Finalize + Verify never call skipFunction | authority-o0-vs-optnone-commit.ll PLAIN/OPT; contracts/pipeline.md |
 | T1-ALIGN schema surface closed | one PacketFormats + FeasibleMask getFormatOrNull; refuse empty-cover representative | HaydnBundle.h getFormatOrNull; no second format pipeline |
-| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 98890c529be9 | phase-firewall-inventory-pins.ll + this file |
+| Goal 1 ledger (T7-ALIGN) | contracts/pipeline.md + GOALS.md §1 closed at 4b6677f8bf87 | phase-firewall-inventory-pins.ll + this file |
 | T7-ALIGN residual hygiene | R15 leftover (orphan pass-deep-review + CLAUDE symlink + ISA-64) + P19 Manual.td tombstone/CMake closed; W54/W55 stay LANDED; MF0 INERT; no DG0 | llc-pipeline-haydn.ll AUTO/CMAKE/ISANEXT |
 | W55 nine-file golden pin | llvm-claude.md table; hashes only in STATUS.md; GOALS row LANDED | Inputs nine-file pin; do not reopen |
 | T7-ALIGN schema tip-reconcile | productVLIWFormatForRow PacketFormats full-cover only; no empty-cover / cross-row; no suffix discovery | HaydnBundlePlan.h; HaydnBundle.h getFormatOrNull |
 | P19 CMake leftover closed | Haydn/CMakeLists.txt golden-dir is env/-D only; banned plans-tree path gone; no home-directory discovery; skip if unset | llc-pipeline-haydn.ll CMAKE |
 | Callback-local repair residual | T4 ordinary / T3 inverse — not a second format pipeline | contracts/pipeline.md lifecycle gap |
 | GR2.4 postmisched mandatory for optnone (forcePostRAScheduling) | TargetSubtargetInfo.h defaulted virtual + MachineScheduler.cpp guard; HaydnSubtarget override true (legacy-only seam; new-PM never skipped) | gr24-optnone-mandatory-sched.ll POST-*; authority-o0-vs-optnone-commit.ll SKIP-OPTNONE/PACK |
-| skipFunction = optnone / pass gate (residual: LateConvergence S2 driver only) | Pass.cpp FunctionPass::skipFunction; HaydnLateConvergence.cpp | late-convergence-loop.ll DBG-NOT |
-| GR2.6 monotone closure (S2 once per entry; no reschedule-after-mutation) | HaydnLateConvergence.cpp runHaydnLateConvergence; deleted RunS2/inventoryChanged | gr26-closure-no-reschedule.ll DBG; gr26-nested-closure-matrix.ll |
-| GR2.6 enforced no-growth law (event-accounted per-iteration) | HaydnLateConvergence.cpp haydnClosureGrowthAccount + HaydnHWLoopContracts.h MaxHwLoopDemoteGrowthBytes/isStillRelaxableShortBranch | HaydnLateConvergenceBudgetTest; late-convergence-o0.ll NOGROWTH |
+| skipFunction = optnone / pass gate | Pass.cpp FunctionPass::skipFunction; GR1.7 deleted LateConvergence S2 driver | llc-pipeline-haydn.ll NOLC; gr15-lateconv-no-br-last.ll |
+| GR2.6 monotone closure (one S1; no reschedule-after-mutation) | GR1.7 deleted HaydnLateConvergence / S2 reopen | gr26-closure-no-reschedule.ll DBG; llc-pipeline-haydn.ll NOLC |
+| GR2.6 demote growth bound | HaydnHWLoopContracts.h MaxHwLoopDemoteGrowthBytes/isStillRelaxableShortBranch | HaydnPreS1GrowthCompositionTest |
 | LatencyStalls never skipFunction | HaydnLatencyStalls.cpp::runOnMachineFunction | latency-stalls.ll |
 | Plain O0 commits Format-E BUNDLE (row+completion) | postmisched + finalize path | authority-o0-vs-optnone-commit.ll PLAIN |
 | optnone also commits Format-E BUNDLE (mandatory scheduler singleton fallback + Finalize residual) | forcePostRAScheduling scheduler commit; Finalize no-skip residual | gr24-optnone-mandatory-sched.ll VERIFY-*; authority-o0-vs-optnone-commit.ll OPT + ASM |
@@ -104,7 +105,7 @@ Pipeline ownership anchors (current implementation)
 
 Phase-firewall inventory (PIPE-20; no issue-cycle/format identity crosses RA)
 -----------------------------------------------------------------------------
-CLOSED 2026-08-18 T1-ALIGN at 98890c529be9 (D1000 HC#0 ledger). Structural
+CLOSED 2026-08-18 T1-ALIGN at 4b6677f8bf87 (D1000 HC#0 ledger). Structural
 barrier (primary): zero pre-RA BuildMI(BUNDLE)/MIBundleBuilder; no pre-RA
 BUNDLE / private member / setDesc / row identity; all finalizeBundle +
 stampBundleCommit seats are post-PostMachineScheduler only; pre-RA HR cannot
@@ -120,7 +121,7 @@ Live supplementary pins (not a permanent sole barrier):
 | SMS StageCount>1 reject / no freeze through RA | sms-handoff-bundle-through-ra.mir |
 | USAD mutual-WAR no pre-RA freeze | sms-usad-mutual-war-no-prera-freeze.ll |
 | Late pre-emit recommit firewall (hwloops-ON lane) | late-firewall-preemit-recommit.mir |
-| Late Finalize/Verify after BR (every opt level) | phase-firewall-late-finalize-after-br.ll; llc-pipeline-haydn.ll |
+| Late Finalize/Verify after post-stamp LBN (every opt level) | phase-firewall-late-finalize-after-br.ll; llc-pipeline-haydn.ll |
 | Pipeline oracle: no Finalize/Verify before PostRA | llc-pipeline-haydn.ll; phase-firewall-latencystalls-presched2.ll |
 | AR0 phase-firewall inventory | CLOSED — no pre-RA BUNDLE / member / setDesc / row | phase-firewall-*.ll + this file |
 | AR0 leftover residual-pseudo matrix | Expand/Verify fatal SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR/bundled-child | vf5-residual-*.mir + expand-owned-residual-matrix.mir |
@@ -128,7 +129,7 @@ Live supplementary pins (not a permanent sole barrier):
 | s96 G_ANYEXT legalizer loop (COPY walk + AND/OR/XOR/SELECT rebuild) | HaydnLegalizerInfo.cpp; phase-firewall-s96-anyext.ll |
 | hasFP adjustsStack is not sufficient (AIE/RISCV peer; getCallFrameSPAdj) | HaydnFrameLowering.cpp; phase-firewall-hasfp-adjusts-stack.ll |
 | emitCodeAlignment MaxParcels = Align/gcd idle parcels | HaydnMCELFStreamer.cpp; phase-firewall-align-maxparcels.ll |
-| Post-wave rebound: 98890c529be9 in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
+| Post-wave rebound: 4b6677f8bf87 in-repo; 28700d57 is not an ancestor | ARTIFACT llvm_src.git_commit + product_coverage_pin ancestor check |
 | Folded same-artifact residual IDs (G-RUNTIME-TOOLCHAIN) | G-ECOSYSTEM-CONSUMERS / G-LIBRARY-COVERAGE / G-DEBUG-OBSERVABILITY / G-TEST-EVIDENCE | PRODUCT-IDENTITY.txt + product_coverage_pin (inventory; not QUALIFY) |
 
 DG-OPTNONE residual (correctness passes must not skip)
@@ -152,13 +153,13 @@ Hardware-loop / multi-stage product boundaries (G-HWLOOP-POLICY hygiene)
 |---|---|---|
 | -haydn-enable-hwloops default ON | HaydnTargetMachine::hardwareLoopsProductDefaultEnabled() true (static_assert pins the 2026-08-22 qualification) | llc-pipeline-haydn.ll HWFLAG; densify-defaults-off.ll PIPE/ATTR |
 | Multi-stage SMS owner | generic pre-RA MachinePipeliner (W68.1); bespoke post-RA host + flags DELETED | sms-multistage-tied-mull-bundle-copy.ll; no HaydnPostRAMultiStage.cpp |
-| TTI acceptance never flips product policy | isHardwareLoopProfitable; pass still gated on flag | phase-firewall-latencystalls-presched2.ll O2-NOT Hardware Loop Insertion |
-| Innermost multi-BB TTI overlay (latch==exit) | HaydnTargetTransformInfo.cpp isHardwareLoopProfitable | hwloop-multibb.ll DEFAULT-NOT; HWON may SET |
+| TTI acceptance never flips product policy | isHardwareLoopProfitable; pass still gated on flag | phase-firewall-latencystalls-presched2.ll O2 Hardware Loop Insertion; densify-defaults-off.ll SMSONLY / hwloop-multibb.ll HWOFF |
+| Innermost multi-BB TTI overlay (latch==exit) | HaydnTargetTransformInfo.cpp isHardwareLoopProfitable | hwloop-multibb.ll DEFAULT SET; HWOFF residual |
 | Retained-state MIR expand + incomplete reject fatal | HaydnHardwareLoops.cpp expandRoleALoopStarts / rejectIncompleteRoleA | hwloop-rolea-preflight-demote.mir expand; hwloop-rolea-preflight-reject.mir fatal |
 | Retained-state EndGrowth stops at PseudoLoopEnd | HaydnFixupHwLoops.cpp sumStillRelaxableGrowth InclusiveTo | hwloop-fixup-second-br-growth.mir keep_soft_exit_after_ple |
 | Incomplete retained seats reject pre-mutation | rejectIncompleteRoleA report_fatal_error (no structural demote lie) | hwloop-rolea-preflight-reject.mir TRIP/CALL/MEXIT |
 | Late physical semantic reconstruction helpers deleted | HaydnHardwareLoops.cpp retained-state expand only; no convertToHardwareLoop | product shape STATUS.md; no MachineLoopInfo dep |
-| P0/P3/P6 gated on EnableHaydnHardwareLoops | HaydnTargetMachine addPreISel / addPreSched2 / addPreEmitPass | llc-pipeline-haydn.ll (flag OFF arm) |
+| P0/P3/P6 gated on EnableHaydnHardwareLoops | HaydnTargetMachine addPreISel / addPreSched2 / addPreEmitPass | llc-pipeline-haydn.ll O123; densify-defaults-off.ll SMSONLY (flag OFF arm) |
 | Post-RA multistage host + PF-*/JM-* seats deleted | W68 deleted HaydnPostRAMultiStage.cpp with its Preflight/Journal tables | FAULT-INJECTION-SEATS.txt W68 tombstone section |
 | Combined interaction QUALIFY | closed by the 2026-08-22 independent + combined qualification | product default ON; no combined-* XFAIL |
 | Policy flips | historical; hwloops + multistage owners both landed | G-HWLOOP-POLICY / G-MULTISTAGE-POLICY closed |
@@ -177,9 +178,8 @@ ABI / bank / runtime anchors
 | Separate GPR/DR/AR banks | HaydnRegisterBanks.td | G-BACKEND-CORRECTNESS |
 | Soft-float / ILP32 baremetal | clang Targets/Haydn.cpp setABI(ilp32) | G-RUNTIME-TOOLCHAIN |
 
-Live XFAIL (TOTAL=5): GE96-09 ar_sel + G-MULTISTAGE-HWLOOP combined
-  matrix/transaction/cfg/trip — Inputs/XFAIL-OWNER-LEDGER.txt
-  Combined dual-ON files are expected-fail / QUALIFY waiting; no PRODUCT_ON.
+Live XFAIL (TOTAL=1): GE96-09 ar_sel only — Inputs/XFAIL-OWNER-LEDGER.txt
+  Combined dual-ON files are GREEN (G004); no PRODUCT_ON lifecycle.
 Mechanical parity pin: llvm/utils/haydn/check_xfail_ledger.py
 (xfail-owner-ledger-selfcheck.ll). Aggregate gate parser pin:
 llvm/utils/haydn/parse_lit_summary.py (parse-lit-summary-selfcheck.ll).
@@ -226,15 +226,18 @@ Product profile / dependence / geometry seats (G-ECOSYSTEM-CONSUMERS / G-TEST-EV
 | Illegal dual-store co-issue refuse | MC one-parcel placement (serialize-only) | MC/Haydn/bundle-dependence-reject.s |
 | Non-12B exec section / record reject | frontend_pipeline + code_image | test_frontend_pipeline (size 11/16) |
 
-Physical multistage inventory (active target; host present; default OFF)
+Physical multistage inventory (W68 tombstone; post-RA host deleted)
 ------------------------------------------------------------------------
-Closed seat IDs only — full tables live in FAULT-INJECTION-SEATS.txt and
-CORRUPTION-MATRIX.txt; design text in topics/scheduling/TOPIC.md.
+Closed seat IDs only — full tables live in FAULT-INJECTION-SEATS.txt (W68
+tombstone) and CORRUPTION-MATRIX.txt; design text in topics/scheduling/TOPIC.md.
+Product SMS owner is generic pre-RA MachinePipeliner (HaydnTargetMachine.cpp
+addPreRegAlloc); the bespoke post-RA host is deleted. hwloop product default
+is ON. PF-*/JM-* IDs below are provenance, not live pins:
   Preflight: PF-CFG, PF-PHI, PF-TRIP, PF-STAGE, PF-LIVE, PF-ALT, PF-BUNDLE, PF-LATE
   Journal/rollback: JM-ALLOC, JM-SPLICE, JM-COMMIT, JM-TRIP, JM-LIVE, JM-ALT, JM-META
-Every multistage product seat is inventory-only on the active host. Never fake
-force-fail evidence, revive Stage-0 densification or late physical semantic
-rediscovery, or flip policy default ON. Combined dual-ON QUALIFY waits.
+Never fake force-fail evidence, revive Stage-0 densification or late physical
+semantic rediscovery, or revive the deleted post-RA host. Combined dual-ON
+is GREEN (G004); no PRODUCT_ON lifecycle.
 
 open-goals-w0 multi-track residual landings (honest pins; not full exits)
 ------------------------------------------------------------------------
@@ -281,8 +284,8 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | P13 source waves | R13 LANDED; live `_S*` FieldSlot census 0 | Wave 1 unblocked; leftover `_S*` stay (T4) inventory only |
 | AR0 phase-firewall inventory | CLOSED (T1-ALIGN) | no pre-RA BUNDLE / member / setDesc / row; not a product registry |
 | AR0 leftover residual-pseudo matrix | CLOSED | Expand/Verify fatal SET_HWLOOP/SETCBR/LOOPCTL/LOAD_ADDR/bundled-child; vf5-residual-*.mir |
-| Authority inventory leftover (T8-EVID) | G-TEST-EVIDENCE T8-EVID | keep stamps/IDs synchronized; lifecycle pins only; no second format pipeline; no policy default ON; no DecisionGuard revive |
-| 98890c529be9 rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
+| Authority inventory leftover (T8-EVID) | G-TEST-EVIDENCE T8-EVID | keep stamps/IDs synchronized; lifecycle pins only; no second format pipeline; no DecisionGuard revive |
+| 4b6677f8bf87 rebound (in-repo ancestor) | $sysroot/ARTIFACT.json llvm_src.git_commit | product_coverage_pin.sh ancestor check; 28700d57 is not an ancestor |
 | Historical 08-17 full-gate manifest | /tmp/bundlesim-672/full-gate-20260817_093415 git_commit=28700d57 | provenance only; haydn_lit_ok=n/a; do not re-bind |
 | Full Haydn lit + run_full_gate.sh | wave-close product gate | this track pins rebound identity only; does not run the product gate |
 | haydn-rt contract pins | llvm/lib/Target/Haydn/haydn-rt/{SOFTFLOAT-CONTRACT,NATUREDSP-CANARY-PIN,PRODUCT-IDENTITY}.txt | check_xfail_ledger.py --runtime-pin |
@@ -296,7 +299,7 @@ Product evidence aggregate / provenance (G-TEST-EVIDENCE / G-RUNTIME-TOOLCHAIN /
 | T-ABI9 monorepo two-TU matrix | llvm/utils/haydn/run_abi_conformance_matrix.sh | compile/link + e_flags; ctest label residual |
 | NatureDSP executed canary compile | naturedsp-haydn executed_canary_pin.sh | add16/add32/scale32/shift32 compile; vec_dot16 T-DSP3 |
 | NatureDSP 456-beyond census | residual-beyond-approved.txt CENSUS | approved=35 beyond=456 total_hifi3=491; not a second matrix |
-| T-DSP12 default-CPU residual | haydn_dsp.h generic (agu+hwloop) | do not silently -mcpu=haydn; explicit pin only |
+| T-DSP12 default-CPU residual | haydn_dsp.h generic == haydn full ISA | empty/generic/haydn compile haydn_dsp.h; -simd still traps |
 | T-DSP13 declared-vs-tested residual | llvm/utils/haydn/tdsp13_declared_vs_tested_pin.py | inventory only; no 746-name harness invent |
 | libc strcpy/strncmp residual | llvm-libc string exactness (codegen) | host_freestanding_strcpy.c classified; no libc rebuild |
 | M16 leftover T-TI3 per-pass coverage | topics/{runtime,bundlesim}/TOPIC.md; PATTERN_GATE.md | frozen until SF1-SF3; do not invent a coverage-fuzzer |

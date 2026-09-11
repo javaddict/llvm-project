@@ -23,7 +23,9 @@ define void @branch_eq(i32 %a, i32 %b) nounwind {
 ; CHECK: seq32
 ; CHECK: xori32
 ; CHECK: bnez{{(\.s[012])?}}
-; CHECK: jal{{(\.s[012])?}} {{.*}}, extern_fn
+; CHECK: lui{{.*}}extern_fn
+; CHECK: addi32{{.*}}extern_fn
+; CHECK: jalr{{.*}}lr
 entry:
   %cmp = icmp eq i32 %a, %b
   br i1 %cmp, label %then, label %end

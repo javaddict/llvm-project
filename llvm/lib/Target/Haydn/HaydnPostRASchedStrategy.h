@@ -30,7 +30,11 @@
 // latency. No hard-root dissolve identity and no force-coissue.
 // Dual-load packing is HR exactTryAddProduct → identity setDesc members.
 // Closed singletons receive the ProductDefaultRowID member here so
-// Finalize is construction-only (no late tryAdd chooser).
+// Finalize is wrap-only (no late tryAdd chooser). S1 leaveFunction
+// expands leftover RET, folds one dest-window stall net, leftover-
+// logical inverse-bakes bundled FieldSlot children (JALR_W membership),
+// wraps remaining bares including JALR_CALL, and stamps
+// PostCommitCfgSnapshot with the packets.
 //
 //===----------------------------------------------------------------------===//
 
@@ -131,6 +135,11 @@ public:
   // a real BUNDLE MI for each non-empty cycle. Stock bundleWithPred +
   // finalizeBundle (MachineInstrBundle.h). Port of AIE commitBlockSchedule.
   void leaveMBB() override;
+
+  // GR1.2: after every leaveMBB of this invocation, fold one dest-window
+  // stall net and stamp PostCommitCfgSnapshot so packets and the
+  // CFG/inventory wall become visible together. Then the default walk assert.
+  void leaveFunction() override;
 
   // AIE materializeMultiOpcodeInstrs
   // (AIEMachineScheduler.cpp:1121-1139) — for each MI in the DAG top/bottom
@@ -305,11 +314,11 @@ private:
   void materializeBundles(MachineBasicBlock &MBB,
                           SmallVector<CycleBundle> &Bundles);
 
-  // Residual multi-member shells: ordinary multi-MI commit when the product
-  // coissue probe accepts; sequentialize in schedule order as recovery when
-  // it rejects. Sequentialize is not a packing legality authority. Format-E
-  // stamped multi-member is kept only when the probe still passes (SET
-  // trip/Off + true RAW + field order). Not a hard-root freeze path.
+  // Residual-shell arm: S1 (Inv==1 and unstamped) re-probes Format-E
+  // multi-member shells and sequentializes when the product coissue probe
+  // rejects. Sequentialize is not a packing legality authority. Row stamp
+  // alone is not authority on S1; CFG stamp / Inv>=2 refuse-not-dissolve.
+  // Not a hard-root freeze path and not a post-stamp reopen.
   void commitOrSequentializeUnstampedMultiMemberBundles(MachineBasicBlock &MBB);
 
   // Residual multi-member seam replay (pre-free-pack shells only).

@@ -40,6 +40,10 @@ static constexpr unsigned FormatEE3IllegalTupleCount = 22u;
 // Format indicator and header reserved are fixed by golden geometry.
 static constexpr unsigned FormatEIndicator = 0x7u; // bits[2:0]
 static constexpr unsigned FormatEHeaderReserved = 0x0u; // bits[5:4]
+// E2 e0 ALU0 dest/rs GPR windows (parcel-absolute operand_fields).
+static constexpr unsigned FormatEE2E0DestLsb = 20u;
+static constexpr unsigned FormatEE2E0RsLsb = 24u;
+static constexpr unsigned FormatEGPRFieldBits = 4u;
 #endif // GET_FORMAT_E_GOLDEN_PINS
 
 #ifdef GET_FORMAT_E_MODE_ONLY_NAMES

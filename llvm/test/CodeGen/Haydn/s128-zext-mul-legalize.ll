@@ -12,19 +12,18 @@
 define i64 @cb51_zext_mul_i128(i64 %x, i64 %y) {
 ; CHECK-LABEL: cb51_zext_mul_i128:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { move32_dr_h r1, d1; sext32t64 d0, r1; move32_dr_l r3, d1 }
-; CHECK-NEXT:    { sext32t64 d2, r2; sext32t64 d1, r3; sext32t64 d3, r1 }
-; CHECK-NEXT:    { nop; slli64 d2, d2, 32; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; slli64 d3, d3, 32; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d3, d3, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { mul64.ulul d2, d2, d1; mul64.ulul d3, d0, d3 }
-; CHECK-NEXT:    { addi32 r1, r0, 32; mul64.ulul d0, d0, d1 }
-; CHECK-NEXT:    { nop; nop; add64 d2, d3, d2 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r2; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r3; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { srli64 d3, d3, 32; mul64.ulul d2, d2, d1 }
+; CHECK-NEXT:    { mul64.ulul d3, d0, d3; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { add64 d2, d3, d2; mul64.ulul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop; sll64 d1, d2, r1 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -40,19 +39,18 @@ define i64 @cb51_zext_mul_i128(i64 %x, i64 %y) {
 define i64 @cb51_sext_mul_i128(i64 %x, i64 %y) {
 ; CHECK-LABEL: cb51_sext_mul_i128:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r2, d0; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { move32_dr_h r1, d1; sext32t64 d0, r1; move32_dr_l r3, d1 }
-; CHECK-NEXT:    { sext32t64 d2, r2; sext32t64 d1, r3; sext32t64 d3, r1 }
-; CHECK-NEXT:    { nop; slli64 d2, d2, 32; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; slli64 d3, d3, 32; slli64 d1, d1, 32 }
-; CHECK-NEXT:    { nop; srli64 d2, d2, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d3, d3, 32; srli64 d1, d1, 32 }
-; CHECK-NEXT:    { mul64.ulul d2, d2, d1; mul64.ulul d3, d0, d3 }
-; CHECK-NEXT:    { addi32 r1, r0, 32; mul64.ulul d0, d0, d1 }
-; CHECK-NEXT:    { nop; nop; add64 d2, d3, d2 }
+; CHECK-NEXT:    { nop; sext32t64 d2, r2; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r3; slli64 d2, d2, 32 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r1; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d2, d2, 32 }
+; CHECK-NEXT:    { srli64 d3, d3, 32; mul64.ulul d2, d2, d1 }
+; CHECK-NEXT:    { mul64.ulul d3, d0, d3; addi32 r1, r0, 32 }
+; CHECK-NEXT:    { add64 d2, d3, d2; mul64.ulul d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop; sll64 d1, d2, r1 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -68,8 +66,7 @@ define i64 @cb51_sext_mul_i128(i64 %x, i64 %y) {
 define i64 @cb51_zext_i64_to_i128_low(i64 %x) {
 ; CHECK-LABEL: cb51_zext_i64_to_i128_low:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

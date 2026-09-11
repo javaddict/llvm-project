@@ -1,0 +1,229 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.142: LBN range-tests a committed one-way cond BUNDLE via the explicit
+# MI unwrap (HaydnInstrInfo::isBranchOffsetInRange(MI)), not the thread_local
+# getBranchDestBlock handshake. Handshake fires only for a bundled cond whose
+# trailing CFG JALR dest-recovers (generic BR invert-swap). A one-way BUNDLE
+# has no JALR, so the opcode-only BUNDLE hook is always-in-range; the owner
+# arm must still promote. Peer: RISC-V RISCVInstrInfo.cpp:1751-1758 takes the
+# site opcode; Hexagon isJumpWithinBranchRange takes the MI; AIE has no BR.
+#
+# Far template (d150 one_way_far_tbb): 170 NOPs = 2040B, buffer=4, window 2044.
+# bb.0 is one BUNDLE parcel (12B); bb.2 starts at 2052.
+#
+--- |
+  define dso_local void @one_way_bundle_far_cond() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            one_way_bundle_far_cond
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r7, $r15
+    successors: %bb.1, %bb.2
+    BUNDLE 0 {
+      BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+# CHECK-LABEL: name:            one_way_bundle_far_cond
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.2{{$}}
+# CHECK: ADDI32{{.*}}%bb.2{{$}}
+# CHECK-NOT: BEQZ{{.*}} $r7
+# CHECK: BNEZ{{.*}} $r7, %bb.1
+# CHECK-NOT: B %bb.
+# CHECK: JALR
+# CHECK-NOT: B %bb.
+# CHECK: bb.1.near

@@ -1,16 +1,22 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
 # RUN:   -run-pass=haydn-expand-pseudos,haydn-verify-bundles %s -o - \
 # RUN:   | FileCheck %s
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -haydn-test-grow-frame-after-snapshot \
+# RUN:   -run-pass=haydn-expand-pseudos,haydn-verify-bundles %s -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=GROW
 
 # Role: MIR — frame-deadline law wiring: HaydnExpandPseudos (first
 # unconditional post-PEI seat) takes the frame snapshot and
-# HaydnVerifyBundles enforces it. A trivial function expands and verifies
-# with an unchanged frame: the pass pair must run clean (no fatal), proving
-# the snapshot/violation plumbing does not false-trip on the identity path.
-# Growth detection itself is unit-sealed in HaydnFrameFreezeTest.
+# HaydnVerifyBundles enforces it. Identity path is green (no fatal).
+# GR2.8 red: the test-only grow hook creates one spill after the snapshot
+# so verify fires frameFreezeViolation at the Verify seat (unit-sealed
+# growth cases stay in HaydnFrameFreezeTest).
 #
 # CHECK: frame_freeze_identity
 # CHECK: {{RET|JALR}}
+# GROW: HaydnVerifyBundles
+# GROW: frame grew after the post-PEI snapshot
 
 ---
 name:            frame_freeze_identity

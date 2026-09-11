@@ -38,6 +38,9 @@
 //     setDesc (no keep/permutation/tie repair). Finalize constructs only.
 //   * commitLateProductCycle / finalizeExactLateSingleton — late insert
 //     (BR / Fixup) wrap+stamp. Not a second packet chooser for S1/S2.
+//   * dropBundleImplicitRegsAbsentFromMembers — prune BUNDLE-header
+//     implicits in place after same-row NOP or leftover JALR bake. Does
+//     not add missing implicits and does not re-run generic finalizeBundle.
 //   * greedySplitLegalOpcodeCycles — DIAGNOSTIC ONLY (ResMII / unit tests).
 //
 // Each committed cycle stamps Format E BundleFormatRowID + CompletionStateID
@@ -1200,6 +1203,14 @@ bool commitExactMultiMIProductCycle(ArrayRef<MachineInstr *> Instrs,
 bool commitOneProductCycle(ArrayRef<MachineInstr *> Instrs,
                            AAResults *AA = nullptr);
 
+/// Greedy coissue of adjacent leftover bares (skipped single-MI scheduler
+/// regions) through \p commitOneProductCycle before wrap-only Finalize.
+/// Wave 4 leftover-logical bake packed these; wrap-as-singleton otherwise
+/// emits `{ nop; addi }` `{ nop; addi }` for independent immediates.
+/// Overlay JALR_CALL / JAL*_TCO / B are not packed. \p AA is forwarded
+/// (nullptr fail-closed on mem pairs).
+bool packAdjacentLeftoverBares(MachineFunction &MF, AAResults *AA = nullptr);
+
 /// Residual unit-test helper: dissolve a multi-member BUNDLE shell and
 /// recommit via \p commitOneProductCycle when membership is one legal
 /// product cycle. Product leaveMBB does not keep hard-root freeze
@@ -1448,9 +1459,21 @@ inline void applyFinalDirectCompatibleOpcode(MachineInstr &MI,
   if (isResidualCycleFormingPseudo(MI.getOpcode()) ||
       isRepresentationExpandPseudo(MI.getOpcode()))
     return;
-  // Compiler `_MSP` clones keep their flag overlay (JALR_MSP isCall not
-  // terminator; BEQZ_W_MSP isBarrier). Encoder peels `_MSP`. Baking onto
-  // the catalog member would restore golden-frozen flags and break CFG.
+  // Flag overlays keep gMIR Desc (B uncond / JALR_CALL isCall not
+  // terminator / JAL_TCO / JALR_TCO tail). Encoder peels to catalog
+  // BEQZ/JALR/JAL. Baking onto catalog Desc would restore golden-frozen
+  // flags and break CFG. MultiSlot ADD32_MSP is not a flag overlay;
+  // suffix skip keeps its bake on the scheduler setDesc path, not this
+  // late singleton site.
+  switch (MI.getOpcode()) {
+  case Haydn::B:
+  case Haydn::JALR_CALL:
+  case Haydn::JAL_TCO:
+  case Haydn::JALR_TCO:
+    return;
+  default:
+    break;
+  }
   const StringRef Name = TII.getName(MI.getOpcode());
   if (Name.ends_with("_MSP"))
     return;
@@ -1530,6 +1553,28 @@ inline void finalizeExactLateSingleton(MachineInstr &MI) {
   stampBundleCommit(Root, Plan);
 }
 
+/// Prune BUNDLE-header implicits the remaining members no longer occupy.
+/// Substitute for re-running generic finalizeBundle after same-row NOP
+/// (MachineInstrBundle.cpp:184-220 copies member all_defs/all_uses;
+/// re-finalize would rebuild InternalRead/memrefs). AIE
+/// AIEFinalizeBundle.cpp:40-59 is wrap-only — no child-NOP overlay and no
+/// implicit-drop helper (AIE has no BR). HexagonConstPropagation.cpp:2508-2512
+/// replaceWithNop is setDesc+strip only; Hexagon packetizes last.
+/// Haydn overlay (pipeline.md preserve-or-extend): neutralize + prune in
+/// place so FPL/LBN dest-window do not see poisoned JALR caller-saved Defs
+/// (HaydnInstrInfo.td:1513-1528 JALR_W Defs).
+///
+/// Occupancy: explicit operands always. Jump/RET JALR (catalog or generated
+/// member): explicit only — leftover catalog caller-saved Defs never occupy
+/// the root. JALR_CALL / JAL_TCO / JALR_TCO: explicit plus Desc implicits
+/// (ABI clobbers). Every other member unions explicit operands, Desc
+/// implicit defs/uses, and leftover physical implicits (anonymous $sfr on
+/// generated members whose Desc dropped Uses/Defs=[SFR]; HaydnPortModel.h:1118-1152
+/// / HaydnBundlePortBudget.h:49-88 CB-161 operand truth). KEEP $sfr iff a
+/// remaining member occupies SFR under that collect; DROP when the only
+/// writer was neutralized (tii5 ADD32 survivor — ADD32 is not an SFR writer).
+void dropBundleImplicitRegsAbsentFromMembers(MachineInstr &Root);
+
 /// Layout bytes for an inserted or removed late MI.
 /// Bundle children charge the committed root; bare reals charge one product
 /// parcel. Call after finalizeExactLateSingleton so insert hooks report the
@@ -1549,226 +1594,6 @@ inline unsigned lateLayoutBytes(const MachineInstr &MI) {
     return MF->getSubtarget().getInstrInfo()->getInstSizeInBytes(MI);
   }
   return productParcelBytes().Value;
-}
-
-/// W68.2R S2 reopen (STATUS limit #1): dissolve every provisional
-/// BUNDLE root so the second scheduler invocation rebuilds from current
-/// bare MIs instead of treating S1's packet choices as immutable. Per
-/// contracts/pipeline.md ("S1/S2 repair law"), each direct-compatible
-/// member is canonicalized back to its logical opcode through the
-/// GENERATED member->logical identity (format_e::
-/// lookupGeneratedMemberToLogical; non-members keep their opcode).
-/// Pad-NOP children (completion fill) are erased.
-///
-/// Fail-closed law: a root is reopened only when every real child is a
-/// generated member WITH a logical identity or is already non-member. A
-/// generated member without identity (or any residual pseudo) keeps its
-/// BUNDLE committed — S2 schedules around it exactly as today, and the
-/// invariant checker still owns the final word. No operand is added,
-/// dropped, reordered, or retied here: reopen is the exact inverse of
-/// the commit path's setDesc bake, so operands already match the logical
-/// shape (direct-alternate compatibility law).
-///
-/// True when the logical/member explicit-operand sequences match one-to-one
-/// in kind and register class (DIRECT pair). Direct pairs invert the commit
-/// bake with a plain setDesc; keep-map pairs do not.
-inline bool
-memberShapesDirectEqual(unsigned LogicalOpc, unsigned MemberOpc,
-                        const MCInstrInfo &MII = getHaydnSharedMCInstrInfo()) {
-  const MCInstrDesc &L = MII.get(LogicalOpc);
-  const MCInstrDesc &M = MII.get(MemberOpc);
-  const unsigned LN = L.getNumOperands(), MN = M.getNumOperands();
-  if (LN != MN)
-    return false;
-  for (unsigned I = 0; I != LN; ++I) {
-    const MCOperandInfo &A = L.operands()[I];
-    const MCOperandInfo &B = M.operands()[I];
-    const bool AReg =
-        A.OperandType == MCOI::OPERAND_REGISTER || A.RegClass >= 0;
-    const bool BReg =
-        B.OperandType == MCOI::OPERAND_REGISTER || B.RegClass >= 0;
-    if (AReg != BReg)
-      return false;
-    if (AReg && A.RegClass != B.RegClass)
-      return false;
-  }
-  return true;
-}
-
-/// \returns the number of BUNDLE roots reopened (0 = nothing to do).
-///
-/// Reopened children re-enter scheduling as bare MIs, so stale
-/// IsInternalRead is cleared like every other dissolve site (the shared
-/// finalizeBundle-never-clears law; see the unbind loop below).
-inline unsigned reopenProvisionalBundles(MachineFunction &MF,
-                                         const MCInstrInfo &MII) {
-  unsigned Reopened = 0;
-  for (MachineBasicBlock &MBB : MF) {
-    // Collect roots first: unbundle + erase mutates the instr list.
-    SmallVector<MachineInstr *, 16> Roots;
-    for (MachineInstr &MI : MBB.instrs())
-      if (MI.isBundle() && !MI.isBundledWithPred())
-        Roots.push_back(&MI);
-
-    for (MachineInstr *Root : Roots) {
-      SmallVector<MachineInstr *, 4> Kids = members(*Root);
-      // Every real child must be identity-recoverable; pad NOPs drop.
-      // Recoverable = member has a logical identity AND the logical/member
-      // pair is DIRECT-shaped (same explicit operand kind/class sequence).
-      // Keep-map-class pairs (CB load/store: logical ins order is
-      // rs, cbr_sel, imm while the member commits cbr_sel, rs, imm) were
-      // REORDERED by the commit bake; a desc-only inverse would leave the
-      // member-ordered operands under the logical Desc — a half-baked MI
-      // that later fails every keep-map solve (cbr_wrap_csr under the
-      // convergence driver). Such roots stay committed and S2 schedules
-      // around them, same as identity-less members.
-      bool AllRecoverable = true;
-      for (MachineInstr *Kid : Kids) {
-        if (isPadNopOpcode(Kid->getOpcode()))
-          continue;
-        if (Kid->isMetaInstruction() || Kid->isDebugInstr() ||
-            Kid->isPosition())
-          continue;
-        const unsigned Opc = Kid->getOpcode();
-        if (!lookupPrivateFormatEMember(Opc))
-          continue;
-        const unsigned Logical =
-            format_e::lookupGeneratedMemberToLogical(Opc);
-        if (Logical == 0) {
-          // Generated private member without a logical identity: not
-          // recoverable through the generated mapping.
-          AllRecoverable = false;
-          break;
-        }
-        if (!memberShapesDirectEqual(Logical, Opc)) {
-          // Keep-map class: operand order differs; reopen is desc-only and
-          // cannot restore the logical operand order.
-          AllRecoverable = false;
-          break;
-        }
-      }
-      if (!AllRecoverable)
-        continue;
-
-      // CB-167 read-old dissolve order: within a committed parcel, a
-      // member may carry a DEAD definition of a register R that a sibling
-      // reads as the PRIOR definition (S1 coissued them legally under
-      // snapshot read-old semantics; the intra-cycle RAW check skips dead
-      // defs). Dissolving must not leave that dead def BEFORE the sibling
-      // reader in the bare-MI order: the rebuilt scheduling DAG derives a
-      // Data edge for that program order and serializes the reader after
-      // the load, which then reads the LOADED value instead of the prior
-      // def (pr85529-1: the k < foo(k,2) short-circuit took the wrong
-      // path). Move every colliding dead-def member AFTER the same-parcel
-      // readers of the same register before unbinding.
-      {
-        SmallVector<MachineInstr *, 4> Order;
-        for (MachineInstr *Kid : Kids)
-          if (!isPadNopOpcode(Kid->getOpcode()))
-            Order.push_back(Kid);
-        // Do not auto-increment: erase+insert shifts the next member into
-        // slot I. ++I after a splice would skip it (chained dead-def pairs
-        // would leave a later dead def before its reader). Unsigned --I at
-        // I==0 wraps; advance only on the no-splice path.
-        for (unsigned I = 0; I < Order.size();) {
-          MachineInstr *MI = Order[I];
-          SmallVector<Register, 2> DeadRegs;
-          for (const MachineOperand &MO : MI->operands())
-            if (MO.isReg() && MO.isDef() && MO.isDead() && MO.getReg())
-              DeadRegs.push_back(MO.getReg());
-          if (DeadRegs.empty()) {
-            ++I;
-            continue;
-          }
-          int LastReader = -1;
-          for (unsigned J = I + 1; J < Order.size(); ++J)
-            for (const MachineOperand &MO : Order[J]->operands())
-              if (MO.isReg() && MO.isUse() && MO.getReg() &&
-                  llvm::is_contained(DeadRegs, MO.getReg())) {
-                LastReader = static_cast<int>(J);
-                break;
-              }
-          if (LastReader < 0) {
-            ++I;
-            continue;
-          }
-          MachineInstr *After = Order[LastReader];
-          MachineBasicBlock *Parent = MI->getParent();
-          // Bundled MIs cannot be remove()d; unbind MI's adjacency first,
-          // relink its neighbors, then splice it after the reader. MI's
-          // flags are re-cleared by the common unbind loop below.
-          MI->clearFlag(MachineInstr::BundledPred);
-          MI->clearFlag(MachineInstr::BundledSucc);
-          // Splice via the ilist: remove from the bundle chain in place.
-          MachineBasicBlock::instr_iterator IIt = MI->getIterator();
-          MachineBasicBlock::instr_iterator Next = std::next(IIt);
-          if (Next != Parent->instr_end() && Next->isBundledWithPred())
-            Next->clearFlag(MachineInstr::BundledPred);
-          if (IIt != Parent->instr_begin()) {
-            MachineBasicBlock::instr_iterator Prev = std::prev(IIt);
-            if (Prev->isBundledWithSucc())
-              Prev->clearFlag(MachineInstr::BundledSucc);
-          }
-          // insertAfter() takes a bundle iterator; After is still a bundled
-          // member, so After->getIterator() would assert. Hexagon
-          // moveInstrOut splices with instr_iterator (HexagonVLIWPacketizer.cpp
-          // :155-174). Insert immediately after LastReader, inside the shell.
-          MachineBasicBlock::instr_iterator InsertPt =
-              std::next(After->getIterator());
-          Parent->remove(MI);
-          Parent->insert(InsertPt, MI);
-          Order.erase(Order.begin() + I);
-          Order.insert(Order.begin() + LastReader, MI);
-        }
-      }
-
-      // Canonicalize each real child to its logical descriptor in place,
-      // then dissolve the bundle shell (children stay at the root's
-      // position as bare MIs — Hexagon packet-dissolve idiom). EVERY
-      // child (real, meta, debug, CFI, position) is unbundled; pad NOPs
-      // are erased. A left-bundled non-real child would outlive the root
-      // as an orphaned bundle chain (iterator assertion downstream).
-      //
-      // finalizeBundle only sets IsInternalRead; it never clears
-      // (MachineInstrBundle.cpp; the same law the pre-pack recommit clear
-      // and the sibling dissolve sites state — HaydnBundleMaterialize.cpp
-      // pre-pack clear, HaydnPostRASchedStrategy sequentializeMultiMemberRoot
-      // / unstamped dissolve, HaydnFixupHwLoops). A committed member that
-      // reads an in-parcel LocalDefs register carries that marker, and a
-      // reopened bare MI with a stale marker would hide the read from
-      // MachineOperand::readsReg() — blinding every readsReg()-based seat
-      // (the ONE shared no-forwarding predicate haydnHasIntraCycleRAW the
-      // incremental HR walk and SMS placement use) to a same-cycle true
-      // RAW. Reopen dissolves back to bare MIs: restore pre-bundle operand
-      // semantics on every kid that survives as a bare MI (real, meta,
-      // debug, CFI, position — clearing all is harmless and matches the
-      // erase-only exception for pad NOPs, which never re-enter
-      // scheduling).
-      for (MachineInstr *Kid : Kids) {
-        if (isPadNopOpcode(Kid->getOpcode())) {
-          Kid->clearFlag(MachineInstr::BundledPred);
-          Kid->clearFlag(MachineInstr::BundledSucc);
-          Kid->eraseFromParent();
-          continue;
-        }
-        for (MachineOperand &MO : Kid->operands()) {
-          if (MO.isReg() && MO.isInternalRead())
-            MO.setIsInternalRead(false);
-        }
-        const unsigned Opc = Kid->getOpcode();
-        if (!Kid->isMetaInstruction() && !Kid->isDebugInstr() &&
-            !Kid->isPosition())
-          if (unsigned Logical = format_e::lookupGeneratedMemberToLogical(Opc))
-            Kid->setDesc(MII.get(Logical));
-        Kid->clearFlag(MachineInstr::BundledPred);
-        Kid->clearFlag(MachineInstr::BundledSucc);
-      }
-      Root->clearFlag(MachineInstr::BundledSucc);
-      Root->eraseFromParent();
-      ++Reopened;
-    }
-  }
-  return Reopened;
 }
 
 } // namespace bundle

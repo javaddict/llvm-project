@@ -1,19 +1,22 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=postmisched,haydn-finalize-mi-bundles,haydn-verify-bundles,branch-relaxation,haydn-fixup-hwloops,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -run-pass=haydn-hwloops,postmisched,haydn-longbranch-normalize,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,POSTRA
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=branch-relaxation,haydn-fixup-hwloops,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -run-pass=haydn-hwloops,haydn-longbranch-normalize,haydn-finalize-mi-bundles,haydn-verify-bundles \
 # RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefixes=CHECK,LATE
 
-# Role: MIR — Fixed late multi-pass order (product PreEmit after postmisched pack): BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->.
+# Role: MIR — Fixed late multi-pass order: BranchRelaxation -> FixupHwLoops -> BranchRelaxation -> Finalize.
 #
 # W39 fixture hygiene (2026-08-16): historical noise `implicit-def dead $sfr`
 # operands on ALU members were removed (ALU descs carry no implicit SFR def;
 # under the unified no-dual-write law they silently defeated the multi-MI
 # coissue this fixture exists to pin). W39 itself is pinned by
 # w39-dead-def-dual-write-waw.mir.
-
-# Fixed late multi-pass order (product PreEmit after postmisched pack):
+#
+# Wave 4 H / GR2.10: CFG demote is illegal after PostCommitCfgSnapshot.
+# Formation unstamped demote stays legal; stamped closeRetainedHwLoops
+# never CFG-demotes (d159 restamp: Finalize-then-closer is FATAL).
+# Fixed late multi-pass order:
 #   BranchRelaxation -> FixupHwLoops -> BranchRelaxation ->
 #   late FinalizeBundle -> VerifyBundles
 #
@@ -79,7 +82,7 @@ body:             |
     $r4 = ADD32 $r0, $r1
     $r5 = XOR32 $r2, $r3
     $r6 = OR32 $r4, $r5
-    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    $r0 = JALR $r15, 0, implicit $r15
 
 ...
 ---
@@ -112,7 +115,7 @@ body:             |
     ; LATE: ADD32{{.*}}
     ;
     ; CHECK: BUNDLE 0
-    ; CHECK: {{B|BEQZ_W_MSP \$r0,}} %bb.1
+    ; CHECK: B %bb.1
     ; CHECK: BUNDLE 0
     ; CHECK: {{RET|JALR}}
     ; CHECK-NOT: LoopDec
@@ -145,8 +148,8 @@ body:             |
 
     $r0 = frame-setup XOR32 $r0, $r0
     ; Immediate trip 8; header==latch is %bb.2. Three following NOPs =
-    ; InterveningCycles (SetupIssueDistance=4). Final wide form so first
-    ; postmisched Finalize/Verify accept before Fixup demotes.
+    ; InterveningCycles (SetupIssueDistance=4). Wide SET so unstamped
+    ; Fixup (before Finalize) may CFG-demote; stamped Fixup refuses.
     SET_HWLOOP_W 0, %bb.2, %bb.2, 8, implicit-def dead $sfr
     NOP
     NOP
@@ -180,7 +183,7 @@ body:             |
   bb.2.body:
     liveins: $r1, $r0
     successors: %bb.3
-    ST32 $r0, $r1, 0
+    ST32 $r0, $r1, 0 :: (store (s32))
     NOP
     NOP
     NOP

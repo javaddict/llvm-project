@@ -40,119 +40,153 @@
 
 define float @frem_f32(float %a, float %b) {
 ; OK-LABEL: frem_f32:
-; OK: jal{{(\.s[012])?}}	lr, fmodf
+; OK: lui{{.*}}fmodf
+; OK: addi32{{.*}}fmodf
+; OK: jalr{{.*}}lr
   %r = frem float %a, %b
   ret float %r
 }
 
 define double @frem_f64(double %a, double %b) {
 ; OK-LABEL: frem_f64:
-; OK: jal{{(\.s[012])?}}	lr, fmod
+; OK: lui{{.*}}fmod
+; OK: addi32{{.*}}fmod
+; OK: jalr{{.*}}lr
   %r = frem double %a, %b
   ret double %r
 }
 
 define float @sqrt_f32(float %a) {
 ; OK-LABEL: sqrt_f32:
-; OK: jal{{(\.s[012])?}}	lr, sqrtf
+; OK: lui{{.*}}sqrtf
+; OK: addi32{{.*}}sqrtf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.sqrt.f32(float %a)
   ret float %r
 }
 
 define float @fma_f32(float %a, float %b, float %c) {
 ; OK-LABEL: fma_f32:
-; OK: jal{{(\.s[012])?}}	lr, fmaf
+; OK: lui{{.*}}fmaf
+; OK: addi32{{.*}}fmaf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.fma.f32(float %a, float %b, float %c)
   ret float %r
 }
 
 define float @sin_f32(float %a) {
 ; OK-LABEL: sin_f32:
-; OK: jal{{(\.s[012])?}}	lr, sinf
+; OK: lui{{.*}}sinf
+; OK: addi32{{.*}}sinf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.sin.f32(float %a)
   ret float %r
 }
 
 define float @cos_f32(float %a) {
 ; OK-LABEL: cos_f32:
-; OK: jal{{(\.s[012])?}}	lr, cosf
+; OK: lui{{.*}}cosf
+; OK: addi32{{.*}}cosf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.cos.f32(float %a)
   ret float %r
 }
 
 define float @exp_f32(float %a) {
 ; OK-LABEL: exp_f32:
-; OK: jal{{(\.s[012])?}}	lr, expf
+; OK: lui{{.*}}expf
+; OK: addi32{{.*}}expf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.exp.f32(float %a)
   ret float %r
 }
 
 define float @log_f32(float %a) {
 ; OK-LABEL: log_f32:
-; OK: jal{{(\.s[012])?}}	lr, logf
+; OK: lui{{.*}}logf
+; OK: addi32{{.*}}logf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.log.f32(float %a)
   ret float %r
 }
 
 define float @log2_f32(float %a) {
 ; OK-LABEL: log2_f32:
-; OK: jal{{(\.s[012])?}}	lr, log2f
+; OK: lui{{.*}}log2f
+; OK: addi32{{.*}}log2f
+; OK: jalr{{.*}}lr
   %r = call float @llvm.log2.f32(float %a)
   ret float %r
 }
 
 define float @log10_f32(float %a) {
 ; OK-LABEL: log10_f32:
-; OK: jal{{(\.s[012])?}}	lr, log10f
+; OK: lui{{.*}}log10f
+; OK: addi32{{.*}}log10f
+; OK: jalr{{.*}}lr
   %r = call float @llvm.log10.f32(float %a)
   ret float %r
 }
 
 define float @pow_f32(float %a, float %b) {
 ; OK-LABEL: pow_f32:
-; OK: jal{{(\.s[012])?}}	lr, powf
+; OK: lui{{.*}}powf
+; OK: addi32{{.*}}powf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.pow.f32(float %a, float %b)
   ret float %r
 }
 
 define double @pow_f64(double %a, double %b) {
 ; OK-LABEL: pow_f64:
-; OK: jal{{(\.s[012])?}}	lr, pow
+; OK: lui{{.*}}pow
+; OK: addi32{{.*}}pow
+; OK: jalr{{.*}}lr
   %r = call double @llvm.pow.f64(double %a, double %b)
   ret double %r
 }
 
 define float @powi_f32(float %a, i32 %n) {
 ; OK-LABEL: powi_f32:
-; OK: jal{{(\.s[012])?}}	lr, __powisf2
+; OK: lui{{.*}}__powisf2
+; OK: addi32{{.*}}__powisf2
+; OK: jalr{{.*}}lr
   %r = call float @llvm.powi.f32.i32(float %a, i32 %n)
   ret float %r
 }
 
 define float @trunc_f32(float %a) {
 ; OK-LABEL: trunc_f32:
-; OK: jal{{(\.s[012])?}}	lr, truncf
+; OK: lui{{.*}}truncf
+; OK: addi32{{.*}}truncf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.trunc.f32(float %a)
   ret float %r
 }
 
 define float @round_f32(float %a) {
 ; OK-LABEL: round_f32:
-; OK: jal{{(\.s[012])?}}	lr, roundf
+; OK: lui{{.*}}roundf
+; OK: addi32{{.*}}roundf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.round.f32(float %a)
   ret float %r
 }
 
 define float @roundeven_f32(float %a) {
 ; OK-LABEL: roundeven_f32:
-; OK: jal{{(\.s[012])?}}	lr, roundevenf
+; OK: lui{{.*}}roundevenf
+; OK: addi32{{.*}}roundevenf
+; OK: jalr{{.*}}lr
   %r = call float @llvm.roundeven.f32(float %a)
   ret float %r
 }
 
 define float @fp16_load_fpext(ptr %p) {
 ; OK-LABEL: fp16_load_fpext:
-; OK: jal{{(\.s[012])?}}	lr, __extendhfsf2
+; OK: lui{{.*}}__extendhfsf2
+; OK: addi32{{.*}}__extendhfsf2
+; OK: jalr{{.*}}lr
   %h = load half, ptr %p, align 2
   %f = fpext half %h to float
   ret float %f
@@ -160,7 +194,9 @@ define float @fp16_load_fpext(ptr %p) {
 
 define void @fp16_fptrunc_store(ptr %p, float %f) {
 ; OK-LABEL: fp16_fptrunc_store:
-; OK: jal{{(\.s[012])?}}	lr, __truncsfhf2
+; OK: lui{{.*}}__truncsfhf2
+; OK: addi32{{.*}}__truncsfhf2
+; OK: jalr{{.*}}lr
   %h = fptrunc float %f to half
   store half %h, ptr %p, align 2
   ret void
@@ -168,7 +204,9 @@ define void @fp16_fptrunc_store(ptr %p, float %f) {
 
 define double @fp16_load_fpext_f64(ptr %p) {
 ; OK-LABEL: fp16_load_fpext_f64:
-; OK: jal{{(\.s[012])?}}	lr, __extendhfdf2
+; OK: lui{{.*}}__extendhfdf2
+; OK: addi32{{.*}}__extendhfdf2
+; OK: jalr{{.*}}lr
   %h = load half, ptr %p, align 2
   %d = fpext half %h to double
   ret double %d

@@ -67,10 +67,10 @@ add_llvm_target(HaydnCodeGen
   HaydnLatencyStalls.cpp
   HaydnHazardRecognizer.cpp
   HaydnLongBranchNormalize.cpp
-  HaydnLateConvergence.cpp
   HaydnMachineAlignment.cpp
   HaydnHardwareLoops.cpp
   HaydnHWLoopDemote.cpp
+  HaydnLayoutSite.cpp
   HaydnFixupHwLoops.cpp
   HaydnEnsureTerminators.cpp
   HaydnAlternateDescriptors.cpp

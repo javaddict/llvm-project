@@ -38,6 +38,7 @@
 #include "llvm/Target/TargetOptions.h"
 #include "gtest/gtest.h"
 #include <memory>
+#include <optional>
 
 extern "C" void LLVMInitializeHaydnTargetInfo();
 extern "C" void LLVMInitializeHaydnTarget();
@@ -134,12 +135,19 @@ TEST_F(HaydnInterBlockEdgesTest, BoundarySplitSemantics) {
   EXPECT_EQ(DDG.getPostBoundaryNode(&P1), &DDG.SUnits[2]);
 }
 
-// Cross-boundary edges must carry the producer's conservative itinerary
-// latency on their SDep: the register-form SDep constructor hardcodes
-// Data latency to 1 (and binds its third argument as a REGISTER, not a
+// Cross-boundary memory edges must carry getMemoryLatency, not dest
+// OperandCycles. The register-form SDep constructor hardcodes Data
+// latency to 1 (and binds its third argument as a REGISTER, not a
 // latency). The effective-latency cut prices Remaining =
-// EdgeLat - Depth(Succ); a latency-1 memory edge understates a
-// Data_Latency=2 producer and lets S2 issue the consumer early.
+// EdgeLat - Depth(Succ); a latency-1 store→store edge understates the
+// published MemoryCycle window and lets S2 issue the consumer early.
+//
+// Golden store Data_Latency is 0 — ST32 has no dest claim. Slot0_LS
+// OperandCycles [2] is the load dest scaffold; Slot0_LS_WbLat [1] is
+// writeback-register latency. Store→store authority is the published
+// MemoryCycle pair (first=0, last=1) → Last-First+1 = 2, the same
+// getMemoryLatency API intra-block MemoryEdges already consumes
+// (AIE MemInstrItinData / AIEBaseInstrInfo.cpp:1038-1049).
 TEST_F(HaydnInterBlockEdgesTest, CrossBoundaryEdgeLatency) {
   const HaydnInstrInfo &II = TII();
   MachineInstr *Store1 =
@@ -170,27 +178,22 @@ TEST_F(HaydnInterBlockEdgesTest, CrossBoundaryEdgeLatency) {
   DDG.buildCrossBoundaryEdges(/*AA=*/nullptr, &II, TRI,
                               &DDG.getSchedModelRef());
 
-  // Memory edge Store1 -> Store2: Data kind, latency = the writer's
-  // published Data_Latency = max OperandCycles (ST32 memory scaffold = 2;
-  // every product InstrStage is single-cycle, so the stage latency would
-  // wrongly say 1), Reg stays 0 (no register bound).
-  const InstrItineraryData *Itin = ST->getInstrItineraryData();
-  const unsigned SchedClass = Store1->getDesc().getSchedClass();
-  unsigned Expected = 0;
-  for (unsigned I = 0;; ++I) {
-    std::optional<unsigned> OpLat = Itin->getOperandCycle(SchedClass, I);
-    if (!OpLat)
-      break;
-    Expected = std::max(Expected, *OpLat);
-  }
-  ASSERT_TRUE(Itin && !Itin->isEmpty()) << "haydn itinerary must be present";
-  EXPECT_EQ(Expected, 2u) << "ST32 memory scaffold Data_Latency";
+  const unsigned SrcSC = Store1->getDesc().getSchedClass();
+  const unsigned DstSC = Store2->getDesc().getSchedClass();
+  std::optional<int> First = II.getFirstMemoryCycle(SrcSC);
+  std::optional<int> Last = II.getLastMemoryCycle(SrcSC);
+  ASSERT_TRUE(First.has_value() && Last.has_value())
+      << "ST32 is a published Slot0_LS memory class";
+  EXPECT_EQ(*Last - *First + 1, 2) << "ST32 MemoryCycle pair (0,1)";
+  std::optional<int> MemLat = II.getMemoryLatency(SrcSC, DstSC);
+  ASSERT_TRUE(MemLat.has_value());
+  EXPECT_EQ(*MemLat, 2) << "ST32 MemoryCycle last-first+1=2";
   SmallVector<const SDep *, 4> MemEdges =
       DDG.getCrossBoundaryEdges(DDG.SUnits[0]);
   ASSERT_EQ(MemEdges.size(), 1u);
   EXPECT_EQ(MemEdges[0]->getKind(), SDep::Data);
   EXPECT_EQ(MemEdges[0]->getReg(), 0u);
-  EXPECT_EQ(MemEdges[0]->getLatency(), Expected);
+  EXPECT_EQ(MemEdges[0]->getLatency(), static_cast<unsigned>(*MemLat));
 
   // Register edge Def(ADD32 def R1) -> Use(ADD32 read R1): Data kind, Reg
   // bound to R1, latency >= the writer's itinerary latency.

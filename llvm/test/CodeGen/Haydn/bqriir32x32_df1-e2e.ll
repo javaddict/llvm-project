@@ -147,8 +147,9 @@ define i32 @main() {
 ; BUNDLE-LABEL: <main>:
 ; BUNDLE-DAG: lui
 ; BUNDLE-DAG: addi32
-; Unrelocated call target prints as "jal lr, 0" under Format E objdump.
-; BUNDLE: jal{{.*}}lr, 0
+; Two cascaded process() calls (general JAL_IND form), then load, then RET.
+; BUNDLE: jalr{{.*}}lr, r{{[0-9]+}}
+; BUNDLE: jalr{{.*}}lr, r{{[0-9]+}}
 ; BUNDLE: ld32
 ; BUNDLE: jalr{{.*}}r0, lr, 0
 entry:

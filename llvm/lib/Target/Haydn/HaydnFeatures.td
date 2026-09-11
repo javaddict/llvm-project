@@ -21,11 +21,9 @@ def HasAGU : Predicate<"Subtarget->hasAGU()">,
              AssemblerPredicate<(all_of FeatureAGU),
              "Enable Address Generation Unit">;
 
-// Tuner / ProcessorModel flags only. Instruction defs are not predicated on
-// HasCircularBuffer / HasBitReversed / HasSIMD: the generic CPU still
-// admits those families (HaydnGeneric.td: generic = HWLoop+AGU; haydn adds
-// the three). Attaching Predicates is a separate product gate, not implied
-// by declaring the feature.
+// Tuner / ProcessorModel flags. Product CPUs (generic and haydn) enable
+// every ISA feature. Instruction defs are not predicated on these bits;
+// -mattr=-feature remains a compiler test hook, not a product option.
 def FeatureCircularBuffer
     : SubtargetFeature<"circular-buffer", "HasCircularBuffer", "true",
                        "Enable circular buffer addressing (CBR registers)">;

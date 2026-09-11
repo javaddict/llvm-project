@@ -1,0 +1,718 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize,branch-relaxation,haydn-finalize-mi-bundles,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.68: already-long skip re-validates the retained near cond
+# (isAlreadyLongCfgJalr + condDisplacementInRange). In-range near cond
+# still skips (no stacked LUI+ADDI+JALR). Out-of-range near cond falls
+# through to Arm A (invert+retarget when the JALR dest is near).
+#
+# Arms (post-stamp pair chain: finalize stamps, Normalize, BR, finalize+
+# verify):
+#   already_long_far : JALR dest far, retained cond to layout-next. Skip
+#     holds: exactly ONE LUI/ADDI/JALR, near cond retained, no trampoline.
+#   near_edge_retained : retained near cond ~1920B out (+48 buffer still
+#     inside simm12). In-range skip is the product law, not a blind spot.
+#   reoverflowed_near_cond : JALR dest is layout-next (near); cond dest
+#     sits past 180 NOP parcels. condDisplacementInRange is false → Arm A
+#     invert+retarget. Pair moves to %bb.2; cond inverts to %bb.1.
+
+--- |
+  define void @already_long_far(i1 %c) {
+  entry:
+    br i1 %c, label %near, label %far
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define void @near_edge_retained(i1 %c) {
+  entry:
+    br i1 %c, label %near, label %far
+  pad:
+    br label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define void @reoverflowed_near_cond(i1 %c) {
+  entry:
+    br i1 %c, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            already_long_far
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.1, %bb.2
+    liveins: $r2, $r7, $r15
+    $r6 = LUI_E2_E0_ALU0_I12 %bb.2
+    $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.2
+    BEQZ_W $r7, %bb.1, implicit-def dead $sfr
+    BUNDLE implicit-def $r6, implicit $r6 {
+      $r6 = JALR_W $r6, 0
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            near_edge_retained
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.3
+    liveins: $r2, $r7, $r15
+    $r6 = LUI_E2_E0_ALU0_I12 %bb.3
+    $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.3
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    BUNDLE implicit-def $r6, implicit $r6 {
+      $r6 = JALR_W $r6, 0
+    }
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.near:
+    successors: %bb.3
+    liveins: $r15
+    RET implicit killed $r15
+
+  bb.3.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            reoverflowed_near_cond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r2', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r2, $r7, $r15
+    $r6 = LUI_E2_E0_ALU0_I12 %bb.1
+    $r6 = ADDI32_E2_E0_ALU0_RI20 $r6, %bb.1
+    BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    BUNDLE implicit-def $r6, implicit $r6 {
+      $r6 = JALR_W $r6, 0
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+# already_long_far: exactly one LUI / one ADDI / one JALR after the full
+# post-stamp pair (never a second stacked long form); near cond retained
+# to %bb.1; no CFG growth.
+# CHECK-LABEL: name:            already_long_far
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.2{{$}}
+# CHECK: ADDI32{{.*}}%bb.2{{$}}
+# CHECK: BEQZ{{.*}} $r7, %bb.1,
+# CHECK: JALR
+# CHECK-NOT: LUI
+# CHECK-NOT: JALR
+# CHECK: bb.1.near
+# CHECK-NOT: bb.4
+#
+# near_edge_retained: in-range retained near cond is still skipped.
+# CHECK-LABEL: name:            near_edge_retained
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.3{{$}}
+# CHECK: ADDI32{{.*}}%bb.3{{$}}
+# CHECK: BEQZ{{.*}} $r7, %bb.2,
+# CHECK: JALR
+# CHECK-NOT: LUI
+# CHECK-NOT: JALR
+# CHECK: bb.1.pad
+# CHECK-NOT: bb.4
+#
+# reoverflowed_near_cond: far retained cond + near JALR dest → invert+
+# retarget. Pair dest becomes %bb.2; cond inverts to %bb.1.
+# CHECK-LABEL: name:            reoverflowed_near_cond
+# CHECK: bb.0.entry
+# CHECK: LUI{{.*}}%bb.2{{$}}
+# CHECK: ADDI32{{.*}}%bb.2{{$}}
+# CHECK: BNEZ{{.*}} $r7, %bb.1,
+# CHECK: JALR
+# CHECK-NOT: LUI
+# CHECK-NOT: JALR
+# CHECK: bb.1.near
+# CHECK-NOT: bb.3

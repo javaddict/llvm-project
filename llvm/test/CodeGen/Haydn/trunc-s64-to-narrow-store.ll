@@ -28,8 +28,7 @@
 define void @trunc_s64_to_i8_store(i64 %v, ptr %p) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i8_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32_dr_l r2, d0 }
 ; CHECK-NEXT:    { nop; st8 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -42,8 +41,7 @@ define void @trunc_s64_to_i8_store(i64 %v, ptr %p) nounwind {
 define void @trunc_s64_to_i16_store(i64 %v, ptr %p) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i16_store:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32_dr_l r2, d0 }
 ; CHECK-NEXT:    { nop; st16 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -56,8 +54,7 @@ define void @trunc_s64_to_i16_store(i64 %v, ptr %p) nounwind {
 define i8 @trunc_s64_to_i8_arith(i64 %v) nounwind {
 ; CHECK-LABEL: trunc_s64_to_i8_arith:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

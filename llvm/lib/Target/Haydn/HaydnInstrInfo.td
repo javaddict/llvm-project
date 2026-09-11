@@ -1499,14 +1499,15 @@ def ORI32_W   : Fmt48_WideGPRImm<0x06, (outs GPR32:$rt),
 // Class 001 — Branch (§5.5). Offsets in 2-byte units (§5.14, D1).
 //===----------------------------------------------------------------------===//
 
-// Calls (Phase 1a): JAL_W/JALR_W are the canonical call forms.
-// They mirror legacy JAL/JALR — isCall + caller-saved clobber Defs (same set
-// as the legacy block, including R12 as normal call-clobbered GPR). JAL_W is NOT
-// isTerminator (a call returns); JALR_W is isTerminator (RET/indirect-branch
-// use) + isCall + isIndirectBranch. The prior `isBranch=isTerminator=
-// hasSideEffects=1` wrapping was wrong: it made JAL_W a terminator so
-// ADJCALLSTACKUP landed after a terminator (verifier error) AND omitted the
-// caller-saved Defs (lost live-across-call tracking).
+// Calls: ISel emits the general form (LOAD_ADDR + JAL_IND → JALR). JAL_W
+// remains the short CallSImm20 encoding (LLD cycle-neutral relax / asm).
+// JAL_W/JALR_W mirror legacy JAL/JALR — isCall + caller-saved clobber Defs
+// (same set as the legacy block, including R12 as normal call-clobbered GPR).
+// JAL_W is NOT isTerminator (a call returns); JALR_W is isTerminator
+// (RET/indirect-branch use) + isCall + isIndirectBranch. The prior
+// `isBranch=isTerminator=hasSideEffects=1` wrapping was wrong: it made
+// JAL_W a terminator so ADJCALLSTACKUP landed after a terminator (verifier
+// error) AND omitted the caller-saved Defs (lost live-across-call tracking).
 // Note: R15 (LR) is the explicit $rt output of JAL_W/JALR_W, not listed here.
 // R14 is a GPR; clobber/preserve via regmask only (not Defs).
 let Defs = [R1, R2, R3, R4, R5, R6, R7, R12,

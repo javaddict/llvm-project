@@ -93,7 +93,7 @@ body:             |
   bb.1:
     liveins: $r1, $r0
     successors: %bb.2
-    ST32 $r0, $r1, 0
+    ST32 $r0, $r1, 0 :: (store (s32))
   bb.2:
     liveins: $r15
     RET implicit $r15

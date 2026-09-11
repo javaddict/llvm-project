@@ -1,0 +1,242 @@
+# D1.116: ZOL missing-trailing-uncond fatal is PostCommit-gated. A latch
+# with two trailing B (ordered-tail law: multiple uncond cycles) used to
+# named-fatal at the ZOL arm pre-stamp. Pre-stamp now defers (SelUncond
+# nullptr); post-stamp the law still named-fatals. WALL/NOSTAMP split as
+# gr27-covc-poststamp-scratch-refusal.mir.
+#
+# Layout: 180 NOP parcels in bb.1 put exit %bb.2 past WIDE_BranchSImm12
+# (buffer=4).
+#
+# RUN: not llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 %s -o - 2>&1 \
+# RUN:   | FileCheck %s --check-prefix=WALL
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 %s -o - \
+# RUN:   | FileCheck %s --check-prefix=NOSTAMP
+# REQUIRES: haydn-registered-target
+
+--- |
+  define void @zol_dup_uncond() {
+  entry:
+    br label %latch
+  latch:
+    br i1 undef, label %latch, label %exit
+  pad:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            zol_dup_uncond
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.latch:
+    liveins: $r15
+    successors: %bb.0, %bb.2
+    PseudoLoopEnd %bb.0
+    B %bb.2
+    B %bb.2
+
+  bb.1.pad:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+# WALL: LLVM ERROR: haydn-longbranch-normalize: ordered terminator tail: multiple unconditional control cycles in tail at zol_dup_uncond bb.0
+#
+# NOSTAMP-LABEL: name:            zol_dup_uncond
+# NOSTAMP: PseudoLoopEnd %bb.0
+# NOSTAMP: B %bb.2
+# NOSTAMP: B %bb.2
+# NOSTAMP-NOT: JALR
+# NOSTAMP-NOT: LUI

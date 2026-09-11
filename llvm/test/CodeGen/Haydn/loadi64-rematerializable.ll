@@ -29,8 +29,7 @@
 define i64 @i64_const_small() nounwind {
 ; CHECK-LABEL: i64_const_small:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
@@ -43,8 +42,7 @@ define i64 @i64_const_small() nounwind {
 define i64 @i64_const_large() nounwind {
 ; CHECK-LABEL: i64_const_large:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; lui r1, 291 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 284280 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
@@ -58,8 +56,7 @@ define i64 @i64_const_large() nounwind {
 define i64 @i64_const_neg() nounwind {
 ; CHECK-LABEL: i64_const_neg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -70,8 +67,7 @@ define i64 @i64_const_neg() nounwind {
 define i64 @i64_const_in_two_blocks(i32 %c) nounwind {
 ; CHECK-LABEL: i64_const_in_two_blocks:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }

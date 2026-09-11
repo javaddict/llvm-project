@@ -4,6 +4,7 @@ add_llvm_component_library(LLVMHaydnDesc
   HaydnInstPrinter.cpp
   HaydnAsmBackend.cpp
   HaydnRelocLayout.cpp
+  HaydnCallRelax.cpp
   HaydnELFObjectWriter.cpp
   HaydnMCELFStreamer.cpp
   HaydnMCCodeEmitter.cpp

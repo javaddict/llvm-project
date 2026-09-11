@@ -12,7 +12,7 @@
 ; RUN:     -O2 -haydn-postra-interblock -stats -o /dev/null < %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=ON-STATS
 ; RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -global-isel-abort=1 \
-; RUN:     -O2 -haydn-postra-interblock -haydn-sms2 -stats -o /dev/null < %s 2>&1 \
+; RUN:     -O2 -haydn-postra-interblock -stats -o /dev/null < %s 2>&1 \
 ; RUN:     | FileCheck %s --check-prefix=ON-STATS
 ;
 ; W68.2R Bot scoreboard replay (AIE initializeBotScoreBoard peer,

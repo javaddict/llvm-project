@@ -42,8 +42,7 @@
 define void @test_independent_alu_cross_slot(i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-LABEL: test_independent_alu_cross_slot:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add64 d0, d0, d1; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; st32 r1, r3, 0 }
@@ -76,12 +75,11 @@ entry:
 define void @test_3slot_bundle(i32* %ptr, i32 %a, i32 %b, i64 %c, i64 %d,
 ; CHECK-LABEL: test_3slot_bundle:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { ld32 r1, r1, 0; add32 r2, r2, r3; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; st32 r1, r4, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; st64 d0, r5, 0 }
@@ -115,8 +113,7 @@ define i32 @test_raw_hazard(i32 %x) {
 ; SUB32 reads r1 (written by ADD32 above) -- RAW hazard -> separate bundle
 ; CHECK-LABEL: test_raw_hazard:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -142,8 +139,7 @@ define i32 @test_memory_dependency(i32* %ptr, i32 %val) {
 ; ld32 and ld32 are semantically identical loads, so this is acceptable.
 ; CHECK-LABEL: test_memory_dependency:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; st32 r2, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
@@ -172,12 +168,11 @@ define i32 @test_independent_loads(i32* %p1, i32* %p2) {
 ; Both appear on one bundle line.
 ; CHECK-LABEL: test_independent_loads:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { ld32 r1, r1, 0; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { ld32 r2, r2, 0; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

@@ -34,7 +34,6 @@ FunctionPass *createHaydnPostLegalizerCombiner();
 FunctionPass *createHaydnPostSelectOptimizePass();
 FunctionPass *createHaydnExpandPseudosPass();
 FunctionPass *createHaydnHardwareLoopsPass();
-FunctionPass *createHaydnFixupHwLoopsPass();
 FunctionPass *createHaydnEnsureTerminatorsPass();
 // AIE createAIEFinalizeBundle peer (AIEFinalizeBundle.h / AIE2TargetMachine:244).
 FunctionPass *createHaydnFinalizeBundlePass();
@@ -42,27 +41,10 @@ FunctionPass *createHaydnFinalizeBundlePass();
 // IsFreezeSeat argument pins seat identity at the call site: only the
 // addPreEmitPass2 adder passes true (D1.13; no default argument).
 FunctionPass *createHaydnVerifyBundlesPass(bool IsFreezeSeat);
-// Exposed-pipeline Data_Latency stall insert (pre-emit; every opt level).
-FunctionPass *createHaydnLatencyStallsPass();
-// W68.3R bounded late repair loop (S2 -> stalls -> HWLoop validate ->
-// BranchRelaxation-last, to a census fixed point; -haydn-sms2 gated).
-FunctionPass *createHaydnLateConvergencePass();
-// W70.2 function-entry alignment writer (AIE MachineAlignment peer; after
-// the closure Finalize+Verify at addPostBBSections). Pads the committed
-// extent with legal generated idle-parcel BUNDLEs; the AsmPrinter label no
-// longer grows.
-FunctionPass *createHaydnMachineAlignmentPass();
-// GR2.7 postcommit long-form normalizer: seated immediately BEFORE every
-// post-stamp BranchRelaxation invocation; rewrites far short-branch sites
-// to the terminal in-block LUI+ADDI32_W(+cond)+JALR_W form so BR's
-// CFG-creating fixup arms are product-unreachable (no trampoline/RestoreBB,
-// MF.size() unchanged). No-op before the first Finalize stamp.
+// Postcommit long-form normalizer. Rewrites far short-branch sites to the
+// in-block LUI+ADDI32_W(+cond)+JALR_W form. Generic BranchRelaxation is
+// seated only pre-S1 in addPreSched2 (RestoreBB while CFG is mutable).
 FunctionPass *createHaydnLongBranchNormalizePass();
-
-/// -haydn-sms2 (product default ON, G004 flip 2026-08-27). S1 keeps the
-/// inter-block DDG for S2 Bot replay; the last scheduler invocation clears
-/// it before freeze.
-bool haydnSMS2Enabled();
 
 /// -haydn-zol-pipelining (product default ON; emergency-disable only).
 /// Consumed by shouldUseSchedule (SMS ZOL admission) and
@@ -75,13 +57,9 @@ void initializeHaydnPostLegalizerCombinerPass(PassRegistry &);
 void initializeHaydnPostSelectOptimizePass(PassRegistry &);
 void initializeHaydnExpandPseudosPass(PassRegistry &);
 void initializeHaydnHardwareLoopsPass(PassRegistry &);
-void initializeHaydnFixupHwLoopsPass(PassRegistry &);
 void initializeHaydnEnsureTerminatorsPass(PassRegistry &);
 void initializeHaydnFinalizeBundlePass(PassRegistry &);
 void initializeHaydnVerifyBundlesPass(PassRegistry &);
-void initializeHaydnLatencyStallsPass(PassRegistry &);
-void initializeHaydnLateConvergencePassPass(PassRegistry &);
-void initializeHaydnMachineAlignmentPass(PassRegistry &);
 void initializeHaydnLongBranchNormalizePass(PassRegistry &);
 } // namespace llvm
 

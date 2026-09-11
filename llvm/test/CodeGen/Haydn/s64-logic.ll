@@ -8,8 +8,7 @@
 define i64 @and64(i64 %a, i64 %b) {
 ; CHECK-LABEL: and64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; and64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -23,8 +22,7 @@ define i64 @and64(i64 %a, i64 %b) {
 define i64 @or64(i64 %a, i64 %b) {
 ; CHECK-LABEL: or64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -38,8 +36,7 @@ define i64 @or64(i64 %a, i64 %b) {
 define i64 @xor64(i64 %a, i64 %b) {
 ; CHECK-LABEL: xor64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; xor64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -53,8 +50,7 @@ define i64 @xor64(i64 %a, i64 %b) {
 define i64 @and64_imm(i64 %a) {
 ; CHECK-LABEL: and64_imm:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 255 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1 }
@@ -72,8 +68,7 @@ define i64 @and64_imm(i64 %a) {
 define i64 @logic64_chain(i64 %a, i64 %b, i64 %c) {
 ; CHECK-LABEL: logic64_chain:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; or64 d1, d0, d1 }
 ; CHECK-NEXT:    { nop; nop; and64 d1, d1, d2 }
@@ -91,8 +86,7 @@ define i64 @logic64_chain(i64 %a, i64 %b, i64 %c) {
 define i64 @not64(i64 %a) {
 ; CHECK-LABEL: not64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; not64 d0, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

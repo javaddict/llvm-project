@@ -1,8 +1,8 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=NEAR --check-prefix=FAR
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs \
 # RUN:   %S/Inputs/gr27-d134-header-first-control.mir -o - \
 # RUN:   | FileCheck %s --check-prefix=CTL
 # REQUIRES: haydn-registered-target
@@ -302,15 +302,19 @@ body:             |
 ...
 # Adjacent rotated backedge: measured FORWARD 0 B — short demote with a
 # BNEZ backedge (this arm is the nsichneu #289/#302 regression pin; it
-# fatals under a flat sentinel refusal).
+# fatals under a flat sentinel refusal). Latch BNEZ_W $r2 is a Latch-block
+# terminator zero-test (erased by the L2 latch-terminator sweep before
+# SUBI32+BNEZ_W). It is not a live-in-body read, so Prefer ($r2) remains
+# the countdown.
 # NEAR-LABEL: name:            rotated_near
-# NEAR: SUBI32
+# NEAR: $r2 = SUBI32
 # NEAR: BNEZ{{.*}} $r2, {{.*}}bb.2
 # NEAR-NOT: JALR
 #
 # Far rotated backedge: measured FORWARD 2052 B — the terminal in-block
 # long latch LUI(scr); ADDI32_W(scr); BEQZ_W(countdown, Exit); JALR_W.
 # FAR-LABEL: name:            rotated_far
+# FAR: $r2 = SUBI32
 # FAR: LUI
 # FAR: ADDI32
 # FAR: BEQZ{{.*}} $r2, {{.*}}bb.4
@@ -318,6 +322,7 @@ body:             |
 # FAR-NOT: BNEZ
 #
 # Header-then-Latch control (2100 B backward span): LONG, unchanged.
+# Body is NOP-only, so Prefer ($r2) remains the countdown.
 # CTL-LABEL: name:            header_first
 # CTL: LUI
 # CTL: ADDI32

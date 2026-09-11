@@ -20,12 +20,12 @@ declare void @use_i32(i32)
 define i64 @test_zext_gpr_to_dr64(i32 %x) nounwind {
 ; CHECK-LABEL: test_zext_gpr_to_dr64:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { sext32t64 d1, r1; addi32 r2, r0, 1 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32; sext32t64 d0, r2 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; nop; srli64 d0, d0, 32 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r1; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -42,8 +42,7 @@ entry:
 define i32 @test_trunc_dr64_to_gpr(i64 %x) nounwind {
 ; CHECK-LABEL: test_trunc_dr64_to_gpr:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -61,16 +60,17 @@ entry:
 define i64 @test_multiple_cross_bank(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_multiple_cross_bank:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { nop; sext32t64 d1, r2; sext32t64 d0, r1 }
-; CHECK-NEXT:    { nop; slli64 d1, d1, 32; slli64 d0, d0, 32 }
-; CHECK-NEXT:    { nop; srli64 d1, d1, 32; srli64 d0, d0, 32 }
-; CHECK-NEXT:    { add64 d0, d0, d1; addi32 r2, r0, 100 }
-; CHECK-NEXT:    { nop; sext32t64 d0, r2; move32_dr_l r1, d0 }
-; CHECK-NEXT:    { slli64 d0, d0, 32; addi32 r1, r1, 10 }
-; CHECK-NEXT:    { nop; srli64 d0, d0, 32; sext32t64 d1, r1 }
-; CHECK-NEXT:    { nop; nop; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r2; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
+; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
+; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
+; CHECK-NEXT:    { addi32 r2, r0, 100; addi32 r1, r1, 10 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r1; slli64 d0, d0, 32 }
+; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d1, d1, 32 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -92,12 +92,11 @@ entry:
 define i64 @test_cross_bank_under_pressure(i32 %a, i32 %b, i32 %c, i32 %d,
 ; CHECK-LABEL: test_cross_bank_under_pressure:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add32 r2, r3, r4; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r7; add32 r3, r5, r6 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1; add32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; slli64 d0, d0, 32; sext32t64 d1, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r2; slli64 d0, d0, 32 }
 ; CHECK-NEXT:    { nop; srli64 d0, d0, 32; slli64 d1, d1, 32 }
 ; CHECK-NEXT:    { srli64 d1, d1, 32; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; sext32t64 d1, r1; add64 d0, d0, d1 }
@@ -131,8 +130,7 @@ entry:
 define i64 @test_zext_return(i32 %x) nounwind {
 ; CHECK-LABEL: test_zext_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 6 }
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }

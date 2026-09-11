@@ -38,6 +38,22 @@ extern cl::opt<int> HaydnLoopMinTripCount;
 // Produced by HaydnInstrInfo::analyzeCountableLoop. Fields are valid only when
 // the method returns true. Declared early (forward) so HaydnInstrInfo's method
 // can reference it; defined after the class.
+// D1.117 owner record. AIE/RISCV leave indirect unanalyzable
+// (AIEBaseInstrInfo.cpp:186-188, RISCVInstrInfo.cpp:1325-1327). Hexagon
+// walks instr_iterator (HexagonInstrInfo.cpp:435-508) with no LUI+ADDI
+// pair. Haydn overlay: complete LUI+ADDI %bb chain from JALR rs, or a
+// named refusal at retarget (D1.124). Dest may still name the first
+// recovered %bb so cond+JALR stays analyzable.
+struct HaydnJalrAddrMaterializeChain {
+  MachineInstr *Control = nullptr;
+  MachineInstr *Lui = nullptr;
+  MachineInstr *Addi = nullptr;
+  MachineBasicBlock *Dest = nullptr;
+  Register JumpReg;
+  bool Complete = false;
+  bool Incoherent = false;
+};
+
 struct HaydnCountableLoop {
   // The loop's conditional-branch terminator (the latch back-edge/exit test).
   // A hardware-loop pass removes this once the loop is converted.
@@ -57,6 +73,11 @@ struct HaydnCountableLoop {
   // decrementing IV, or the compare's non-IV operand for an incrementing IV).
   Register TripCountReg;
 };
+
+// D1.74: member→logical peel via msp::logicalOpcodeForMspClone (slot-map
+// MultiSlot leftovers). D1.130 gMIR roles (B, JALR_CALL, JAL_TCO, JALR_TCO) are not
+// peeled here. Catalog BEQZ/JAL/JALR stay cond / call / RET.
+unsigned haydnLogicalOpcode(unsigned Opc);
 
 class HaydnInstrInfo : public HaydnGenInstrInfo {
   const HaydnRegisterInfo RegInfo;
@@ -105,6 +126,11 @@ public:
   Register isStoreToStackSlotPostFE(const MachineInstr &MI,
                                     int &FrameIndex) const override;
 
+  // Dest-less CFG JALR/RET/computed-goto is unanalyzable. LUI/ADDI %bb dest
+  // recovery keeps cond+long JALR two-way. JALR_CALL is a returning call, not
+  // a CFG jump (dest-scan miss continues). A coissued short uncond B stays
+  // the FBB when unwrap prefers the cond. JAL_W / JAL_TCO / JALR_TCO are not
+  // analyzable uncond terminators.
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
@@ -142,10 +168,30 @@ public:
 
   // Strip short B/cond terminators (including bundled solo/coissue). Leave
   // LUI+ADDI32_W+JALR_W sites intact so they cannot shrink back to B.
-  // Post-stamp removals re-stamp surviving members as committed
-  // singletons/cycles (never leaves bare real encode).
+  // Post-stamp coissued survivors stay on the same root (same-row NOP
+  // of the vacated child). Pre-stamp restamp is one product cycle or
+  // one singleton wrap (no singleton-split; never leaves bare real encode).
   unsigned removeBranch(MachineBasicBlock &MBB,
                        int *BytesRemoved = nullptr) const override;
+
+  // Erase a selected branch (bare MI, BUNDLE root, or bundled member).
+  // Bare: erase the MI. Solo BUNDLE (branch ± padding): erase the whole
+  // cycle. Coissued BUNDLE{branch, real…}:
+  //   * post-stamp: neutralize the selected child with the generated
+  //     same-row NOP (HexagonConstPropagation.cpp:2508-2512 replaceWithNop
+  //     peer; pipeline.md preserve-or-extend). Do not unbundle, do not
+  //     singleton-split, do not re-choose the row.
+  //   * pre-stamp: strip only that member (LongBranchNormalize far uncond)
+  //     and restamp survivors as one product cycle or one singleton wrap
+  //     (HaydnHWLoopDemote.cpp:860-890 recommitSurvivingCycleMembers
+  //     unbundle). No singleton-split fallback.
+  //   * BUNDLE root: strip every branch child in that cycle (generic
+  //     removeBranch per-cycle) under the same post-/pre-stamp law
+  // Does not walk preceding cycles — generic removeBranch still reverse-
+  // walks the trailing analyzable tail (AIEBaseInstrInfo.cpp:237-266;
+  // HexagonInstrInfo.cpp:605-625; RISCVInstrInfo.cpp:1361-1390).
+  unsigned eraseSelectedBranch(MachineInstr &MI,
+                               int *BytesRemoved = nullptr) const;
 
   // Reverse a branch condition, swapping the target basic blocks.
   bool reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
@@ -154,10 +200,10 @@ public:
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
   // Representation expansion after MBP (HaydnExpandPseudos) and leftover
-  // wrap (HaydnFinalizeBundle). B becomes BEQZ_W_MSP r0 (barrier clone of
-  // BEQZ_W; AIEPseudoBranchExpansion.cpp:70-75). RET/BR_JT rebuild JALR_W.
-  // PseudoCALLIndirect becomes JALR_MSP. Returns the surviving MI, or
-  // nullptr when \p MI is not one of those four.
+  // wrap (HaydnFinalizeBundle). B stays B through MIR (encoder peels to
+  // BEQZ rs=R0). RET/BR_JT rebuild JALR_W. PseudoCALLIndirect becomes
+  // JALR_CALL. Returns the surviving MI, or nullptr when \p MI is not
+  // RET/BR_JT/PseudoCALLIndirect.
   MachineInstr *expandRepresentationPseudo(MachineInstr &MI) const;
 
   // Format E CB members list dest2 as an input only (HaydnFormatsE96Members
@@ -217,20 +263,39 @@ public:
   bool isBranchOffsetInRange(unsigned BranchOpc,
                              int64_t BrOffset) const override;
 
+  // D1.142: explicit site unwrap. Opcode-only BUNDLE stays always-in-range
+  // unless getBranchDestBlock just armed the same MI (generic BR pair at
+  // BranchRelaxation.cpp:739-740). Haydn callers pass the site MI and never
+  // the thread_local handshake. AIE has no BR; RISC-V
+  // RISCVInstrInfo.cpp:1751-1758 and Hexagon isJumpWithinBranchRange take
+  // the MI / opcode they already unwrapped — no hidden adjacency flag.
+  bool isBranchOffsetInRange(const MachineInstr &MI, int64_t BrOffset) const;
+
   // Destination MBB of a short B/cond, or of the LUI/ADDI32_W pair that
-  // materializes a long-form JALR target. Null if the JALR has no address MI.
+  // materializes a long-form JALR target. Null if the JALR has no address MI
+  // or is a returning JALR_CALL.
   MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
 
-  // Long-form far jump: LUI+ADDI32_W+JALR_W (RISCV insertIndirectBranch
-  // peer; AIE has empty addPreEmitPass / no BR). Inherits DL onto every new
-  // MI including the emergency FI spill/reload. Updates Dest PHIs and
-  // RestoreBB live-ins. Does not add CFG successors (BranchRelaxation owns
-  // that after return). Spill is ST32 to a pre-reserved FI — SP/CFA unchanged.
+  // One LUI+ADDI chain owner from JALR rs (D1.117). Complete requires both
+  // halves, same %bb dest, and ADDI rs = JumpReg. Retarget named-refuses
+  // a missing or dest-mismatched pair (D1.124).
+  HaydnJalrAddrMaterializeChain
+  getJalrAddrMaterializeChain(const MachineInstr &Jalr) const;
+
+  // Long-form far jump: LUI+ADDI32_W+JALR_W into the pre-S1 BR trampoline
+  // (RISCVInstrInfo.cpp:1294-1323 AUIPC+JALR vocabulary; AIE has empty
+  // addPreEmitPass / no BR at AIE2TargetMachine.cpp:92). Inherits DL onto
+  // every new MI. Updates Dest PHIs onto the trampoline. Does not add CFG
+  // successors (BranchRelaxation owns that after return). RestoreBB is
+  // unused and stays empty so generic BR erases it
+  // (BranchRelaxation.cpp:687-688). No R11 spill. No free GPR is
+  // fail-closed — RISC-V RestoreBB (RISCVInstrInfo.cpp:1433-1498) is the
+  // CFG form Haydn does not grow.
   //
   // GR2.7 phase law: once the first Finalize run stamped the postcommit
   // block budget, this CFG-creating callback REFUSES (named fatal) —
-  // long-form promotion must be selected pre-scheduler. Unstamped
-  // (pre-S1 seat, -run-pass probes) behavior is unchanged.
+  // long-form promotion is LBN in-block templates. Unstamped (pre-S1
+  // seat, -run-pass probes) emits the trampoline sequence only.
   void insertIndirectBranch(MachineBasicBlock &MBB,
                             MachineBasicBlock &NewDestBB,
                             MachineBasicBlock &RestoreBB, const DebugLoc &DL,
@@ -379,6 +444,10 @@ public:
   bool areMemAccessesTriviallyDisjoint(const MachineInstr &MIa,
                                        const MachineInstr &MIb) const override;
 };
+
+/// HexagonConstPropagation.cpp:2508-2512 replaceWithNop (setDesc + strip).
+/// Generated same-row NOP of the committed packet; do not unbundle.
+void neutralizeSameRowNop(MachineInstr &MI, const HaydnInstrInfo &TII);
 
 } // namespace llvm
 

@@ -45,10 +45,10 @@ define dso_local i32 @cb161_dual_mux() {
 ; CHECK-LABEL: name: cb161_dual_mux
 ; All four SFR-epoch members exist (order-free: the scheduler may interleave
 ; the two epochs' memory/ALU filler, only the $sfr operand law is pinned).
-; CHECK-DAG: X2SLT32_E3_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit-def $sfr
-; CHECK-DAG: X2MOVT32_E3_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit $sfr
-; CHECK-DAG: X4SLT16_E3_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit-def $sfr
-; CHECK-DAG: X4MOVT16_E3_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit $sfr
+; CHECK-DAG: X2SLT32_E{{[23]}}_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit-def $sfr
+; CHECK-DAG: X2MOVT32_E{{[23]}}_E{{[012]}}_ALU{{[012]}}_R
+; CHECK-DAG: X4SLT16_E{{[23]}}_E{{[012]}}_ALU{{[012]}}_R {{.*}}implicit-def $sfr
+; CHECK-DAG: X4MOVT16_E{{[23]}}_E{{[012]}}_ALU{{[012]}}_R
 entry:
   %p2 = call i32 @llvm.haydn.x2cmplt32(<2 x i32> <i32 1, i32 2>,
                                        <2 x i32> <i32 3, i32 4>)

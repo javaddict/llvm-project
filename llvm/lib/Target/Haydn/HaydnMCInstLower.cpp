@@ -44,37 +44,53 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-mcinstlower"
 
-/// `_MSP` clones encode as the catalog logical's generated member at the
-/// already-stamped (Mode, EntryIdx). Table identity, not occupancy DFS.
-/// Standalone clones take the closed-singleton E2 entry 0 member
-/// (AIEMachineScheduler.cpp:1126-1132 setDesc of the selected alt; Haydn
-/// overlay keeps the clone in MIR so CFG flags survive BranchRelaxation).
+/// Encode-peel overlays (B / JALR_CALL / JAL_TCO / JALR_TCO, and residual `_MSP`
+/// clones until S deletes them) encode as the catalog logical's generated
+/// member at the already-stamped (Mode, EntryIdx). Table identity, not
+/// occupancy DFS. Standalone overlays take the closed-singleton E2 entry 0
+/// member. gMIR keeps the overlay so CFG flags survive BranchRelaxation;
+/// no MIR setDesc of a call onto terminator JALR.
 static unsigned haydnMemberOpcodeForLogicalModeEntry(StringRef Logical,
                                                      uint8_t Mode,
                                                      unsigned EntryIdx) {
-  for (unsigned I = 0; I < haydn::format_e::FormatEMemberCount; ++I) {
-    const haydn::format_e::FormatEMemberRec &Mem =
-        haydn::format_e::FormatEMembers[I];
-    if (Mem.IsNop || Mem.Mode != Mode || Mem.EntryIdx != EntryIdx)
-      continue;
-    if (!Mem.Logical || !StringRef(Mem.Logical).equals_insensitive(Logical))
-      continue;
-    if (I < FormatEMemberOpcodeCount && FormatEMemberOpcodes[I])
-      return FormatEMemberOpcodes[I];
-  }
+  const unsigned Mid =
+      haydn::format_e::findFormatEMemberIdForLogicalModeEntry(Logical, Mode,
+                                                             EntryIdx);
+  if (Mid < FormatEMemberOpcodeCount && FormatEMemberOpcodes[Mid])
+    return FormatEMemberOpcodes[Mid];
   return 0;
+}
+
+/// Catalog logical NAME the encoder emits. ONE D1.74 table for remaining
+/// `_MSP` clones (logicalNameForMspClone). D1.130 gMIR names map onto the
+/// same catalog keys that table already uses — not a second occupancy
+/// switch. ADD32_MSP stays empty (setDesc baking is its only commit path).
+static StringRef haydnEncodeInverseLogicalName(unsigned Opc) {
+  if (StringRef Mapped = haydn::msp::logicalNameForMspClone(Opc);
+      !Mapped.empty())
+    return Mapped;
+  switch (Opc) {
+  case Haydn::B:
+    return "BEQZ";
+  case Haydn::JALR_CALL:
+  case Haydn::JALR_TCO:
+    return "JALR";
+  case Haydn::JAL_TCO:
+    return "JAL";
+  default:
+    return StringRef();
+  }
 }
 
 static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
   const unsigned Opc = MI.getOpcode();
-  // ONE clone-family table (D1.43): the structural inverse walk in
-  // HaydnBundleVerify.cpp resolves the same clones through
-  // logicalOpcodeForMspClone in HaydnMspCloneFamily.h — serializer and
-  // verifier cannot drift. Unmapped `_MSP` opcodes (ADD32_MSP) return an
-  // empty name and stay Desc-as-is here; the verifier's unit-cover
-  // pre-check fails closed on them (setDesc baking is their only commit
-  // path).
-  const StringRef Logical = haydn::msp::logicalNameForMspClone(Opc);
+  // ONE clone-family table (D1.43 / D1.74) plus D1.130 gMIR overlays.
+  // HaydnBundleVerify.cpp resolves clones through logicalOpcodeForMspClone
+  // — serializer and verifier cannot drift. Unmapped `_MSP` opcodes
+  // (ADD32_MSP) return an empty name and stay Desc-as-is here; the
+  // verifier's unit-cover pre-check fails closed on them (setDesc baking
+  // is their only commit path).
+  const StringRef Logical = haydnEncodeInverseLogicalName(Opc);
   if (Logical.empty())
     return Opc;
 
@@ -92,6 +108,12 @@ static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
     unsigned Pos = 0;
     for (const MachineInstr *C : haydn::bundle::members(Root)) {
       if (!C)
+        continue;
+      // Same census as freeze verifyCommittedBundle EntryOpcodes: skip
+      // meta/debug/position so PreferEntry is the stamped membership
+      // index, not a debug-inflated child count. Pad NOPs stay — they
+      // are unused windows in the encode-dag, never compacted.
+      if (C->isMetaInstruction() || C->isDebugInstr() || C->isPosition())
         continue;
       if (C == &MI) {
         PreferEntry = Pos;
@@ -119,8 +141,8 @@ static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
   }
   if (Entry >= Cap)
     report_fatal_error(
-        "Haydn MCInstLower: `_MSP` clone has no free Format E entry in the "
-        "stamped row — refuse first-member occupancy invent",
+        "Haydn MCInstLower: encode-peel overlay has no free Format E entry "
+        "in the stamped row — refuse first-member occupancy invent",
         /*GenCrashDiag=*/false);
   const unsigned Member =
       haydnMemberOpcodeForLogicalModeEntry(Logical, Mode, Entry);
@@ -128,7 +150,7 @@ static unsigned haydnMemberOpcodeForMspClone(const MachineInstr &MI) {
     report_fatal_error(
         Twine("Haydn MCInstLower: no generated ") + Logical +
             " member at mode " + Twine(static_cast<unsigned>(Mode)) +
-            " entry " + Twine(Entry) + " for `_MSP` clone",
+            " entry " + Twine(Entry) + " for encode-peel overlay",
         /*GenCrashDiag=*/false);
   return Member;
 }
@@ -152,6 +174,7 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // format-member when materialize succeeded; logical residual otherwise
   // (hand-asm / pseudo expand). Placement is member Desc getSlotKind /
   // Format composite (AIEBaseMCFormats.cpp:66-75) — no Flags re-slot.
+  const unsigned SrcOpc = MI->getOpcode();
   OutMI.setOpcode(haydnMemberOpcodeForMspClone(*MI));
 
   // Reloc CSR I8 must already be a generated member. A leftover
@@ -188,6 +211,11 @@ void HaydnMCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   // latch). Owned by Lower so BUNDLE/standalone stay pure Desc-as-is (no
   // printer dual-path expand).
   const bool Hwloop = isHwloopWideSetup(*MI);
+
+  // Uncond B is dest-only in MIR; catalog BEQZ is (rs, dest). Encoder
+  // injects rs=R0 (same bits as catalog BEQZ). Do not rewrite MIR.
+  if (SrcOpc == Haydn::B)
+    OutMI.addOperand(MCOperand::createReg(Haydn::R0));
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
@@ -307,9 +335,18 @@ MCOperand HaydnMCInstLower::LowerOperand(const MachineOperand &MO) const {
 
   case MachineOperand::MO_IntrinsicID:
   case MachineOperand::MO_Predicate:
-  case MachineOperand::MO_TargetIndex:
     // These should not appear in real instructions
     return MCOperand();
+
+  case MachineOperand::MO_TargetIndex:
+    // D1.54 census admits TargetIndex as a non-reg kind; Haydn has no
+    // target-index lowering (no getTargetIndexName). Silent drop would
+    // encode a truncated operand list. Refuse.
+    report_fatal_error(
+        "Haydn MCInstLower: MO_TargetIndex is not a Haydn lowering — "
+        "refuse silent drop",
+        /*GenCrashDiag=*/false);
+    llvm_unreachable("MO_TargetIndex is not a Haydn lowering");
   }
 
   return MCOperand();

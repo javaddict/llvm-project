@@ -65,22 +65,34 @@
 #define LLVM_LIB_TARGET_HAYDN_HAYDNPORTMODEL_H
 
 #include "HaydnFormatERecords.h"
-#include "HaydnRegisterInfo.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCInstrInfo.h"
+#include <cstdint>
+
+// LLVMHaydnDesc (HaydnMCChecker) includes this header with
+// HAYDN_PORTMODEL_MC_ONLY so parse-time can import named ceilings and the
+// opcode-only solo / HWLR-CSR / store-load predicates without CodeGen.
+#ifndef HAYDN_PORTMODEL_MC_ONLY
+#include "HaydnRegisterInfo.h"
+
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/MC/MCInstrDesc.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCRegister.h"
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
+#include <utility>
+#endif
 
 namespace llvm {
 
@@ -112,6 +124,179 @@ inline constexpr unsigned HAYDN_AR_WRITE_PORTS = 2;
 // require at most one SFR writer per bundle (write budget 1 encodes that).
 inline constexpr unsigned HAYDN_SFR_READ_PORTS = 2;
 inline constexpr unsigned HAYDN_SFR_WRITE_PORTS = 1;
+
+/// One solo-class matrix for same-cycle issue-alone / e0-alone gates.
+/// Four named classes, one classify site — do not add a fifth boolean next
+/// to these. Hexagon packet solo bits overlay; AIE has no solo enum
+/// (AIEBaseSubtarget.cpp itinerary-only). Golden Constraints §Special /
+/// HI12-LO20 FieldLsb / CSR 0x20-0x25.
+enum class HaydnSoloIssueClass : uint8_t {
+  None = 0,
+  SinCosArctan,  // ARCTAN / SIN_COS — alone in the issue cycle
+  LuiAddiE0,     // LUI / ADDI32_W — e0-alone (HI12/LO20 FieldLsb)
+  CsrwSetHwloop, // CSRW 0x20-0x25 must not share a cycle with SET_HWLOOP
+};
+
+/// SET_HWLOOP opcode family (W64 QW2). The three overlapping lists are
+/// DIFFERENT LAWS (T1): ResidualLaw = pre-expansion shells only
+/// (ExpandPseudos rewrites them to _W forms); ExpandedLaw = residual plus
+/// the wide committed forms HardwareLoops/TII reason about — including bare
+/// golden logical SET_HWLOOP_F2 (HWLRIIR), which no generated member
+/// inverts to (SET_HWLOOP_F2_* members resolve to SET_HWLOOP_F2_W) and
+/// which the old Setup/RegTrip name-peel fallbacks admitted; TiiLaw =
+/// ExpandedLaw plus LoopStart (TII isHardwareLoopSetup* serves mutation +
+/// Fixup, which must also see LoopStart). MCInstLower excludes LoopStart
+/// (wide-setup lowering is encode-only). One shared bool anywhere = a
+/// silent dropped encode.
+enum class HaydnHwloopSetupFamily : uint8_t {
+  None = 0,
+  Residual,  // SET_HWLOOP, SET_HWLOOP_REG (pre-expansion shells)
+  Expanded,  // + SET_HWLOOP_F2, SET_HWLOOP_W, SET_HWLOOP_F2_W,
+             //   SET_HWLOOP_REG_W
+  Tii,       // + LoopStart (mutation/Fixup population)
+};
+
+/// Classify an already-logical (or public hand-asm) hwloop-setup opcode.
+/// Does not call lookupGeneratedMemberToLogical (CodeGen-only symbol).
+inline HaydnHwloopSetupFamily
+haydnClassifyHwloopSetupLogical(unsigned Log) {
+  switch (Log) {
+  case Haydn::SET_HWLOOP:
+  case Haydn::SET_HWLOOP_REG:
+    return HaydnHwloopSetupFamily::Residual;
+  case Haydn::SET_HWLOOP_F2:
+  case Haydn::SET_HWLOOP_W:
+  case Haydn::SET_HWLOOP_F2_W:
+  case Haydn::SET_HWLOOP_REG_W:
+    return HaydnHwloopSetupFamily::Expanded;
+  case Haydn::LoopStart:
+    return HaydnHwloopSetupFamily::Tii;
+  default:
+    return HaydnHwloopSetupFamily::None;
+  }
+}
+
+/// Classify one hwloop-setup opcode. Accepts raw or already-logical
+/// opcodes: the member peel (logicalOpcodeOrSelf) is idempotent, and
+/// generated SET_HWLOOP_* members invert to their wide logical forms.
+inline HaydnHwloopSetupFamily
+haydnClassifyHwloopSetupOpcode(unsigned Opcode) {
+  return haydnClassifyHwloopSetupLogical(
+      haydn::format_e::logicalOpcodeOrSelf(Opcode));
+}
+
+/// Logical-opcode classify. Format E members peel at the HR / Materialize
+/// sites; this list stays the logical identity only. Peel-free so
+/// LLVMHaydnDesc can call it on public hand-asm opcodes.
+inline HaydnSoloIssueClass haydnClassifySoloIssueLogical(unsigned Log) {
+  if (Log == Haydn::ARCTAN || Log == Haydn::SIN_COS)
+    return HaydnSoloIssueClass::SinCosArctan;
+  if (Log == Haydn::LUI || Log == Haydn::ADDI32_W)
+    return HaydnSoloIssueClass::LuiAddiE0;
+  // Tii membership: bare SET_HWLOOP_F2 joins the CSRW-conflict class here
+  // (the MC checker string law starts_with("SET_HWLOOP") already covers
+  // it — this closes the compiler-side gap; fail-closed direction).
+  if (haydnClassifyHwloopSetupLogical(Log) != HaydnHwloopSetupFamily::None)
+    return HaydnSoloIssueClass::CsrwSetHwloop;
+  return HaydnSoloIssueClass::None;
+}
+
+/// Logical-opcode classify. Format E members peel at the HR / Materialize
+/// sites; this list stays the logical identity only.
+inline HaydnSoloIssueClass haydnClassifySoloIssueOpcode(unsigned Opcode) {
+  return haydnClassifySoloIssueLogical(
+      haydn::format_e::logicalOpcodeOrSelf(Opcode));
+}
+
+/// LUI / ADDI32_W e0-alone (HI12/LO20 FieldLsb). Same peel as HR
+/// isAbsMaterializeOp.
+inline bool haydnIsAbsMaterializeOpcode(unsigned Opcode) {
+  return haydnClassifySoloIssueOpcode(Opcode) == HaydnSoloIssueClass::LuiAddiE0;
+}
+
+/// Class-1 issue-alone capacity (PackLegality rule 4 / HR peer). Not a
+/// multi-cycle invent and not a competitive latency claim.
+/// Single opcode list: ResourceCycle isHaydnSMSAloneOpcode and HR
+/// opcodeIssuesAloneInCycle call this. Do not re-list ARCTAN/SIN_COS
+/// elsewhere. Member / _S* identity is the HR predicate, not this list.
+inline bool haydnOpcodeIssuesAloneInCycle(unsigned Opcode) {
+  return haydnClassifySoloIssueOpcode(Opcode) ==
+         HaydnSoloIssueClass::SinCosArctan;
+}
+
+/// Peel-free issue-alone for public logical opcodes (HaydnMCChecker).
+inline bool haydnLogicalOpcodeIssuesAloneInCycle(unsigned Opcode) {
+  return haydnClassifySoloIssueLogical(Opcode) ==
+         HaydnSoloIssueClass::SinCosArctan;
+}
+
+/// CSRW targeting HWLR 0x20-0x25. -1 if not that writer. Opcode is the
+/// already-logical identity (CSRW / CSRW_W). Shared by the MI peel wrapper
+/// and parse-time MCInst overlay.
+inline int haydnHwloopCsrAddr(unsigned Opcode, int64_t Addr) {
+  if (Opcode != Haydn::CSRW && Opcode != Haydn::CSRW_W)
+    return -1;
+  if (Addr >= 0x20 && Addr <= 0x25)
+    return static_cast<int>(Addr);
+  return -1;
+}
+
+/// Parse-time CSRW HWLR window. Public logicals only (checker refuses
+/// private members). HexagonMCChecker.cpp:326-338 checkHWLoop overlay;
+/// Haydn window is CSR 0x20-0x25, not SA0/SA1.
+inline int haydnHwloopCsrAddr(const MCInst &Inst) {
+  if (Inst.getNumOperands() == 0 || !Inst.getOperand(0).isImm())
+    return -1;
+  return haydnHwloopCsrAddr(Inst.getOpcode(), Inst.getOperand(0).getImm());
+}
+
+/// Parse-time overlay of pack::cycleHasMayAliasStoreLoad with no AA/MMOs
+/// (HaydnPackLegality.h:214-221; DFAPacketizer.cpp:275-276 empty MMO =
+/// alias). Dual-load is not this law (HexagonVLIWPacketizer.cpp:1559).
+///
+/// Hand-asm has no AA/MMO. Catalog WITH_IMM / LD32/ST32 is (rt, base,
+/// scaled-imm) so operand 1 is the GPR base. Distinct bases are disjoint
+/// (unknown r2 vs r4 at +0). Peers prove only same-base non-overlap and
+/// leave distinct bases to AA (AIEBaseInstrInfo.cpp:2116-2149 SameValue;
+/// HexagonInstrInfo.cpp:2031-2032; RISCVInstrInfo.cpp:3543-3552) — parse
+/// has no AA, so this overlay is the GPR proof. Same-base stays unproven:
+/// width is CodeGen-only (haydnMemAccessWidthBytes). Missing base/imm
+/// refuses.
+inline bool haydnParsedCycleHasUnprovenStoreLoadOverlap(
+    ArrayRef<const MCInst *> Reals, const MCInstrInfo &MII) {
+  auto parseBaseImm = [](const MCInst &Inst, unsigned &Base) -> bool {
+    if (Inst.getNumOperands() < 2 || !Inst.getOperand(1).isReg())
+      return false;
+    const unsigned Id = Inst.getOperand(1).getReg().id();
+    if (!Id)
+      return false;
+    Base = Id;
+    return Inst.getNumOperands() >= 3 && Inst.getOperand(2).isImm();
+  };
+
+  for (const MCInst *Store : Reals) {
+    if (!Store)
+      continue;
+    const MCInstrDesc &StoreDesc = MII.get(Store->getOpcode());
+    if (!StoreDesc.mayStore())
+      continue;
+    for (const MCInst *Load : Reals) {
+      if (!Load || Load == Store)
+        continue;
+      const MCInstrDesc &LoadDesc = MII.get(Load->getOpcode());
+      if (!LoadDesc.mayLoad())
+        continue;
+      unsigned StoreBase = 0, LoadBase = 0;
+      if (!parseBaseImm(*Store, StoreBase) || !parseBaseImm(*Load, LoadBase))
+        return true;
+      if (StoreBase == LoadBase)
+        return true;
+    }
+  }
+  return false;
+}
+
+#ifndef HAYDN_PORTMODEL_MC_ONLY
 
 /// True only when the complete per-operation port / latency / pipeline /
 /// required-alignment table has been admitted from the golden authority into
@@ -308,102 +493,15 @@ haydnCurrentGoldenAggregateResourceSurface() {
   return S;
 }
 
-/// One solo-class matrix for same-cycle issue-alone / e0-alone gates.
-/// Four named classes, one classify site — do not add a fifth boolean next
-/// to these. Hexagon packet solo bits overlay; AIE has no solo enum
-/// (AIEBaseSubtarget.cpp itinerary-only). Golden Constraints §Special /
-/// HI12-LO20 FieldLsb / CSR 0x20-0x25.
-enum class HaydnSoloIssueClass : uint8_t {
-  None = 0,
-  SinCosArctan,  // ARCTAN / SIN_COS — alone in the issue cycle
-  LuiAddiE0,     // LUI / ADDI32_W — e0-alone (HI12/LO20 FieldLsb)
-  CsrwSetHwloop, // CSRW 0x20-0x25 must not share a cycle with SET_HWLOOP
-};
-
-/// SET_HWLOOP opcode family (W64 QW2). The three overlapping lists are
-/// DIFFERENT LAWS (T1): ResidualLaw = pre-expansion shells only
-/// (ExpandPseudos rewrites them to _W forms); ExpandedLaw = residual plus
-/// the wide committed forms HardwareLoops/TII reason about — including bare
-/// golden logical SET_HWLOOP_F2 (HWLRIIR), which no generated member
-/// inverts to (SET_HWLOOP_F2_* members resolve to SET_HWLOOP_F2_W) and
-/// which the old Setup/RegTrip name-peel fallbacks admitted; TiiLaw =
-/// ExpandedLaw plus LoopStart (TII isHardwareLoopSetup* serves mutation +
-/// Fixup, which must also see LoopStart). MCInstLower excludes LoopStart
-/// (wide-setup lowering is encode-only). One shared bool anywhere = a
-/// silent dropped encode.
-enum class HaydnHwloopSetupFamily : uint8_t {
-  None = 0,
-  Residual,  // SET_HWLOOP, SET_HWLOOP_REG (pre-expansion shells)
-  Expanded,  // + SET_HWLOOP_F2, SET_HWLOOP_W, SET_HWLOOP_F2_W,
-             //   SET_HWLOOP_REG_W
-  Tii,       // + LoopStart (mutation/Fixup population)
-};
-
-/// Classify one hwloop-setup opcode. Accepts raw or already-logical
-/// opcodes: the member peel (logicalOpcodeOrSelf) is idempotent, and
-/// generated SET_HWLOOP_* members invert to their wide logical forms.
-inline HaydnHwloopSetupFamily
-haydnClassifyHwloopSetupOpcode(unsigned Opcode) {
-  switch (haydn::format_e::logicalOpcodeOrSelf(Opcode)) {
-  case Haydn::SET_HWLOOP:
-  case Haydn::SET_HWLOOP_REG:
-    return HaydnHwloopSetupFamily::Residual;
-  case Haydn::SET_HWLOOP_F2:
-  case Haydn::SET_HWLOOP_W:
-  case Haydn::SET_HWLOOP_F2_W:
-  case Haydn::SET_HWLOOP_REG_W:
-    return HaydnHwloopSetupFamily::Expanded;
-  case Haydn::LoopStart:
-    return HaydnHwloopSetupFamily::Tii;
-  default:
-    return HaydnHwloopSetupFamily::None;
-  }
-}
-
-/// Logical-opcode classify. Format E members peel at the HR / Materialize
-/// sites; this list stays the logical identity only.
-inline HaydnSoloIssueClass haydnClassifySoloIssueOpcode(unsigned Opcode) {
-  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(Opcode);
-  if (Log == Haydn::ARCTAN || Log == Haydn::SIN_COS)
-    return HaydnSoloIssueClass::SinCosArctan;
-  if (Log == Haydn::LUI || Log == Haydn::ADDI32_W)
-    return HaydnSoloIssueClass::LuiAddiE0;
-  // Tii membership: bare SET_HWLOOP_F2 joins the CSRW-conflict class here
-  // (the MC checker string law starts_with("SET_HWLOOP") already covers
-  // it — this closes the compiler-side gap; fail-closed direction).
-  if (haydnClassifyHwloopSetupOpcode(Log) != HaydnHwloopSetupFamily::None)
-    return HaydnSoloIssueClass::CsrwSetHwloop;
-  return HaydnSoloIssueClass::None;
-}
-
-/// LUI / ADDI32_W e0-alone (HI12/LO20 FieldLsb). Same peel as HR
-/// isAbsMaterializeOp.
-inline bool haydnIsAbsMaterializeOpcode(unsigned Opcode) {
-  return haydnClassifySoloIssueOpcode(Opcode) == HaydnSoloIssueClass::LuiAddiE0;
-}
-
 /// CSRW targeting HWLR 0x20-0x25. -1 if not that writer. Shared by HR and
-/// ResourceCycle so the race with SET_HWLOOP is one predicate.
+/// ResourceCycle so the race with SET_HWLOOP is one predicate. Peels
+/// generated members, then reuses the opcode+imm core.
 inline int haydnHwloopCsrAddr(const MachineInstr &MI) {
-  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
-  if (Log != Haydn::CSRW && Log != Haydn::CSRW_W)
-    return -1;
   if (MI.getNumOperands() == 0 || !MI.getOperand(0).isImm())
     return -1;
-  const int64_t Addr = MI.getOperand(0).getImm();
-  if (Addr >= 0x20 && Addr <= 0x25)
-    return static_cast<int>(Addr);
-  return -1;
-}
-
-/// Class-1 issue-alone capacity (PackLegality rule 4 / HR peer). Not a
-/// multi-cycle invent and not a competitive latency claim.
-/// Single opcode list: ResourceCycle isHaydnSMSAloneOpcode and HR
-/// opcodeIssuesAloneInCycle call this. Do not re-list ARCTAN/SIN_COS
-/// elsewhere. Member / _S* identity is the HR predicate, not this list.
-inline bool haydnOpcodeIssuesAloneInCycle(unsigned Opcode) {
-  return haydnClassifySoloIssueOpcode(Opcode) ==
-         HaydnSoloIssueClass::SinCosArctan;
+  return haydnHwloopCsrAddr(
+      haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode()),
+      MI.getOperand(0).getImm());
 }
 
 /// Constraints §Special SIN_COS/ARCTAN window. Occupancy is uimm4+2
@@ -475,6 +573,45 @@ inline constexpr const char *HAYDN_NAMED_SAME_CYCLE_LAWS_TAG =
 /// Occupied empty = no violation. Overlay of Hexagon packet solo /
 /// checkHWLoop (HexagonMCChecker.cpp check() FullCheck, checkHWLoop
 /// 326-338); Haydn overlay is CSR 0x20-0x25 + SET_HWLOOP, not SA0/SA1.
+inline bool haydnInstrHasSfrDef(const MachineInstr &MI) {
+  // Generated SLT members may mark implicit-def $sfr dead after setDesc
+  // dropped Uses/Defs naming. Hardware still writes SFR; MOVT in the
+  // same cycle samples the old flag (intrin_x2/x4_cmpsel).
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.getReg() == Haydn::SFR && MO.isDef())
+      return true;
+  return false;
+}
+
+inline bool haydnInstrHasSfrUse(const MachineInstr &MI) {
+  for (const MachineOperand &MO : MI.operands())
+    if (MO.isReg() && MO.getReg() == Haydn::SFR && MO.readsReg())
+      return true;
+  return false;
+}
+
+/// Generated MOVT/SLT members may drop Uses/Defs=[SFR]. Peel to the
+/// logical shell so compare/select still cannot share a cycle.
+inline bool haydnInstrLogicalSfrDef(const MachineInstr &MI) {
+  if (haydnInstrHasSfrDef(MI))
+    return true;
+  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+  if (Log == MI.getOpcode() || !MI.getMF())
+    return false;
+  return MI.getMF()->getSubtarget().getInstrInfo()->get(Log).hasImplicitDefOfPhysReg(
+      Haydn::SFR);
+}
+
+inline bool haydnInstrLogicalSfrUse(const MachineInstr &MI) {
+  if (haydnInstrHasSfrUse(MI))
+    return true;
+  const unsigned Log = haydn::format_e::logicalOpcodeOrSelf(MI.getOpcode());
+  if (Log == MI.getOpcode() || !MI.getMF())
+    return false;
+  return MI.getMF()->getSubtarget().getInstrInfo()->get(Log).hasImplicitUseOfPhysReg(
+      Haydn::SFR);
+}
+
 inline bool haydnCycleViolatesNamedSameCycleLaws(
     const MachineInstr &Cand, ArrayRef<const MachineInstr *> Occupied) {
   if (Occupied.empty())
@@ -482,6 +619,8 @@ inline bool haydnCycleViolatesNamedSameCycleLaws(
   const unsigned CandOpc = Cand.getOpcode();
   if (haydnOpcodeIssuesAloneInCycle(CandOpc))
     return true;
+  const bool CandSfrDef = haydnInstrLogicalSfrDef(Cand);
+  const bool CandSfrUse = haydnInstrLogicalSfrUse(Cand);
   const bool CandAbs = haydnIsAbsMaterializeOpcode(CandOpc);
   const bool CandSetup = haydnClassifySoloIssueOpcode(CandOpc) ==
                          HaydnSoloIssueClass::CsrwSetHwloop;
@@ -498,6 +637,12 @@ inline bool haydnCycleViolatesNamedSameCycleLaws(
                           HaydnSoloIssueClass::CsrwSetHwloop;
     if ((CandSetup && haydnHwloopCsrAddr(*O) >= 0) ||
         (CandCsrw && OccSetup))
+      return true;
+    // SFR compare/select has no snapshot-WAR exception: MOVT samples the
+    // SLT write next cycle. Field-order rematch to use-then-def is still
+    // a same-cycle live SFR def+use (intrin_x2/x4_cmpsel).
+    if ((CandSfrDef && haydnInstrLogicalSfrUse(*O)) ||
+        (CandSfrUse && haydnInstrLogicalSfrDef(*O)))
       return true;
   }
   return false;
@@ -1026,6 +1171,8 @@ countSFRPorts(const MachineInstr &MI,
           haydnIsPrivateFormatEMemberOpcode(MI.getOpcode()),
       /*MRI=*/nullptr);
 }
+
+#endif // HAYDN_PORTMODEL_MC_ONLY
 
 } // end namespace llvm
 

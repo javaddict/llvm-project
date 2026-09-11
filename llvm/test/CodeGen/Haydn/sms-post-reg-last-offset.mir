@@ -1,0 +1,63 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=-hwloop -run-pass=pipeliner \
+# RUN:   -debug-only=pipeliner -verify-machineinstrs %s -o - 2>&1 \
+# RUN:   | FileCheck %s
+# REQUIRES: asserts
+
+# Role: MIR — generic SMS canUseLastOffsetValue must not call getImm() on a
+# Haydn POST_REG increment. getBaseAndOffsetPosition reports positions only
+# when OffsetPos is Imm (Hexagon peer). POST_REG + a same-base LD32 imm load
+# used to assert in MachineOperand::getImm during changeDependences
+# (fft_stageS2_DFT4_32x32). Declining the rewrite is target admission, not
+# a second pipeliner.
+
+# CHECK-NOT: Assertion
+# CHECK-NOT: Wrong MachineOperand accessor
+# CHECK-NOT: Unable to analyzeLoop
+# CHECK: Schedule Found?
+
+--- |
+  define i32 @sms_post_reg_last_offset(ptr %p, i32 %n, i32 %stride) #0 {
+  entry:
+    br label %loop
+  loop:
+    br i1 undef, label %loop, label %exit
+  exit:
+    ret i32 undef
+  }
+  attributes #0 = { "target-features"="-hwloop" }
+...
+---
+name:            sms_post_reg_last_offset
+tracksRegLiveness: true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3
+    successors: %bb.1
+
+    %p:gpr32 = COPY $r1
+    %n:gpr32 = COPY $r2
+    %stride:gpr32 = COPY $r3
+    %zero:gpr32 = ADDI32 $r0, 0
+    %one:gpr32 = ADDI32 $r0, 1
+    B %bb.1
+
+  bb.1.loop:
+    successors: %bb.1, %bb.2
+
+    %bp:gpr32 = PHI %p, %bb.0, %bp_n, %bb.1
+    %s:gpr32 = PHI %zero, %bb.0, %s_n, %bb.1
+    %i:gpr32 = PHI %zero, %bb.0, %i_n, %bb.1
+    ; Same-base imm load (not post-inc) + POST_REG that defines the loop-
+    ; carried pointer. canUseLastOffsetValue used to getImm() the REG delta.
+    %ld_imm:gpr32 = LD32 %bp, 1 :: (load (s32))
+    %ld_pr:gpr32, %bp_n:gpr32 = S_LW_POST_REG %bp, %stride :: (load (s32))
+    %s1:gpr32 = ADD32 %s, %ld_imm
+    %s_n:gpr32 = ADD32 %s1, %ld_pr
+    %i_n:gpr32 = ADD32 %i, %one
+    %cmp:gpr32 = SLTU32 %i_n, %n
+    BNEZ_W %cmp, %bb.1
+    B %bb.2
+
+  bb.2.exit:
+    $r1 = COPY %s_n
+    RET implicit $r15, implicit $r1

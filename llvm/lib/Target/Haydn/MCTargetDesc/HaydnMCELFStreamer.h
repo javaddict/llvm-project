@@ -22,6 +22,7 @@
 #ifndef LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNMCELFSTREAMER_H
 #define LLVM_LIB_TARGET_HAYDN_MCTARGETDESC_HAYDNMCELFSTREAMER_H
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/MC/MCELFStreamer.h"
 #include <memory>
 
@@ -37,10 +38,22 @@ public:
                        const MCSubtargetInfo &STI) override;
 
   // Product pack: executable padding is whole Format E parcels only.
-  // Peer: AIETargetELFStreamer::finish emitCodeAlignment(Align(16)).
+  // W70.2r function-entry path: HasFunctionAlignment=true makes AsmPrinter
+  // call this before the entry label (shared .text and optional function
+  // sections). Peer: AIETargetELFStreamer::finish emitCodeAlignment(Align(16)).
   // EncodedBytes is not a power of two, so a 4/8-byte align fragment is
   // rounded up to idle parcels instead of writeNopData failing or inventing
   // a short pad. Walk Align/gcd parcels (lcm bound); ignore MaxBytesToEmit.
+  // Data-only text (no instruction yet) zero-fills an off-grid remainder;
+  // instruction text stays fail-closed.
+  //
+  // GR1.9 / D1.166: compiler internal MBB/ZOL alignment is committed idle
+  // packets from padInternalMBBAlignment, which also MF.ensureAlignment
+  // so this pre-label fill honors llvm.loop.align as an absolute address.
+  // MBB metadata is cleared before freeze. This override remains the
+  // function-entry pre-label owner and the hand-asm .p2align path. It must
+  // not become a second compiler layout owner for unresolved MBB alignment
+  // metadata.
   void emitCodeAlignment(Align Alignment, const MCSubtargetInfo *STI,
                          unsigned MaxBytesToEmit = 0) override;
 
@@ -53,6 +66,11 @@ private:
   // Recursively register symbols referenced by Inst (and any isInst children).
   void emitSymbolsInInst(const MCInst &Inst);
   void emitIdleParcels(unsigned Count);
+
+  // Text sections that have emitted a product instruction. Data-only text
+  // (Xtensa DISCARD_FUN `.long` stubs) may zero-pad to `.align`; instruction
+  // streams stay fail-closed on a short writeNopData remainder.
+  SmallPtrSet<const MCSection *, 4> SectionsWithInstructions;
 };
 
 MCStreamer *createHaydnELFStreamer(const Triple &TT, MCContext &Context,

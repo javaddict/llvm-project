@@ -1,8 +1,12 @@
 # RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-postlegalizer-combiner \
 # RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=COMBINE
+# pair_underaligned_2_no_combine keeps an align-2 G_LOAD (combiner refuse).
+# ISEL of that function is not a pin — abort=0 so the legal bodies still
+# emit LD64 / LD32×2.
 # RUN: llc -mtriple=haydn-unknown-elf \
 # RUN:     -run-pass=haydn-postlegalizer-combiner,regbankselect,instruction-select \
-# RUN:     -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=ISEL
+# RUN:     -global-isel-abort=0 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=ISEL
 #
 # Role: MIR — the combiner layer of DR64 pair-load promotion (bkfir report
 # §7 ask #3): the software-pack idiom becomes ONE wide s64 load; the
@@ -17,9 +21,17 @@
 #            same pass folds the offset G_PTR_ADD, so the shape is the
 #            G_HAYDN_PREINC_LOAD spelling); no G_OR survives.
 #   At select: D_LDW_PRE_IMM (golden pair-load family), never an LD32 pair.
-# Negative bodies: non-adjacent (gap 8) and aliasing-store forms must keep
-# the scalar G_OR pack + LD32 pair. If a negative body ever produces an s64
-# access, the matcher is unsound — fix the closed condition, not this CHECK.
+# D1.126: 8-align path uses low MMO align 8 / high align 4 (pair EA
+# 8-aligned; +4 cannot be 8-aligned) and selects LD64. MIR pretty-print
+# omits default align==size, so an Align(8) s64 MMO is `(load (s64))`
+# not `align 8`; `, align 4` would print if 8 were weakened. ISEL LD64
+# is the 8-align witness. Product consecutive i32 is 4-aligned:
+# pair_pack_align4 must still form the s64 pair; ISel splits (LD32×2 +
+# MOV_GPR_TO_DR64) and must not emit LD64. Align < 4 stays scalar.
+# Negative bodies: non-adjacent (gap 8), aliasing-store, and sub-word
+# align must keep the scalar G_OR pack + LD32 pair. If a negative body
+# ever produces an s64 access, the matcher is unsound — fix the closed
+# condition, not this CHECK.
 
 ---
 name:            pair_pack_off8
@@ -35,7 +47,7 @@ body:             |
     %plo:_(p0) = G_PTR_ADD %base, %c8(s32)
     %phi:_(p0) = G_PTR_ADD %base, %c12(s32)
     %lo:_(s32) = G_LOAD %plo(p0) :: (load (s32), align 8)
-    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 8)
+    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 4)
     %lo64:_(s64) = G_ZEXT %lo(s32)
     %hi64:_(s64) = G_ZEXT %hi(s32)
     %his:_(s64) = G_SHL %hi64, %c32(s32)
@@ -43,7 +55,7 @@ body:             |
     $d0 = COPY %d(s64)
     RET implicit $r15, implicit $d0
     ; COMBINE-LABEL: name: pair_pack_off8
-    ; COMBINE: G_HAYDN_PREINC_LOAD {{.*}}(s64)
+    ; COMBINE: G_HAYDN_PREINC_LOAD{{.*}} :: (load (s64)){{$}}
     ; COMBINE-NOT: G_OR
     ; COMBINE-NOT: G_SHL
     ; COMBINE-NOT: G_ZEXT
@@ -66,7 +78,7 @@ body:             |
     %plo:_(p0) = G_PTR_ADD %base, %c8(s32)
     %phi:_(p0) = G_PTR_ADD %base, %c12(s32)
     %lo:_(s32) = G_LOAD %plo(p0) :: (load (s32), align 8)
-    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 8)
+    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 4)
     %lo64:_(s64) = G_ZEXT %lo(s32)
     %hi64:_(s64) = G_SEXT %hi(s32)
     %his:_(s64) = G_SHL %hi64, %c32(s32)
@@ -74,7 +86,7 @@ body:             |
     $d0 = COPY %d(s64)
     RET implicit $r15, implicit $d0
     ; COMBINE-LABEL: name: pair_pack_sext_hi
-    ; COMBINE: G_HAYDN_PREINC_LOAD {{.*}}(s64)
+    ; COMBINE: G_HAYDN_PREINC_LOAD{{.*}} :: (load (s64)){{$}}
     ; COMBINE-NOT: G_OR
     ; ISEL-LABEL: name: pair_pack_sext_hi
     ; ISEL: LD64 {{.*}}, 1
@@ -139,4 +151,95 @@ body:             |
     ; ISEL-LABEL: name: pair_aliasing_store_no_combine
     ; ISEL: LD32
     ; ISEL: LD32
+...
+
+---
+name:            pair_pack_align4
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1
+    %base:_(p0) = COPY $r1
+    %c8:_(s32) = G_CONSTANT i32 8
+    %c12:_(s32) = G_CONSTANT i32 12
+    %c32:_(s32) = G_CONSTANT i32 32
+    %plo:_(p0) = G_PTR_ADD %base, %c8(s32)
+    %phi:_(p0) = G_PTR_ADD %base, %c12(s32)
+    %lo:_(s32) = G_LOAD %plo(p0) :: (load (s32), align 4)
+    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 4)
+    %lo64:_(s64) = G_ZEXT %lo(s32)
+    %hi64:_(s64) = G_ZEXT %hi(s32)
+    %his:_(s64) = G_SHL %hi64, %c32(s32)
+    %d:_(s64) = G_OR %his, %lo64
+    $d0 = COPY %d(s64)
+    RET implicit $r15, implicit $d0
+    ; COMBINE-LABEL: name: pair_pack_align4
+    ; COMBINE: {{(G_LOAD|G_HAYDN_.*INC_LOAD).*\(s64\).*align 4}}
+    ; COMBINE-NOT: G_OR
+    ; ISEL-LABEL: name: pair_pack_align4
+    ; ISEL-NOT: LD64
+    ; ISEL: LD32
+    ; ISEL: LD32
+    ; ISEL: MOV_GPR_TO_DR64
+    ; ISEL-NOT: LD64
+...
+
+---
+name:            pair_pack_align4_off4
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1
+    %base:_(p0) = COPY $r1
+    %c4:_(s32) = G_CONSTANT i32 4
+    %c8:_(s32) = G_CONSTANT i32 8
+    %c32:_(s32) = G_CONSTANT i32 32
+    %plo:_(p0) = G_PTR_ADD %base, %c4(s32)
+    %phi:_(p0) = G_PTR_ADD %base, %c8(s32)
+    %lo:_(s32) = G_LOAD %plo(p0) :: (load (s32), align 4)
+    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 4)
+    %lo64:_(s64) = G_ZEXT %lo(s32)
+    %hi64:_(s64) = G_ZEXT %hi(s32)
+    %his:_(s64) = G_SHL %hi64, %c32(s32)
+    %d:_(s64) = G_OR %his, %lo64
+    $d0 = COPY %d(s64)
+    RET implicit $r15, implicit $d0
+    ; COMBINE-LABEL: name: pair_pack_align4_off4
+    ; COMBINE: G_LOAD {{.*}}(s64){{.*}}align 4
+    ; COMBINE-NOT: G_OR
+    ; ISEL-LABEL: name: pair_pack_align4_off4
+    ; ISEL-NOT: LD64
+    ; ISEL: LD32
+    ; ISEL: LD32
+    ; ISEL: MOV_GPR_TO_DR64
+    ; ISEL-NOT: LD64
+...
+
+---
+name:            pair_underaligned_2_no_combine
+legalized:       true
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $r1
+    %base:_(p0) = COPY $r1
+    %c8:_(s32) = G_CONSTANT i32 8
+    %c12:_(s32) = G_CONSTANT i32 12
+    %c32:_(s32) = G_CONSTANT i32 32
+    %plo:_(p0) = G_PTR_ADD %base, %c8(s32)
+    %phi:_(p0) = G_PTR_ADD %base, %c12(s32)
+    %lo:_(s32) = G_LOAD %plo(p0) :: (load (s32), align 2)
+    %hi:_(s32) = G_LOAD %phi(p0) :: (load (s32), align 2)
+    %lo64:_(s64) = G_ZEXT %lo(s32)
+    %hi64:_(s64) = G_ZEXT %hi(s32)
+    %his:_(s64) = G_SHL %hi64, %c32(s32)
+    %d:_(s64) = G_OR %his, %lo64
+    $d0 = COPY %d(s64)
+    RET implicit $r15, implicit $d0
+    ; COMBINE-LABEL: name: pair_underaligned_2_no_combine
+    ; COMBINE: G_OR
+    ; COMBINE-NOT: {{(G_LOAD|G_HAYDN_.*INC_LOAD).*\(s64\)}}
+    ; Align-2 G_LOAD is illegal at ISEL; not an ISEL pin.
 ...

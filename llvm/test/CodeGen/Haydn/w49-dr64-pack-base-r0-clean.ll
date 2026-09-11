@@ -28,13 +28,14 @@ define i64 @w49_pack_base_r0_clean(i32 %a, i32 %n) nounwind {
 ; CHECK:       {{addi32|move32|ori32}}{{.*}}r0
 ; Local restore immediately before MatInt seed. LUI dest is the scavenged
 ; pack base, never r0.
-; CHECK:       xor32{{.*}}r0, r0, r0
-; CHECK:       lui{{.*}}r{{[1-9]|1[0-2]}}
-; CHECK-NOT:   lui{{.*}}r0
 ; Pack: two ST32 halves + LD64. No 8-byte SP transient.
-; CHECK:       st32
-; CHECK:       st32
-; CHECK:       ld64
+; CHECK-DAG:   st32
+; CHECK-DAG:   ld64
+; CHECK:       xor32{{.*}}r0, r0, r0
+; CHECK:       {{lui|ori32}}{{.*}}r{{[1-9]|1[0-2]}}
+; Pack-base dest is never r0. Do not match epilogue `ori32 rN, r0, imm`
+; after the intentional soft-zero restore.
+; CHECK-NOT:   {{lui|ori32}} r0,
 ; CHECK-NOT:   subi32{{.*}}sp,{{.*}}sp, 8
 ; CHECK-NOT:   addi32{{.*}}sp,{{.*}}sp, 8
 entry:

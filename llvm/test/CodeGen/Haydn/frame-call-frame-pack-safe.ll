@@ -17,15 +17,17 @@ declare void @sink(double, double, double, double, double)
 
 define void @stack_f64_const() {
 ; CHECK-LABEL: stack_f64_const:
-; CHECK:       { nop; xor32 r0, r0, r0 }
-; CHECK:       { nop; st32 lr, sp,
+; CHECK:       xor32 r0, r0, r0
+; CHECK:       st32 lr, sp,
 ; CHECK-NOT:   .cfi_def_cfa fp
 ; Distinctive high word of 0x400921fb54442d18 (pi bits).
 ; CHECK:       lui{{.*}}1025
 ; Outgoing 8-byte slot after four DR args. Pack must not land here.
 ; CHECK:       subi32{{(_w)?}}{{.*}}sp{{.*}}, 8
-; CHECK:       st64{{.*}}sp
-; CHECK:       { nop; jal lr, sink }
+; CHECK-DAG:   st64{{.*}}sp
+; CHECK-DAG:   lui{{.*}}sink
+; CHECK-DAG:   addi32{{.*}}sink
+; CHECK-DAG:   jalr{{.*}}lr
 ; CHECK:       addi32{{(_w)?}}{{.*}}sp{{.*}}, 8
 ; CHECK:       { nop; jalr r0, lr, 0 }
   call void @sink(double 1.0, double 2.0, double 3.0, double 4.0,

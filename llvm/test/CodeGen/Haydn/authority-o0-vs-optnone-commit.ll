@@ -29,9 +29,9 @@
 ;     ops may co-issue into scheduler-committed multi-MI BUNDLE roots at
 ;     postmisched already.
 ;   * FinalizeBundle and VerifyBundles deliberately do NOT call skipFunction:
-;     they own true residual commits (late BR parcels). HaydnLatencyStalls
-;     sits between PostMachineScheduler and the first Finalize so stall NOPs
-;     are committed in the same lane. Product default also runs late
+;     they own true residual commits (late BR parcels). Dest-window stalls
+;     fold into S1 PostMachineScheduler with the packet+stamp (GR1.2).
+;     Product default also runs late
 ;     Finalize/Verify after BranchRelaxation so insertIndirectBranch
 ;     LUI+ADDI32_W+JALR_W rejoin the same lane.
 ;   * Therefore both plain O0 and optnone leave committed Format-E BUNDLE roots
@@ -79,20 +79,21 @@
 ; THRU-NOT: CompletionStateID
 
 ; ---------------------------------------------------------------------------
-; After postmisched at -O0 (GR2.4): optnone is scheduled too. Dependent
-; chains are sequential generated members (singleton fallback); independent
-; multi is a scheduler-committed BUNDLE root.
+; After postmisched at -O0 (GR2.4 + GR1.2): optnone is scheduled too.
+; S1 leaveFunction wraps remaining bares as singleton BUNDLEs (AIE
+; Finalize wrap moved into the packet+stamp transaction). Independent
+; multi is a scheduler-committed multi-member BUNDLE root.
 ; ---------------------------------------------------------------------------
 ; PACK-LABEL: name:{{ +}}with_optnone
-; PACK: $r{{[0-9]+}} = ADD32{{ }}
-; PACK-NOT: BUNDLE
+; PACK: ADD32_E{{[23]}}_
+; PACK: BUNDLE
 ; PACK: JALR
-; Dependent multi-op optnone: sequential generated members, no BUNDLE root
-; at this stop (Finalize wraps each as a singleton).
+; Dependent multi-op optnone: sequential generated members, each wrapped
+; as a singleton BUNDLE at S1 stamp.
 ; PACK-LABEL: name:{{ +}}multi_optnone
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; PACK: ADD32_E{{[23]}}_E{{[0-2]}}_
-; PACK-NOT: BUNDLE
+; PACK: BUNDLE
 ; PACK: JALR
 ; GR2.4: independent multi-op optnone is a scheduler-committed co-issue root.
 ; PACK-LABEL: name:{{ +}}indep_optnone
@@ -109,16 +110,17 @@
 
 ; ---------------------------------------------------------------------------
 ; After postmisched at -O2: optnone scheduled identically (GR2.4; no skip).
+; S1 wraps remaining bares as singleton BUNDLEs (GR1.2).
 ; ---------------------------------------------------------------------------
 ; SKIP-OPTNONE-LABEL: name:{{ +}}with_optnone
-; SKIP-OPTNONE: $r{{[0-9]+}} = ADD32{{ }}
-; SKIP-OPTNONE-NOT: BUNDLE
+; SKIP-OPTNONE: ADD32_E{{[23]}}_
+; SKIP-OPTNONE: BUNDLE
 ; SKIP-OPTNONE: JALR
-; Dependent multi-op optnone: sequential generated members (no reorder pack).
+; Dependent multi-op optnone: sequential generated members, S1-wrapped.
 ; SKIP-OPTNONE-LABEL: name:{{ +}}multi_optnone
 ; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; SKIP-OPTNONE: ADD32_E{{[23]}}_E{{[0-2]}}_
-; SKIP-OPTNONE-NOT: BUNDLE
+; SKIP-OPTNONE: BUNDLE
 ; SKIP-OPTNONE: JALR
 ; GR2.4: independent multi-op optnone is a scheduler-committed co-issue root
 ; at -O2 as well.

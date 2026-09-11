@@ -22,7 +22,7 @@ Stamp: 2026-08-22 G004 dual-ON qualification (live=1: GE96-09 only).
   paragraph is G004-era history).
   Prior stamps: 2026-08-18 T7-ALIGN residual hygiene + T8-ALIGN-POLICY
   (R15 leftover + P19 closed; W54/W55 LANDED; rebound ancestor
-  98890c529be9). GE96-03 tests remain product PASS
+  4b6677f8bf87). GE96-03 tests remain product PASS
   (cb89/cb94/reloc-range-branch).
   Mechanical parity: llvm/utils/haydn/check_xfail_ledger.py (+ lit pin
   xfail-owner-ledger-selfcheck.ll). Update this ledger in the same change as

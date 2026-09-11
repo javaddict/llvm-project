@@ -7,7 +7,10 @@ without reviving a DecisionGuard product registry:
   * ARTIFACT.debug.step_inst contract (parcel12 preferred; same-PC residual)
   * ARTIFACT.decode Functional_Model + ARTIFACT.consumer loader/debugger
   * ARTIFACT.decode live bind (shim/model sha256 vs live files)
-  * ARTIFACT.toolchain live bind (clang/llc/ld.lld/lldb + loader hashes)
+  * ARTIFACT.toolchain live bind (clang/llc/ld.lld/lldb + loader hashes);
+    hash drift is fail-closed unbound. Restamp is producer-only
+    (record_haydn_artifact_set.py --restamp). GOLDEN_INPUTS five-file
+    pin count is inventory, not a product-gate fail.
   * ARTIFACT.library + ARTIFACT.product_ld required on a live stamp
   * install_product_ld binds haydn-rt/haydn.ld and refuses .bak/.broken
   * consumer working-tree bind is required by --require-consumer-install;
@@ -120,7 +123,7 @@ HAYDN_RT_SNIPPETS = {
         "va-arg-2.c",
         "CODE_IMAGE_REJECT",
         "direct control target is not an exact code record",
-        "98890c529be9",
+        "4b6677f8bf87",
         "28700d57",
         "T-ABI4",
         "T-ABI6",
@@ -213,7 +216,7 @@ LIBRARY_TORTURE_SEATS = (
     "va-arg-2.c",
 )
 STALE_FULL_GATE_COMMIT = "28700d57"
-REBIND_ANCESTOR = "98890c529be9"
+REBIND_ANCESTOR = "4b6677f8bf87"
 IMAGE_REJECT_NEEDLE = "CODE_IMAGE_REJECT"
 IMAGE_REJECT_MSG = "direct control target is not an exact code record"
 LLD_HAYDN = "lld/ELF/Arch/Haydn.cpp"
@@ -589,6 +592,19 @@ def _live_tool_path(block: Any, fallback: Optional[Path]) -> Optional[Path]:
     return None
 
 
+def check_golden_inputs_pin_not_gate(artifact: Path, infos: List[str]) -> None:
+    """Catalog GOLDEN_INPUTS pin count is inventory, never a product fail."""
+    cat = (load_json(artifact).get("catalog") or {})
+    pin = cat.get("golden_inputs_pin") or {}
+    if not isinstance(pin, dict) or not pin:
+        return
+    count = int(pin.get("file_count") or 0)
+    infos.append(
+        f"GOLDEN_INPUTS pin file_count={count} "
+        "(five-file pin is not a product-gate fail)"
+    )
+
+
 def check_toolchain_bind(
     artifact: Path,
     haydn_bin: Optional[Path],
@@ -596,7 +612,12 @@ def check_toolchain_bind(
     errs: List[str],
     infos: List[str],
 ) -> None:
-    """Fail-closed when stamped tool hashes no longer match live binaries."""
+    """Fail-closed when stamped tool hashes no longer match live binaries.
+
+    Hash drift is unbound. Restamp is producer-only
+    (record_haydn_artifact_set.py --restamp). GOLDEN_INPUTS five-file
+    pin count is not checked here.
+    """
     doc = load_json(artifact)
     toolchain = doc.get("toolchain") or {}
     if not toolchain:
@@ -606,9 +627,11 @@ def check_toolchain_bind(
         errs.append("artifact.toolchain.false_qualified")
     for name in TOOLCHAIN_BIND_TOOLS:
         block = toolchain.get(name) or {}
-        if name == "ld.lld" and not block.get("sha256"):
+        if name == "ld.lld" and not (
+            isinstance(block, dict) and block.get("sha256")
+        ):
             block = toolchain.get("lld") or block
-        digest = str(block.get("sha256") or "")
+        digest = str(block.get("sha256") or "") if isinstance(block, dict) else ""
         if len(digest) != 64:
             errs.append(f"artifact.toolchain.{name}.missing")
             continue
@@ -1489,6 +1512,7 @@ def check(
             check_consumer_contract(artifact, errs)
             check_no_semantic_qualify(artifact, errs)
             check_toolchain_bind(artifact, haydn_bin, bundlesim, errs, infos)
+            check_golden_inputs_pin_not_gate(artifact, infos)
             check_library_identity(artifact, sysroot, errs, infos)
             check_product_ld_identity(artifact, llvm_src, errs, infos)
             check_artifact_rebind(artifact, errs, infos, llvm_src)
@@ -1642,7 +1666,7 @@ def _self_test() -> int:
                     },
                     "semantic_qualify": False,
                     "llvm_src": {
-                        "git_commit": "98890c529be92fa35b3a1bc39270bf919eee395e"
+                        "git_commit": "4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f"
                     },
                 }
             ),
@@ -1699,7 +1723,7 @@ def _self_test() -> int:
             "user-printf.c memset-2.c builtin-bitops-1.c strlen-5.c "
             "va-arg-1.c va-arg-2.c CODE_IMAGE_REJECT "
             "direct control target is not an exact code record "
-            "98890c529be9 28700d57 T-ABI4 T-ABI6 T-ABI11 T-ABI12 i128 "
+            "4b6677f8bf87 28700d57 T-ABI4 T-ABI6 T-ABI11 T-ABI12 i128 "
             "G-ECOSYSTEM-CONSUMERS G-LIBRARY-COVERAGE "
             "G-DEBUG-OBSERVABILITY G-TEST-EVIDENCE "
             "not a product C ABI\n",
@@ -2026,7 +2050,7 @@ def _self_test() -> int:
             assert rc == 1 and any("coverage.missing" in e for e in rep["errors"]), rep
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
 
-            # Stale 28700d57 full-gate commit is fail-closed (rebind 98890c529be9).
+            # Stale 28700d57 full-gate commit is fail-closed (rebind 4b6677f8bf87).
             llvm_ok = dict(doc.get("llvm_src") or {})
             doc["llvm_src"] = {
                 "git_commit": "28700d57366a35a7d04e8adfbdf782743ec847e0"
@@ -2042,7 +2066,7 @@ def _self_test() -> int:
             doc["llvm_src"] = llvm_ok
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
 
-            # Live monorepo: 98890c529be9 is an ancestor; a missing object is not.
+            # Live monorepo: 4b6677f8bf87 is an ancestor; a missing object is not.
             live_repo = Path("/ssd/mhyang/llvm/llvm-head")
             if _git_work_tree(live_repo):
                 assert git_commit_is_repo_resident(live_repo, REBIND_ANCESTOR), (
@@ -2056,14 +2080,15 @@ def _self_test() -> int:
                     live_repo, "28700d57366a35a7d04e8adfbdf782743ec847e0"
                 )
 
-            # Live clang hash drift after rebuild must unbind.
+            # Live clang hash drift after rebuild must unbind (no ARTIFACT rewrite).
             fake_bin = root / "bin"
             fake_bin.mkdir()
             clang_path = fake_bin / "clang"
             clang_path.write_bytes(b"clang-live")
+            stamped_clang = "00" * 32
             doc["toolchain"]["clang"] = {
                 "path": str(clang_path),
-                "sha256": "00" * 32,
+                "sha256": stamped_clang,
             }
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
             rc, rep = check(
@@ -2074,7 +2099,36 @@ def _self_test() -> int:
                 haydn_bin=fake_bin,
             )
             assert rc == 1 and any("clang.unbound" in e for e in rep["errors"]), rep
+            leftover = json.loads(
+                (sysroot / "ARTIFACT.json").read_text(encoding="utf-8")
+            )
+            assert leftover["toolchain"]["clang"]["sha256"] == stamped_clang
+            assert leftover["toolchain"]["clang"]["sha256"] != file_sha256(
+                clang_path
+            )
             doc["toolchain"]["clang"] = {"sha256": "11" * 32}
+            (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
+
+            # GOLDEN_INPUTS pin count is inventory, not a product-gate fail.
+            doc["catalog"] = {
+                "authority": "five-file",
+                "complete": True,
+                "golden_inputs_pin": {
+                    "file_count": 9,
+                    "five_file_complete": True,
+                },
+            }
+            (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
+            rc, rep = check(
+                llvm_src=root,
+                sysroot=sysroot,
+                bundlesim=bundlesim,
+                require_sysroot=True,
+            )
+            assert rc == 0, rep
+            assert any("GOLDEN_INPUTS pin file_count=9" in e for e in rep["info"]), rep
+            assert not any("GOLDEN_INPUTS" in e for e in rep["errors"]), rep
+            doc.pop("catalog", None)
             (sysroot / "ARTIFACT.json").write_text(json.dumps(doc), encoding="utf-8")
 
             # Debris fail-closed.

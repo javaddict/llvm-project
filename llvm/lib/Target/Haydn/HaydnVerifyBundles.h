@@ -25,17 +25,24 @@
 // functions cannot escape noncanonical cycles — inverse records still run.
 // Fail-closes residual cycle-forming, expand-owned, leftover generic
 // COPY/subreg children, leftover B/RET/BR_JT/PseudoCALLIndirect
-// representation shells (no printer-expand carve-out), mixed
-// logical+private inverse children, and — at the addPreEmitPass2 freeze
-// seat — residual logical children plus surviving alternate-map / DDG
-// transients and dest-window seams (verifyMBBDestWindowSeams; not
+// representation shells as bundle children (no printer-expand
+// carve-out), mixed logical+private inverse children, and — at the
+// addPreEmitPass2 freeze seat — TOP-LEVEL B/RET/BR_JT/
+// PseudoCALLIndirect representation escapes (D1.55: ExpandPseudos ran
+// before S1; S1 leftover-RET-expands before stamp; stamped Finalize is
+// wrap-only plus inverse-complete packet templates, so a top-level survivor at
+// freeze is an uncommitted escape; the two earlier IsFreezeSeat=false
+// seats keep the explicit pre-expansion-residual carve-out), residual
+// logical children plus surviving alternate-map / DDG
+// transients and dest-window seams (verifyMBBDestWindowSeams; not)
 // verifyCommittedBundle). Freeze identity is bound by the constructor
 // argument passed from the addPreEmitPass2 adder (registration), never by
 // instance order/count: no cross-instance globals decide Freeze, so
 // pipeline census drift and per-thread cloning under parallel codegen
 // cannot silently move or disable a freeze wall. The legacy
 // default-constructed -run-pass instance is invariant-only;
-// -haydn-freeze-verify forces freeze on any instance.
+// -haydn-freeze-verify forces freeze on any instance, including the
+// independent EncodedBytes layout/displacement wall (verifyFrozenLayout).
 // Inverse records require exact-committed real members.
 // Optnone bare encode escape and mixed committed-BUNDLE + bare encode MIR
 // are fatal. Does not mutate MIR.
@@ -63,7 +70,7 @@ public:
   static char ID;
 
   // Seat-explicit construction: the addPreEmitPass2 adder passes
-  // IsFreezeSeat=true; the three earlier Verify seats pass false.
+  // IsFreezeSeat=true; the two earlier Verify seats pass false.
   explicit HaydnVerifyBundles(bool IsFreezeSeat);
 
   // Legacy default (RegisterPass / -run-pass): invariant-only.

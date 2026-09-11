@@ -141,7 +141,7 @@ RUNTIME_SNIPPETS = {
         "va-arg-2.c",
         "CODE_IMAGE_REJECT",
         "direct control target is not an exact code record",
-        "98890c529be9",
+        "4b6677f8bf87",
         "T-ABI4",
         "T-ABI6",
         "T-ABI11",
@@ -444,7 +444,7 @@ def _self_test() -> int:
             "install_product_ld ARTIFACT.product_ld .bak .broken "
             "user-printf.c memset-2.c builtin-bitops-1.c strlen-5.c "
             "va-arg-1.c va-arg-2.c CODE_IMAGE_REJECT "
-            "direct control target is not an exact code record 98890c529be9 "
+            "direct control target is not an exact code record 4b6677f8bf87 "
             "T-ABI4 T-ABI6 T-ABI11 T-ABI12 "
             "G-ECOSYSTEM-CONSUMERS G-LIBRARY-COVERAGE "
             "G-DEBUG-OBSERVABILITY G-TEST-EVIDENCE\n",

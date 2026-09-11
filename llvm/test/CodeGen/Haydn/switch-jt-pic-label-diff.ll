@@ -9,8 +9,7 @@
 define i32 @switch_jt_pic(i32 %x) nounwind {
 ; CHECK-LABEL: switch_jt_pic:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 7 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB0_10 }

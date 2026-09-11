@@ -1,0 +1,34 @@
+# RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnFinalizeBundle.cpp --check-prefix=ORDER
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-finalize-mi-bundles \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# REQUIRES: haydn-registered-target
+#
+# D1.162: skipped-postmisched Finalize (PostRASchedInvocations==0, no
+# S1 stamp) must run the dest-window stall net on the logical itinerary
+# before wrapBareAndStamp identity-bakes leftover singles. ST32_POST then
+# an aliased load is consecutive leftover store→load (getMemoryLatency-1);
+# wrap-then-stall would bake first. S1 leaveFunction is stall → leftover
+# bake → wrap → stamp (HaydnPostRASchedStrategy.cpp). Stamped product
+# Finalize stays wrap-only (AIEFinalizeBundle.cpp:40-59).
+#
+# ORDER: if (!AlreadyStamped && MFI->getPostRASchedInvocations() == 0)
+# ORDER: haydnInsertExposedPipelineStalls(MF)
+# ORDER: haydnWrapBareAndStamp(MF)
+# ORDER-NOT: haydnInsertExposedPipelineStalls
+
+---
+name:            st32_post_dest_window
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: st32_post_dest_window
+    ; CHECK: S_SW_POST_IMM
+    ; CHECK: nomerge NOP
+    ; CHECK: {{S_LW|LD32}}
+    ; CHECK-NOT: {{= ST32_POST }}
+    $r2 = ST32_POST $r1, $r2, 1 :: (store (s32))
+    $r3 = LD32 $r2, 0 :: (load (s32))
+    $r0 = JALR_W $r15, 0, implicit $r15, implicit $r3
+...

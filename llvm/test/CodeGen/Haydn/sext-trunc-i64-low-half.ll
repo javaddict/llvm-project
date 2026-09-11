@@ -29,16 +29,15 @@ define dso_local i64 @sext_trunc_low_half() {
 ; REBASELINED (auto) B3.exit.4 Desc-only Format E print (S0-S1-S2 / setDesc members); .file skipped
 ; CHECK-LABEL: sext_trunc_low_half:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, v20 }
-; CHECK-NEXT:    { addi32 r2, r0, 32; addi32 r1, r1, v20 }
+; CHECK-NEXT:    { nop; addi32 r1, r1, v20 }
 ; CHECK-NEXT:    { nop; ld64 d0, r1, 0 }
 ; CHECK-NEXT:    { nop; lui r1, v4 }
-; CHECK-NEXT:    { sll64 d0, d0, r2; addi32 r1, r1, v4 }
-; CHECK-NEXT:    { nop; sra64 d0, d0, r2; ld64 d1, r1, 0 }
-; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { addi32 r2, r0, 32; addi32 r1, r1, v4 }
+; CHECK-NEXT:    { sll64 d0, d0, r2; ld64 d1, r1, 0 }
+; CHECK-NEXT:    { nop; nop; sra64 d0, d0, r2 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

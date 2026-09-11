@@ -164,7 +164,9 @@ BLTZ R9, .Ltarget2
 # Jump and link instructions
 JAL R10, foo
 
-JALR R11, R12, bar
+# ISA-69: symbolic JALR is fail-closed. Literal imm12=12 matches the
+# prior same-section displacement (one 12-byte parcel).
+JALR R11, R12, 12
 
 foo:
 bar:

@@ -10,24 +10,21 @@
 // HaydnFinalizeBundle run stamped the per-function postcommit block budget,
 // generic BranchRelaxation's only promotion path (fixupUnconditionalBranch
 // trampoline + insertIndirectBranch) is a CFG-creation form the wall
-// refuses. But legitimate post-stamp layout mutators still exist:
+// refuses. Post-stamp layout mutators that can re-overflow a pre-S1 short:
 //
-//   * S2's single repack inside HaydnLateConvergence can shrink the
-//     fallthrough span of a site the pre-S1 normalization BR accepted
-//     (bundlesim_reg_cb_wua_cbr: bb.12/bb.13 -> bb.22 re-overflow after a
-//     612B drop; matmult-int bb.7 -> bb.3 after bb.4/bb.5 shrink);
-//   * HaydnFixupHwLoops pads/demotes grow SET->END spans
+//   * closeRetainedHwLoops EncodedBytes NOP pads grow SET->END spans
 //     (product-library FIR kernels);
-//   * HaydnMachineAlignment pads grow the entry span.
+//   * padInternalMBBAlignment idle packets grow internal spans.
 //
-// Those events re-overflow a site whose conservatively-accepted pre-S1 form
-// was short. This pass, seated immediately BEFORE every post-stamp
-// BranchRelaxation invocation, rewrites each such site to the TERMINAL
-// in-block long form first, so BR's fixup arms have no far site left:
+// GR1.5 unseated post-stamp generic BR; GR1.7 deleted S2/LateConvergence.
+// This pass rewrites each such site to the TERMINAL in-block long form
+// so no CFG-creating repair remains:
 //
-//   LUI     scratch, <Dest>          ; committed singleton (HI12 reloc)
-//   ADDI32_W scratch, scratch, <Dest>; committed singleton (LO20 reloc)
-//   <inverted near cond to layout-next or original cond to Dest>
+//   LUI     scratch, <Dest>          ; before first remaining control
+//   ADDI32_W scratch, scratch, <Dest>; (firstControlMI, not getFirstTerminator)
+//   <inverted near cond to analyzed FBB; layout-next only when FBB is
+//    null and MBB.isLayoutSuccessor && successor && != TBB && in-range
+//    (one-way fallthrough); or original cond to in-range TBB>
 //   JALR_W  scratch, scratch, 0      ; committed singleton, last terminator
 //
 // Same encoding vocabulary the pre-S1 trampoline promotion and the demote
@@ -46,10 +43,11 @@
 // fallback spill).
 //
 // Seating (HaydnTargetMachine):
-//   addPreSched2 : NOT seated — the pre-stamp normalization BR owns that
-//                  window (unstamped insertIndirectBranch stays legal).
-//   addPreEmitPass, before each BR after the stamp;
-//   HaydnLateConvergence closure iteration, before its BR.
+//   addPreSched2 before the one generic BR (RestoreBB while CFG is
+//                  mutable; unstamped insertIndirectBranch stays legal);
+//   addPreSched2 after S1 (post-stamp in-block long form; no BR);
+//   addPreEmitPass (library closeRetainedHwLoops then in-block long form).
+// GR1.7 deleted LateConvergence / extra post-stamp BR seats.
 // No common-file edits: the pass is target-owned and called only from
 // target-owned seats.
 //

@@ -37,8 +37,7 @@
 define i32 @test_direct_return(i32 %x) nounwind {
 ; CHECK-LABEL: test_direct_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -53,8 +52,7 @@ entry:
 define i32 @test_simple_op_return(i32 %x) nounwind {
 ; CHECK-LABEL: test_simple_op_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -69,8 +67,7 @@ entry:
 define i64 @test_dr64_direct_return(i64 %x) nounwind {
 ; CHECK-LABEL: test_dr64_direct_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
@@ -84,8 +81,7 @@ entry:
 define i32 @test_phi_coalescing(i32 %x, i1 %cond) nounwind {
 ; CHECK-LABEL: test_phi_coalescing:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { not32 r2, r2; addi32 r3, r1, 20 }
 ; CHECK-NEXT:    { addi32 r1, r1, 10; andi32 r2, r2, 1 }
 ; CHECK-NEXT:    { nop; movt32 r1, r3, r2 }
@@ -118,8 +114,7 @@ merge:
 define i32 @test_two_arg_accumulate(i32 %a, i32 %b) nounwind {
 ; CHECK-LABEL: test_two_arg_accumulate:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -134,8 +129,7 @@ entry:
 define i64 @test_dr64_two_arg_accumulate(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_dr64_two_arg_accumulate:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -151,12 +145,13 @@ entry:
 define i32 @test_copy_chain_collapse() nounwind {
 ; CHECK-LABEL: test_copy_chain_collapse:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; jal lr, simple_callee }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; lui r1, simple_callee }
+; CHECK-NEXT:    { nop; addi32 r1, r1, simple_callee }
+; CHECK-NEXT:    { jalr lr, r1, 0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:

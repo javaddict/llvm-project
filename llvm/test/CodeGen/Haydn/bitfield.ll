@@ -18,8 +18,7 @@ define i32 @extract_bits(i32 %value) {
 ; Extract bits [11:4] (8 bits, starting at bit 4)
 ; CHECK-LABEL: extract_bits:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 4080 }
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 4 }
@@ -36,8 +35,7 @@ define i32 @extract_low_bits(i32 %value) {
 ; Extract bits [7:0] (low byte)
 ; CHECK-LABEL: extract_low_bits:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -52,8 +50,7 @@ define i32 @extract_high_bits(i32 %value) {
 ; Extract bits [31:24] (high byte)
 ; CHECK-LABEL: extract_high_bits:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 24 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -68,8 +65,7 @@ define i32 @insert_bits(i32 %value, i32 %new_field) {
 ; Insert new_field into bits [11:4]
 ; CHECK-LABEL: insert_bits:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { slli32 r2, r2, 4; addi32 r3, r0, -4081 }
 ; CHECK-NEXT:    { and32 r1, r1, r3; andi32 r2, r2, 4080 }
@@ -89,11 +85,10 @@ define i32 @insert_low_bits(i32 %value, i32 %new_low) {
 ; Insert new_low into bits [7:0]
 ; CHECK-LABEL: insert_low_bits:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { andi32 r2, r2, 255; addi32 r3, r0, -256 }
-; CHECK-NEXT:    { nop; and32 r1, r1, r3 }
+; CHECK-NEXT:    { nop; addi32 r3, r0, -256 }
+; CHECK-NEXT:    { and32 r1, r1, r3; andi32 r2, r2, 255 }
 ; CHECK-NEXT:    { nop; or32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -109,8 +104,7 @@ define i32 @extract_sign_extended(i32 %value) {
 ; Extract bits [15:8] and sign-extend from 8 bits
 ; CHECK-LABEL: extract_sign_extended:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 8 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 255 }
@@ -131,8 +125,7 @@ define i32 @read_multiple_fields(i32 %value) {
 ; Read three non-overlapping fields
 ; CHECK-LABEL: read_multiple_fields:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { srli32 r3, r1, 8; andi32 r2, r1, 15 }
 ; CHECK-NEXT:    { srli32 r1, r1, 16; andi32 r3, r3, 255 }
@@ -156,8 +149,7 @@ define i32 @modify_bit_field(i32 %value, i32 %increment) {
 ; Increment bits [11:4] by 1, keep rest unchanged
 ; CHECK-LABEL: modify_bit_field:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r3, r1, 4 }
 ; CHECK-NEXT:    { nop; andi32 r3, r3, 255 }
@@ -184,8 +176,7 @@ define i32 @extract_bit(i32 %value, i32 %bit_pos) {
 ; Extract bit at bit_pos (0-31)
 ; CHECK-LABEL: extract_bit:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srl32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
@@ -201,8 +192,7 @@ define i32 @extract_bit(i32 %value, i32 %bit_pos) {
 define i1 @is_bit_set(i32 %value, i32 %bit_pos) {
 ; CHECK-LABEL: is_bit_set:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srl32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -218,8 +208,7 @@ define i1 @is_bit_set(i32 %value, i32 %bit_pos) {
 define i32 @set_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-LABEL: set_bit:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
@@ -236,8 +225,7 @@ define i32 @set_bit(i32 %value, i32 %bit_pos) {
 define i32 @clear_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-LABEL: clear_bit:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
@@ -256,8 +244,7 @@ define i32 @clear_bit(i32 %value, i32 %bit_pos) {
 define i32 @toggle_bit(i32 %value, i32 %bit_pos) {
 ; CHECK-LABEL: toggle_bit:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 1 }
 ; CHECK-NEXT:    { nop; sll32 r2, r3, r2 }
@@ -275,8 +262,7 @@ define i32 @extract_bits_from_i64(i64 %value) {
 ; Extract bits [31:16] from i64
 ; CHECK-LABEL: extract_bits_from_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 16 }
 ; CHECK-NEXT:    { nop; nop; srl64 d0, d0, r1 }
@@ -296,21 +282,20 @@ define i64 @insert_bits_into_i64(i64 %value, i32 %new_field) {
 ; Insert new_field into bits [31:16] of i64
 ; CHECK-LABEL: insert_bits_into_i64:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
-; CHECK-NEXT:    { sext32t64 d1, r1; addi32 r2, r0, 65535 }
-; CHECK-NEXT:    { nop; st32 r2, sp, 2; slli64 d1, d1, 32 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32 r2, r0, 65535 }
+; CHECK-NEXT:    { nop; st32 r2, sp, 2; sext32t64 d1, r1 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { srli64 d1, d1, 32; addi32 r1, r0, 16 }
-; CHECK-NEXT:    { sll64 d1, d1, r1; addi32 r2, r0, -1 }
-; CHECK-NEXT:    { nop; st32 r2, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { slli64 d1, d1, 32; addi32 r2, r0, -1 }
+; CHECK-NEXT:    { nop; st32 r2, sp, 3; srli64 d1, d1, 32 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { ld64 d2, sp, 1; addi32 r2, r0, -65536 } // 8-byte Folded Reload
+; CHECK-NEXT:    { nop; addi32 r1, r0, 16 }
+; CHECK-NEXT:    { sll64 d1, d1, r1; ld64 d2, sp, 1 } // 8-byte Folded Reload
 ; CHECK-NEXT:    // 8-byte Reload
-; CHECK-NEXT:    { nop; sext32t64 d3, r2 }
-; CHECK-NEXT:    { nop; and64 d0, d0, d2; slli64 d3, d3, 32 }
+; CHECK-NEXT:    { nop; addi32 r2, r0, -65536 }
+; CHECK-NEXT:    { nop; sext32t64 d3, r2; and64 d0, d0, d2 }
+; CHECK-NEXT:    { nop; nop; slli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; nop; srli64 d3, d3, 32 }
 ; CHECK-NEXT:    { nop; nop; and64 d1, d1, d3 }
 ; CHECK-NEXT:    { nop; nop; or64 d0, d0, d1 }
@@ -330,8 +315,7 @@ define i32 @extract_odd_offset(i32 %value) {
 ; Extract bits [13:5] (9 bits, starting at bit 5)
 ; CHECK-LABEL: extract_odd_offset:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r1, r1, 5 }
 ; CHECK-NEXT:    { nop; andi32 r1, r1, 511 }
@@ -348,8 +332,7 @@ define i32 @extract_odd_offset(i32 %value) {
 define i32 @reverse_bytes(i32 %value) {
 ; CHECK-LABEL: reverse_bytes:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; srli32 r3, r1, 24; slli32 r2, r1, 24 }
 ; CHECK-NEXT:    { nop; or32 r2, r3, r2 }

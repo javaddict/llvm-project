@@ -16,13 +16,18 @@
 // peel, DFS/mode retry, keep-map rewrite, or late setDesc.
 //
 // Mixed-stream code-bearing inline asm is fail-closed. Mixed MemberId +
-// leftover FieldSlot is fail-closed. Leftover multi-member logicals refuse
-// RAW/WAW/named/trip/may-alias store-load before exactSolve (AA via
-// getAnalysisIfAvailable<AAResultsWrapperPass>; missing AA stays
-// fail-closed). Finalize does not sequentialize or peel. Unattributed leftover
-// implicit-def $sfr is not WAW when the descriptor does not name SFR
-// (PackLegality rule 3). Named-SFR writers and GPR dual-write still refuse.
-// Reloc leftover CSR stays FieldSlot.
+// leftover FieldSlot is fail-closed. Product Finalize after the S1 stamp
+// is wrap-only (AIEFinalizeBundle.cpp:40-59). Leftover RET expand, one
+// dest-window stall net, and leftover-logical inverse bake run in the
+// S1 owner before the stamp so leaveMBB packets include JALR membership
+// inverse and the stall overlay is in the inventory wall. Isolated
+// skipped-postmisched Finalize still runs that S1 sequence (stall net
+// on the logical itinerary, leftover-logical bake, then wrap) before
+// the stamp. After stamp, Finalize still wraps post-stamp LBN/BR bares
+// as fixed complete packet templates (same-row pad NOP completion) and
+// inverse-completes those new members without restamping a committed
+// row, without growing EncodedBytes, and without inserting dest-window
+// stall cycles. Finalize does not sequentialize or peel.
 //
 // Never calls skipFunction: target-local no-reorder residual commit for
 // remaining bare MIs (since GR2.4 PostMachineScheduler itself runs for
@@ -30,8 +35,9 @@
 //
 // Pipeline:
 //   * addPreSched2 after PostMachineScheduler (AIE2TargetMachine.cpp:242-244)
-//   * addPreEmit after BR/Fixup/BR
-//   * addPostBBSections closure after the common executable tail
+//   * addPreEmit after LBN closer (wrap-only residual templates)
+//   * addPostBBSections empty (GR2.9 read-only TPC default;
+//     TargetPassConfig.h:447). Freeze Verify is addPreEmitPass2.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,6 +48,8 @@
 #include "llvm/CodeGen/MachineFunctionPass.h"
 
 namespace llvm {
+
+class AAResults;
 
 class HaydnFinalizeBundle : public MachineFunctionPass {
 public:
@@ -64,6 +72,25 @@ public:
 };
 
 FunctionPass *createHaydnFinalizeBundlePass();
+
+/// Leftover RET / BR_JT / PseudoCALLIndirect expand. S1 runs this before
+/// stampPostCommitCfgSnapshot so leaveMBB packets include JALR membership
+/// inverse. Isolated -run-pass Finalize still expands unstamped fixtures.
+bool haydnExpandLeftoverRetJtCall(MachineFunction &MF);
+
+/// Wrap leftover bare reals as singleton BUNDLEs (AIEFinalizeBundle.cpp:40-59)
+/// including JALR_CALL without baking onto terminator JALR. LLD HaydnCallRelax
+/// rewrites a returning LUI+ADDI+JALR triple to JAL only; the compiler does
+/// not splice a same-row NOP to obfuscate the matcher.
+bool haydnWrapBareAndStamp(MachineFunction &MF);
+
+/// Leftover-logical inverse bake of bundled FieldSlot children onto
+/// generated members. S1 and unstamped Finalize run this before wrap+stamp
+/// (PreserveStampedRow=false: leftover already-bundled may reselect row).
+/// After the CFG stamp, wrap-only Finalize bakes newly wrapped members with
+/// PreserveStampedRow so a committed row is not reselected.
+bool haydnBakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA,
+                                     bool PreserveStampedRow);
 
 } // namespace llvm
 

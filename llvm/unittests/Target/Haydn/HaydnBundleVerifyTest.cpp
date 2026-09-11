@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Unit tests for haydn::bundle::verifyCommittedBundle.
+// Unit tests for haydn::bundle::verifyCommittedBundle and
+// haydn::bundle::verifyFrozenLayout (GR1.8 freeze uniqueness / displacement).
 //
 // AIE structure peers:
 //   AIEBundle.h:150-156 getFormatOrNull (hasValidFormat + planFromPacketFormats)
@@ -18,12 +19,27 @@
 
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
+#include "HaydnInstrInfo.h"
+#include "HaydnMachineFunctionInfo.h"
+#include "HaydnSubtarget.h"
+#include "HaydnTargetMachine.h"
 #include "MCTargetDesc/HaydnBaseInfo.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "gtest/gtest.h"
+#include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineInstrBuilder.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/TargetOpcodes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Alignment.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/Target/TargetOptions.h"
 
 #define GET_INSTRINFO_ENUM
 #include "HaydnGenInstrInfo.inc"
@@ -33,6 +49,10 @@
 namespace llvm {
 const MCInstrInfo &getHaydnSharedMCInstrInfo();
 }
+
+extern "C" void LLVMInitializeHaydnTargetInfo();
+extern "C" void LLVMInitializeHaydnTarget();
+extern "C" void LLVMInitializeHaydnTargetMC();
 
 using namespace llvm;
 using namespace llvm::haydn::bundle;
@@ -186,7 +206,7 @@ TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::B));
   EXPECT_FALSE(isResidualCycleFormingPseudo(Haydn::RET));
 
-  EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::B));
+  EXPECT_FALSE(isRepresentationExpandPseudo(Haydn::B));
   EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::RET));
   EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::BR_JT));
   EXPECT_TRUE(isRepresentationExpandPseudo(Haydn::PseudoCALLIndirect));
@@ -196,8 +216,7 @@ TEST(HaydnBundleVerifyTest, ResidualCycleFormingPseudoSet) {
   // Printer still classifies the shells; the independent inverse does not
   // accept them as a solo-cycle carve-out.
   HaydnMCFormats Fmts;
-  for (unsigned Opc : {Haydn::B, Haydn::RET, Haydn::BR_JT,
-                       Haydn::PseudoCALLIndirect}) {
+  for (unsigned Opc : {Haydn::RET, Haydn::BR_JT, Haydn::PseudoCALLIndirect}) {
     auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Opc},
                                      Fmts);
     ASSERT_TRUE(Err.has_value()) << "opc=" << Opc;
@@ -897,7 +916,7 @@ TEST(HaydnBundleVerifyTest, FreezeRejectsResidualLogicalAcceptsPrivate) {
 }
 
 //===----------------------------------------------------------------------===//
-// `_MSP` encode clones traverse the structural inverse matrix (D1.18)
+// gMIR encode overlays (JAL_TCO / B) traverse the structural inverse (D1.18/D1.130)
 //===----------------------------------------------------------------------===//
 
 TEST(HaydnBundleVerifyTest, CloneOnlyBundleVerifiesStructurally) {
@@ -909,7 +928,7 @@ TEST(HaydnBundleVerifyTest, CloneOnlyBundleVerifiesStructurally) {
   HaydnMCFormats Fmts;
   BundlePlan Plan;
   auto Err = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
-                                   {Haydn::JAL_W_MSP}, Fmts, &Plan);
+                                   {Haydn::JAL_TCO}, Fmts, &Plan);
   EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
   EXPECT_TRUE(Plan.isProductLegal());
   EXPECT_EQ(Plan.memberCount(), 1u);
@@ -920,7 +939,7 @@ TEST(HaydnBundleVerifyTest, CloneOnlyBundleVerifiesStructurally) {
   // Same law for the uncond-barrier clone at its stamped E2 entry 0.
   BundlePlan BrPlan;
   auto BrErr = verifyCommittedBundle(BundleFormatRowID::E96TwoEntry,
-                                     {Haydn::BEQZ_W_MSP}, Fmts, &BrPlan);
+                                     {Haydn::B}, Fmts, &BrPlan);
   EXPECT_FALSE(BrErr.has_value()) << (BrErr ? *BrErr : "");
   EXPECT_TRUE(BrPlan.isProductLegal());
   EXPECT_EQ(BrPlan.memberCount(), 1u);
@@ -931,7 +950,7 @@ TEST(HaydnBundleVerifyTest, CloneOnlyBundleVerifiesStructurally) {
   // verified: freeze on a clone-only bundle still succeeds.
   BundlePlan FreezePlan;
   auto FreezeErr =
-      verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Haydn::JAL_W_MSP},
+      verifyCommittedBundle(BundleFormatRowID::E96TwoEntry, {Haydn::JAL_TCO},
                             Fmts, &FreezePlan, /*Freeze=*/true);
   EXPECT_FALSE(FreezeErr.has_value()) << (FreezeErr ? *FreezeErr : "");
   EXPECT_TRUE(FreezePlan.isProductLegal());
@@ -945,10 +964,10 @@ TEST(HaydnBundleVerifyTest, CloneOnlyBundleMemberlessEntryFails) {
   HaydnMCFormats Fmts;
   auto Err = verifyCommittedBundle(
       BundleFormatRowID::E96ThreeEntry,
-      {Haydn::NOP, Haydn::NOP, Haydn::JAL_W_MSP}, Fmts);
+      {Haydn::NOP, Haydn::NOP, Haydn::JAL_TCO}, Fmts);
   ASSERT_TRUE(Err.has_value()) << "memberless clone entry must fail";
   EXPECT_NE(Err->find("no generated member"), std::string::npos) << *Err;
-  EXPECT_NE(Err->find("JAL_W_MSP"), std::string::npos) << *Err;
+  EXPECT_NE(Err->find("JAL_TCO"), std::string::npos) << *Err;
 }
 
 TEST(HaydnBundleVerifyTest, CloneAtE2Entry1Fails) {
@@ -957,11 +976,11 @@ TEST(HaydnBundleVerifyTest, CloneAtE2Entry1Fails) {
   // walk's mode/entry match — the walk diagnostic, not "unit-injective".
   HaydnMCFormats Fmts;
   auto Err = verifyCommittedBundle(
-      BundleFormatRowID::E96TwoEntry, {Haydn::ADD32, Haydn::BEQZ_W_MSP},
+      BundleFormatRowID::E96TwoEntry, {Haydn::ADD32, Haydn::B},
       Fmts);
   ASSERT_TRUE(Err.has_value());
   EXPECT_NE(Err->find("no generated member"), std::string::npos) << *Err;
-  EXPECT_NE(Err->find("BEQZ_W_MSP"), std::string::npos) << *Err;
+  EXPECT_NE(Err->find("B"), std::string::npos) << *Err;
 }
 
 TEST(HaydnBundleVerifyTest, UnmappedMspFailsClosed) {
@@ -977,6 +996,152 @@ TEST(HaydnBundleVerifyTest, UnmappedMspFailsClosed) {
                                    {Haydn::ADD32_MSP}, Fmts);
   ASSERT_TRUE(Err.has_value());
   EXPECT_NE(Err->find("unit-injective"), std::string::npos) << *Err;
+}
+
+class HaydnFreezeLayoutTest : public testing::Test {
+protected:
+  std::unique_ptr<HaydnTargetMachine> TM;
+  std::unique_ptr<LLVMContext> Ctx;
+  std::unique_ptr<Module> M;
+  std::unique_ptr<MachineModuleInfo> MMI;
+  std::unique_ptr<HaydnSubtarget> ST;
+  std::unique_ptr<MachineFunction> MF;
+  MachineBasicBlock *BB0 = nullptr;
+  MachineBasicBlock *BB1 = nullptr;
+  MachineBasicBlock *BB2 = nullptr;
+
+  static void SetUpTestSuite() {
+    LLVMInitializeHaydnTargetInfo();
+    LLVMInitializeHaydnTarget();
+    LLVMInitializeHaydnTargetMC();
+  }
+
+  void SetUp() override {
+    std::string Error;
+    Triple TT("haydn-unknown-elf");
+    const Target *TheTarget = TargetRegistry::lookupTarget(TT, Error);
+    ASSERT_NE(TheTarget, nullptr) << Error;
+
+    TargetOptions Options;
+    TM.reset(static_cast<HaydnTargetMachine *>(TheTarget->createTargetMachine(
+        TT, "generic", "", Options, std::nullopt, std::nullopt,
+        CodeGenOptLevel::Default)));
+    ASSERT_NE(TM, nullptr);
+
+    Ctx = std::make_unique<LLVMContext>();
+    M = std::make_unique<Module>("HaydnFreezeLayout", *Ctx);
+    M->setDataLayout(TM->createDataLayout());
+    auto *FTy = FunctionType::get(Type::getVoidTy(*Ctx), false);
+    auto *F = Function::Create(FTy, GlobalValue::ExternalLinkage, "test", *M);
+
+    MMI = std::make_unique<MachineModuleInfo>(TM.get());
+    ST = std::make_unique<HaydnSubtarget>(TM->getTargetTriple(), "generic",
+                                          "generic", "", *TM);
+    MF = std::make_unique<MachineFunction>(*F, *TM, *ST, MMI->getContext(),
+                                           /*FunctionNum=*/0);
+    if (!MF->getInfo<HaydnMachineFunctionInfo>())
+      MF->initTargetMachineFunctionInfo(*ST);
+    BB0 = MF->CreateMachineBasicBlock();
+    BB1 = MF->CreateMachineBasicBlock();
+    BB2 = MF->CreateMachineBasicBlock();
+    MF->push_back(BB0);
+    MF->push_back(BB1);
+    MF->push_back(BB2);
+    BB0->addSuccessor(BB1);
+    BB1->addSuccessor(BB2);
+  }
+
+  const HaydnInstrInfo &TII() const { return *ST->getInstrInfo(); }
+
+  MachineInstr *addBundleRoot(MachineBasicBlock *BB) {
+    return BuildMI(*BB, BB->end(), DebugLoc(), TII().get(TargetOpcode::BUNDLE))
+        .addImm(0)
+        .addImm(0)
+        .getInstr();
+  }
+
+  void addNopBundle(MachineBasicBlock *BB) {
+    addBundleRoot(BB);
+    MachineInstr *Nop =
+        BuildMI(*BB, BB->end(), DebugLoc(), TII().get(Haydn::NOP)).getInstr();
+    Nop->bundleWithPred();
+  }
+
+  void addBeqzBundle(MachineBasicBlock *BB, MachineBasicBlock *Dest) {
+    addBundleRoot(BB);
+    MachineInstr *Br =
+        BuildMI(*BB, BB->end(), DebugLoc(), TII().get(Haydn::BEQZ))
+            .addReg(Haydn::R0)
+            .addMBB(Dest)
+            .getInstr();
+    Br->bundleWithPred();
+  }
+};
+
+TEST_F(HaydnFreezeLayoutTest, SharedCounterFIIsFatal) {
+  HaydnMachineFunctionInfo *MFI = MF->getInfo<HaydnMachineFunctionInfo>();
+  ASSERT_NE(MFI, nullptr);
+  MFI->bindHwLoopStackCounterFI(BB0, /*FI=*/0);
+  MFI->bindHwLoopStackCounterFI(BB1, /*FI=*/0);
+  auto Err = verifyFrozenLayout(*MF);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("overlapping hwloop counter homes"), std::string::npos)
+      << *Err;
+}
+
+TEST_F(HaydnFreezeLayoutTest, DistinctCounterFIsOk) {
+  HaydnMachineFunctionInfo *MFI = MF->getInfo<HaydnMachineFunctionInfo>();
+  ASSERT_NE(MFI, nullptr);
+  MFI->bindHwLoopStackCounterFI(BB0, /*FI=*/0);
+  MFI->bindHwLoopStackCounterFI(BB1, /*FI=*/1);
+  auto Err = verifyFrozenLayout(*MF);
+  EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
+}
+
+TEST_F(HaydnFreezeLayoutTest, DuplicateControlInPacketIsFatal) {
+  addBundleRoot(BB0);
+  MachineInstr *A = BuildMI(*BB0, BB0->end(), DebugLoc(), TII().get(Haydn::BEQZ))
+                        .addReg(Haydn::R0)
+                        .addMBB(BB1)
+                        .getInstr();
+  A->bundleWithPred();
+  MachineInstr *B = BuildMI(*BB0, BB0->end(), DebugLoc(), TII().get(Haydn::BNEZ))
+                        .addReg(Haydn::R1)
+                        .addMBB(BB1)
+                        .getInstr();
+  B->bundleWithPred();
+  auto Err = verifyFrozenLayout(*MF);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("duplicate-control"), std::string::npos) << *Err;
+}
+
+TEST_F(HaydnFreezeLayoutTest, InRangeBeqzDisplacementOk) {
+  addBeqzBundle(BB0, BB1);
+  addNopBundle(BB1);
+  auto Err = verifyFrozenLayout(*MF);
+  EXPECT_FALSE(Err.has_value()) << (Err ? *Err : "");
+}
+
+TEST_F(HaydnFreezeLayoutTest, OutOfRangeBeqzDisplacementIsFatal) {
+  // simm12 byte window is ±2048. 171 idle parcels after the BEQZ packet
+  // is 12 + 171*12 = 2064, past WIDE_BranchSImm12.
+  addBeqzBundle(BB0, BB2);
+  for (unsigned I = 0; I < 171; ++I)
+    addNopBundle(BB1);
+  auto Err = verifyFrozenLayout(*MF);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("relocation offset out of range"), std::string::npos)
+      << *Err;
+}
+
+TEST_F(HaydnFreezeLayoutTest, ResidualMBBAlignmentIsFatal) {
+  addBeqzBundle(BB0, BB1);
+  addNopBundle(BB1);
+  BB1->setAlignment(Align(16));
+  auto Err = verifyFrozenLayout(*MF);
+  ASSERT_TRUE(Err.has_value());
+  EXPECT_NE(Err->find("residual MBB alignment metadata"), std::string::npos)
+      << *Err;
 }
 
 } // namespace

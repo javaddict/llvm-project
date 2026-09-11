@@ -62,12 +62,18 @@ void HaydnMCELFStreamer::emitIdleParcels(unsigned Count) {
 void HaydnMCELFStreamer::emitCodeAlignment(Align Alignment,
                                            const MCSubtargetInfo *STI,
                                            unsigned MaxBytesToEmit) {
-  // Peer: AIETargetELFStreamer::finish emitCodeAlignment(Align(16))
-  // (AIETargetELFStreamer.cpp:73-81) because AIE bundles are 2^n.
-  // Format E EncodedBytes is 12, so writeNopData rejects 4/8-byte fills.
-  // Advance by whole idle parcels until the current text offset satisfies
-  // the requested power-of-two (and therefore stays 0 mod EncodedBytes
-  // when it started that way).
+  // W70.2r product function-entry path (HasFunctionAlignment=true) and
+  // hand-asm .p2align. Compiler internal MBB/ZOL alignment is GR1.9
+  // padInternalMBBAlignment complete packets plus MF.ensureAlignment
+  // (D1.166) so this pre-label fill is the absolute llvm.loop.align grid;
+  // MBB metadata is cleared before freeze so generic emitBasicBlockStart
+  // does not call this for those sites. Peer:
+  // AIETargetELFStreamer::finish emitCodeAlignment(Align(16))
+  // (AIETargetELFStreamer.cpp:73-81) because AIE bundles are 2^n. Format E
+  // EncodedBytes is 12, so writeNopData rejects 4/8-byte fills. Advance by
+  // whole idle parcels until the current text offset satisfies the requested
+  // power-of-two (and therefore stays 0 mod EncodedBytes when it started
+  // that way).
   MCSection *Sec = getCurrentSectionOnly();
   const unsigned Parcel = haydnProductionParcelBytes().Value;
   // Text align: only whole Format E idle parcels from a parcel-aligned
@@ -85,9 +91,17 @@ void HaydnMCELFStreamer::emitCodeAlignment(Align Alignment,
     const uint64_t A = Alignment.value();
     if ((Off % A) == 0)
       return;
-    // Off-grid text cannot be repaired with whole idle parcels. Fall
-    // through so writeNopData refuses the short remainder (pad-only NEG).
+    // Off-grid text cannot be repaired with whole idle parcels.
     if (Parcel == 0 || (Off % Parcel) != 0) {
+      // Data objects in the default text section (NatureDSP DISCARD_FUN
+      // `.type @object` + `.long`, no instruction yet) are not a packet
+      // stream. Pad with zeros — do not invent a 4/8-byte idle encoding.
+      // Once a product instruction has been emitted, keep the pad-only
+      // NEG: writeNopData refuses the short remainder.
+      if (!SectionsWithInstructions.contains(Sec)) {
+        MCELFStreamer::emitValueToAlignment(Alignment, 0, 1, MaxBytesToEmit);
+        return;
+      }
       MCELFStreamer::emitCodeAlignment(Alignment, STI, MaxBytesToEmit);
       return;
     }
@@ -150,6 +164,8 @@ void HaydnMCELFStreamer::emitInstruction(const MCInst &Inst,
   // member before MCObjectStreamer::emitInstruction.
   emitSymbolsInInst(Inst);
   MCSection *Sec = getCurrentSectionOnly();
+  if (Sec && Sec->isText())
+    SectionsWithInstructions.insert(Sec);
   const uint64_t Before = currentSectionSize(Sec);
   const unsigned Parcel = haydnProductionParcelBytes().Value;
   MCELFStreamer::emitInstruction(Inst, STI);

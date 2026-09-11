@@ -60,7 +60,7 @@ body:             |
       $r2 = ADDI32 $r0, 10
     }
     BUNDLE 0, 0 {
-      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+      $r0 = JALR $r15, 0, implicit $r15
     }
 
 ...
@@ -104,7 +104,7 @@ body:             |
       $r2 = ADDI32 $r0, 10
     }
     BUNDLE 0, 0 {
-      $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+      $r0 = JALR $r15, 0, implicit $r15
     }
 
 ...
@@ -143,6 +143,6 @@ body:             |
     ; FIN: JALR
     $r7 = ADD32 killed $r3, killed $r4
     $r2 = ADDI32 $r0, 10
-    $r0 = JALR $r15, 0, implicit $r15, implicit $r0, implicit $r15
+    $r0 = JALR $r15, 0, implicit $r15
 
 ...

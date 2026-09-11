@@ -41,14 +41,14 @@ define i64 @ret_i64_add(i64 %a, i64 %b) {
 define float @ret_f32_arg(float %a) {
 ; CHECK-LABEL: ret_f32_arg:
 ; CHECK-NOT: {{[[:space:]]d[0-9]+}}
-; CHECK-NOT: jal{{(\.s[012])?}}{{.*}}__addsf3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__addsf3
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret float %a
 }
 
 define double @ret_f64_arg(double %a) {
 ; CHECK-LABEL: ret_f64_arg:
-; CHECK-NOT: jal{{(\.s[012])?}}{{.*}}__adddf3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__adddf3
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   ret double %a
 }

@@ -26,8 +26,7 @@ declare i64 @llvm.haydn.movda32(i32)
 define i64 @test_movda32(i32 %x) {
 ; CHECK-LABEL: test_movda32:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
@@ -44,8 +43,7 @@ declare i64 @llvm.haydn.movda16(i32)
 define i64 @test_movda16(i32 %x) {
 ; CHECK-LABEL: test_movda16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }
@@ -62,8 +60,7 @@ declare i64 @llvm.haydn.movda32x2(i32, i32)
 define i64 @test_movda32x2(i32 %lo, i32 %hi) {
 ; CHECK-LABEL: test_movda32x2:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
@@ -84,8 +81,7 @@ declare i32 @llvm.haydn.movad32.low(i64)
 define i32 @test_movad32_low(i64 %dr) {
 ; CHECK-LABEL: test_movad32_low:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_l r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -100,8 +96,7 @@ declare i32 @llvm.haydn.movad32.high(i64)
 define i32 @test_movad32_high(i64 %dr) {
 ; CHECK-LABEL: test_movad32_high:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; move32_dr_h r1, d0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -114,8 +109,7 @@ define i32 @test_movad32_high(i64 %dr) {
 define i32 @test_roundtrip_low(i32 %x) {
 ; CHECK-LABEL: test_roundtrip_low:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
 ; CHECK-NEXT:    { nop; nop; slli64 d0, d0, 32 }

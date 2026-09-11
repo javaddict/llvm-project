@@ -15,18 +15,17 @@ declare void @callee()
 
 define void @reg_only_call() {
 ; CHECK-LABEL: reg_only_call:
-; CHECK:       { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:  { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:  { nop; st32 lr, sp, 3 }
-; CHECK-NEXT:  .cfi_def_cfa_offset 16
-; CHECK-NEXT:  .cfi_offset lr, -4
+; CHECK:       xor32 r0, r0, r0
+; CHECK:       subi32{{(_w)?}}{{.*}}sp, sp, 16
+; CHECK:       st32 lr, sp,
 ; CHECK-NOT:   addi32{{.*}}fp
 ; CHECK-NOT:   .cfi_def_cfa fp
-; CHECK:       { nop; jal lr, callee }
-; CHECK:       { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:  { nop; addi32 sp, sp, 16 }
-; CHECK-NEXT:  .cfi_def_cfa sp, 0
-; CHECK-NEXT:  { nop; jalr r0, lr, 0 }
+; CHECK:       lui r{{[0-9]+}}, callee
+; CHECK:       addi32 r{{[0-9]+}}, r{{[0-9]+}}, callee
+; CHECK:       jalr{{.*}}lr
+; CHECK:       ld32 lr, sp,
+; CHECK:       addi32{{(_w)?}}{{.*}}sp, sp, 16
+; CHECK:       jalr r0, lr, 0
   call void @callee()
   ret void
 }

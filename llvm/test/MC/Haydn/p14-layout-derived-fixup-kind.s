@@ -1,11 +1,10 @@
 # REQUIRES: haydn-registered-target
 # RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=KINDS=1 %s \
 # RUN:   | FileCheck --check-prefix=KIND %s
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=JALR=1 %s \
-# RUN:   | FileCheck --check-prefix=JALR %s
-# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALREXT=1 %s \
-# RUN:   -o %t.jalr.o
-# RUN: llvm-readobj -r %t.jalr.o | FileCheck --check-prefix=JALREXT %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=JALR=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=JALR %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALREXT=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=JALREXT %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=UNKNOWN=1 %s \
 # RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=F19 %s
 
@@ -20,11 +19,12 @@
 # opcode + field size look up RelocFieldInfo. JALR (RI12 opc 1) resolves
 # to the dedicated JALRSImm12 row (same RI12 field numbers as the branch
 # row, distinct identity — W27); execution stays golden rs+imm12. F17/
-# F18/F19 and W37/W38 HWLoop Off1/Off2 defaults stay. M23: an *external*
-# symbolic jalr emits R_HAYDN_JALRSImm12 (not a branch row).
+# F18/F19 and W37/W38 HWLoop Off1/Off2 defaults stay. ISA-69: symbolic
+# jalr is fail-closed (no golden relocation base); JALR/JALREXT arms
+# refuse rather than emit FIXUP_HAYDN_JALRSImm12 / R_HAYDN_JALRSImm12.
 #
-# If the name-switch returns, KIND lines drift or JALR borrows a branch
-# kind. If F19 regresses, UNKNOWN emits FIXUP_HAYDN_32.
+# If the name-switch returns, KIND lines drift. If F19 regresses,
+# UNKNOWN emits FIXUP_HAYDN_32.
 
 .ifdef KINDS
 # KIND: fixup A - offset: 0, value: sym_i12, kind: FIXUP_HAYDN_WIDE_BranchSImm12
@@ -49,15 +49,18 @@
 .ifdef JALR
 jalr_local_target:
 	jalr r1, r2, jalr_local_target
-# JALR: fixup A - offset: 0, value: jalr_local_target, kind: FIXUP_HAYDN_JALRSImm12
+# JALR: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# JALR: refusing silent PC-relative R_HAYDN_JALRSImm12
+# JALR-NOT: kind: FIXUP_HAYDN_JALRSImm12
 # JALR-NOT: kind: FIXUP_HAYDN_32
-# JALR-NOT: kind: FIXUP_HAYDN_BranchSImm16
 # JALR-NOT: kind: FIXUP_HAYDN_WIDE_BranchSImm12
 .endif
 
 .ifdef JALREXT
 	jalr r1, r2, ext_sym
-# JALREXT: R_HAYDN_JALRSImm12 ext_sym
+# JALREXT: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# JALREXT: refusing silent PC-relative R_HAYDN_JALRSImm12
+# JALREXT-NOT: R_HAYDN_JALRSImm12
 # JALREXT-NOT: R_HAYDN_WIDE_BranchSImm12
 .endif
 

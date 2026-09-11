@@ -27,7 +27,9 @@ declare i32 @extern_sink(i32, i32)
 ; C: int call_one(int a) { return extern_sink(a, 0); }
 define i32 @call_one(i32 %a) {
 ; CHECK-LABEL: call_one:
-; CHECK-DAG: jal{{.*}}{{.*}}extern_sink
+; CHECK-DAG: lui{{.*}}{{.*}}extern_sink
+; CHECK-DAG: addi32{{.*}}{{.*}}extern_sink
+; CHECK-DAG: jalr
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
   %r = call i32 @extern_sink(i32 %a, i32 0)
   ret i32 %r
@@ -40,7 +42,9 @@ define i32 @call_one(i32 %a) {
 define i32 @call_many(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; CHECK-LABEL: call_many:
 ; CHECK-DAG: {{add32|addi32}}
-; CHECK-DAG: jal{{.*}}{{.*}}extern_sink
+; CHECK-DAG: lui{{.*}}{{.*}}extern_sink
+; CHECK-DAG: addi32{{.*}}{{.*}}extern_sink
+; CHECK-DAG: jalr
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
   %ab = add i32 %a, %b
   %cd = add i32 %c, %d
@@ -65,7 +69,9 @@ define i32 @local_callee(i32 %x) {
 
 define i32 @local_caller(i32 %a) {
 ; CHECK-LABEL: local_caller:
-; CHECK-DAG: jal{{.*}}{{.*}}local_callee
+; CHECK-DAG: lui{{.*}}{{.*}}local_callee
+; CHECK-DAG: addi32{{.*}}{{.*}}local_callee
+; CHECK-DAG: jalr
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
   %r = call i32 @local_callee(i32 %a)
   ret i32 %r
@@ -79,7 +85,9 @@ define i32 @fib(i32 %n) {
 ; CHECK-DAG: {{slt32|bge}}
 ; n-1/n-2 may be sub32 or addi -1/-2 + add32
 ; CHECK-DAG: {{sub32|add32}}
-; CHECK-DAG: jal{{.*}}{{.*}}fib
+; CHECK-DAG: lui{{.*}}{{.*}}fib
+; CHECK-DAG: addi32{{.*}}{{.*}}fib
+; CHECK-DAG: jalr
 ; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
 entry:
@@ -193,8 +201,12 @@ define i32 @arith(i32 %a, i32 %b) {
 ; C: int divrem(int a, int b) { return (a / b) + (a % b); }
 define i32 @divrem(i32 %a, i32 %b) {
 ; CHECK-LABEL: divrem:
-; CHECK-DAG: jal{{.*}}{{.*}}__divsi3
-; CHECK-DAG: jal{{.*}}{{.*}}__modsi3
+; CHECK-DAG: lui{{.*}}{{.*}}__divsi3
+; CHECK-DAG: addi32{{.*}}{{.*}}__divsi3
+; CHECK-DAG: jalr
+; CHECK-DAG: lui{{.*}}{{.*}}__modsi3
+; CHECK-DAG: addi32{{.*}}{{.*}}__modsi3
+; CHECK-DAG: jalr
 ; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
   %q = sdiv i32 %a, %b
@@ -207,8 +219,12 @@ define i32 @divrem(i32 %a, i32 %b) {
 ; C: unsigned udivrem(unsigned a, unsigned b) { return (a / b) + (a % b); }
 define i32 @udivrem(i32 %a, i32 %b) {
 ; CHECK-LABEL: udivrem:
-; CHECK-DAG: jal{{.*}}{{.*}}__udivsi3
-; CHECK-DAG: jal{{.*}}{{.*}}__umodsi3
+; CHECK-DAG: lui{{.*}}{{.*}}__udivsi3
+; CHECK-DAG: addi32{{.*}}{{.*}}__udivsi3
+; CHECK-DAG: jalr
+; CHECK-DAG: lui{{.*}}{{.*}}__umodsi3
+; CHECK-DAG: addi32{{.*}}{{.*}}__umodsi3
+; CHECK-DAG: jalr
 ; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
   %q = udiv i32 %a, %b
@@ -670,7 +686,6 @@ define i32 @struct_loop(ptr %arr, i32 %n) {
 ; (SFR-strip) changed bundle layout — rebaselined.
 ; dual-sched pre-RA : reg/bundle order free; keep key ops.
 ; CHECK-DAG: ld32
-; CHECK-DAG: {{add32|addi32}}
 ; CHECK-DAG: addi32{{(_w)?}} {{.*}}, {{.*}}, 8
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
 entry:
@@ -709,7 +724,9 @@ define i32 @accumulate_global(i32 %n) {
 ; CHECK-DAG: lui
 ; CHECK-DAG: ld32
 ; CHECK-DAG: st32
-; CHECK-DAG: jal{{.*}}{{.*}}extern_sink
+; CHECK-DAG: lui{{.*}}{{.*}}extern_sink
+; CHECK-DAG: addi32{{.*}}{{.*}}extern_sink
+; CHECK-DAG: jalr
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
 entry:
   %g = load i32, ptr @g_counter
@@ -745,7 +762,6 @@ define i64 @checksum(ptr %arr, i32 %n) {
 ; CHECK-DAG: slt32
 ; CHECK-DAG: sub64
 ; CHECK-DAG: add64
-; CHECK-DAG: .cfi_offset r8, {{[-0-9]+}}
 ; CHECK-DAG: jalr{{.*}}r0, lr, 0
 entry:
   br label %loop

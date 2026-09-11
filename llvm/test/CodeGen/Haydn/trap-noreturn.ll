@@ -12,9 +12,17 @@ define void @t_trap() noreturn {
   unreachable
 }
 
+; CHECK-LABEL: t_trap:
+; CHECK: lui{{.*}}abort
+; CHECK: addi32{{.*}}abort
+; CHECK: jalr{{(\.s[012])?}} lr,
+; CHECK-NOT: jalr{{(\.s[012])?}} lr,
+
 ; CHECK-LABEL: t_ubsantrap:
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
-; CHECK: jal{{(\.s[012])?}} {{.*}}abort
+; CHECK: lui{{.*}}abort
+; CHECK: addi32{{.*}}abort
+; CHECK: jalr{{(\.s[012])?}} lr,
+; CHECK-NOT: jalr{{(\.s[012])?}} lr,
 define void @t_ubsantrap() noreturn {
   call void @llvm.ubsantrap(i8 1)
   unreachable

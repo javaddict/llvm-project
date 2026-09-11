@@ -1,15 +1,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 \
-; RUN:     -stop-after=haydn-latency-stalls -verify-machineinstrs < %s | FileCheck %s
+; RUN:     -stop-after=postmisched -verify-machineinstrs < %s | FileCheck %s
 
-; Role: MIR — W68.4 latency/bake seat split. PostMachineScheduler keeps
-; remaining bare singles LOGICAL: LatencyStalls charges dest windows from
-; the logical Desc's published itinerary (ST32_POST Slot1_LD [2]; the
-; member row is [1]) — baking at the scheduler would erase the exposed-
-; pipeline stall before the stall authority runs (stack-align regression
-; class). The identity bake (closed singleton ProductDefaultRowID E2,
-; AIEMachineScheduler.cpp:1126-1132 peer) runs at the END of
-; haydn-latency-stalls, so at this stop point every bare single is a
-; generated member and construction-only Finalize has no tryAdd chooser.
+; Role: MIR — GR1.2 S1 folds dest-window stalls then identity-bakes leftover
+; logicals before PostMachineScheduler returns. Remaining bare singles stay
+; LOGICAL through leaveMBB (ST32_POST Slot1_LD [2]); the S1-exit stall net
+; charges that itinerary then bakes (AIEMachineScheduler.cpp:1126-1132
+; peer). At this stop every bare single is a generated member and wrap-only
+; Finalize has no tryAdd chooser.
 
 target datalayout = "e-m:e-p:32:32-i64:32-f64:32-v64:32-v128:64-a:0:32-n32-S64"
 target triple = "haydn-unknown-elf"

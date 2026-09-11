@@ -57,4 +57,6 @@ late_path:
 ; (the block after the branch to early_exit).
 ; CHECK: subi32{{.*}}sp{{.*}}sp
 ; CHECK: st32{{.*}}r{{(8|9|10|11|12)}}
-; CHECK: jal{{.*}}getValue
+; CHECK: lui{{.*}}getValue
+; CHECK: addi32{{.*}}getValue
+; CHECK: jalr

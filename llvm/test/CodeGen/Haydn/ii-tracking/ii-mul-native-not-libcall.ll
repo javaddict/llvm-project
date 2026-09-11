@@ -40,10 +40,9 @@
 define i64 @ii_mul_native_not_libcall(i32 %a, i32 %b) {
 ; CHECK-LABEL: ii_mul_native_not_libcall:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; sext32t64 d1, r2; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1; sext32t64 d1, r2 }
 ; CHECK-NEXT:    { nop; mul64.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

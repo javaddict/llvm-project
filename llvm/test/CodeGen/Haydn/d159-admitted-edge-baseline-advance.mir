@@ -1,0 +1,65 @@
+# RUN: not llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize,haydn-verify-bundles,haydn-verify-bundles,haydn-verify-bundles \
+# RUN:   -verify-machineinstrs %s -o - 2>&1 | FileCheck %s --check-prefix=REFUSE
+# REQUIRES: haydn-registered-target
+#
+# Wave 4 H / GR2.10 restamp of the D1.59 L5-admission pin. Product
+# refuses a post-stamp demote successor transition (no L5 admission
+# API). Finalize stamps PostCommitCfgSnapshot; the stamped closer then
+# sees out-of-domain Sel=2 and must refuse CFG demote (SET/CFG untouched)
+# so recoverRangeOrOrder fatals. L5 is a no-exception edge wall;
+# HaydnPostCommitBlockBudgetTest pins EdgeOnlyRewriteRefused. Isolated
+# -run-pass=haydn-longbranch-normalize without Finalize stays unstamped
+# (hwloop-rolea-selector-failclosed).
+#
+# Fixture (postmisched-late-layout-stable-row / gr27-d133 idiom, compact):
+# bb.0 carries an out-of-domain selector (Sel=2) on SET_HWLOOP_W with
+# Header==Latch==bb.1. Pre-Wave-4 the demote rewrote latch successors
+# {%bb.2} → {%bb.1, %bb.2}. That rewrite is illegal after the stamp.
+#
+# REFUSE-NOT: SUBI32
+# REFUSE: LLVM ERROR: {{.*}}cannot demote
+# REFUSE-NOT: SUBI32
+
+--- |
+  define void @admitted_edge_advance() {
+  preheader:
+    br label %latch
+  latch:
+    br label %exit
+  exit:
+    ret void
+  }
+...
+---
+name:            admitted_edge_advance
+tracksRegLiveness: true
+noVRegs:          true
+body:             |
+  bb.0.preheader:
+    liveins: $r2, $r15
+    successors: %bb.1
+    ; Imm trip 16, Header==Latch==%bb.1. Out-of-domain selector Sel=2 (the
+    ; D1.33 trigger idiom, gr27-d133) demotes before any range walk, so no
+    ; spacer body is needed; the imm arm materializes the countdown into a
+    ; probed free GPR (postmisched-late-layout-stable-row demote arm). The
+    ; first finalize wraps this SET as a committed singleton and stamps the
+    ; CFG snapshot (postmisched-late-layout-stable-row RUN 1 precedent:
+    ; finalize+verify over a live committed SET_HWLOOP_W).
+    SET_HWLOOP_W 2, %bb.1, %bb.1, 16, implicit-def dead $sfr
+
+  bb.1.latch:
+    liveins: $r2, $r15
+    ; Pre-demote ZOL shape at the stamp: the hardware backedge is implicit
+    ; in the ZOL, so the only CFG successor is the layout-fallthrough soft
+    ; exit %bb.2. No PseudoLoopEnd (same as d135).
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+
+  bb.2.exit:
+    liveins: $r15
+    RET implicit $r15
+
+...

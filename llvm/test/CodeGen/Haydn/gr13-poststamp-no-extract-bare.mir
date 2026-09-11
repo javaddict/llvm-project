@@ -1,0 +1,262 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=PRE
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-finalize-mi-bundles,haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=POST
+# REQUIRES: haydn-registered-target
+#
+# GR1.5 B: invert/retarget the cond member in place. Do not
+# extractBareFromBundle (D1.125) or singleton-split a committed root.
+# Far one-way BUNDLE{ADD32, BEQZ_W} inverts the cond child to BNEZ of the
+# layout-next near dest; ADD32 stays a sibling of that cond. LongTemplate
+# LUI+ADDI32_W+JALR_W are complete late singleton packets (not bares for
+# Finalize). Post-stamp (finalize then LBN) is the same shape.
+# Peer: AIE has no BR (AIE2TargetMachine.cpp empty PreEmit). Hexagon
+# packetizes last (HexagonTargetMachine.cpp:476-493). RISC-V RestoreBB
+# (RISCVInstrInfo.cpp:1433-1471) is the CFG form Haydn must not grow
+# post-commit. Overlay: LayoutSite Root/Member + in-block template.
+#
+# Far template (d1142/d150 law, buffer=4, parcel=12, window 2044):
+#   bb.0 is one BUNDLE parcel (12B); bb.1 = 170 NOPs + RET = 2052B;
+#   bb.2 starts at 2064.
+#
+--- |
+  define dso_local void @bundle_invert_keeps_cond_child() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            bundle_invert_keeps_cond_child
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r7, $r15
+    successors: %bb.1, %bb.2
+    BUNDLE 0 {
+      $r3 = ADD32 $r1, $r2
+      BEQZ_W $r7, %bb.2, implicit-def dead $sfr
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+# PRE-LABEL: name:            bundle_invert_keeps_cond_child
+# PRE: bb.0.entry
+# PRE: BUNDLE
+# PRE-NEXT: {{.*}}LUI{{.*}}%bb.2
+# PRE-NEXT: }
+# PRE: BUNDLE
+# PRE-NEXT: {{.*}}ADDI32{{.*}}%bb.2
+# PRE-NEXT: }
+# PRE: BUNDLE
+# PRE-NEXT: $r3 = ADD32
+# PRE-NEXT: BNEZ{{.*}} $r7, %bb.1
+# PRE-NEXT: }
+# PRE-NOT: B %bb.
+# PRE: BUNDLE
+# PRE-NEXT: {{.*}}JALR
+# PRE-NEXT: }
+# PRE-NOT: B %bb.
+# PRE: bb.1.near
+#
+# POST-LABEL: name:            bundle_invert_keeps_cond_child
+# POST: bb.0.entry
+# POST: BUNDLE
+# POST: LUI{{.*}}%bb.2
+# POST: BUNDLE
+# POST: ADDI32{{.*}}%bb.2
+# POST: BUNDLE
+# POST: $r3 = ADD32
+# POST-NEXT: BNEZ{{.*}} $r7, %bb.1
+# POST-NOT: BEQZ{{.*}} $r7
+# POST-NOT: B %bb.
+# POST: BUNDLE
+# POST: JALR
+# POST-NOT: B %bb.
+# POST: bb.1.near

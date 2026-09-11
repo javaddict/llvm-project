@@ -33,31 +33,35 @@ define i32 @caller_with_stack_args() {
 ; must decrement SP (SUBI32 r13), pass args, call, then increment SP (ADDI32 r13).
 ; CHECK-LABEL: caller_with_stack_args:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32 r1, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r1, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r1, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r1, 2 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r1, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r1, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r1, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r1, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
-; CHECK-NEXT:    .cfi_offset lr, -12
+; CHECK-NEXT:    .cfi_offset r10, -12
+; CHECK-NEXT:    .cfi_offset lr, -16
 ; CHECK-NEXT:    { addi32 r2, r0, 2; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r3, r0, 3 }
 ; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r5, r0, 5 }
 ; CHECK-NEXT:    { addi32 r12, r0, 8; addi32 r7, r0, 7 }
-; CHECK-NEXT:    { nop; addi32 r8, r0, 9 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { subi32 sp, sp, 16; addi32 r8, r0, 9 }
 ; CHECK-NEXT:    { nop; move32 r9, sp }
-; CHECK-NEXT:    { nop; s_sw_post_imm r12, r9, 2 }
+; CHECK-NEXT:    { nop; lui r10, many_args }
+; CHECK-NEXT:    { s_sw_post_imm r12, r9, 2; addi32 r10, r10, many_args }
 ; CHECK-NEXT:    { nop; st32 r8, r9, 0 }
-; CHECK-NEXT:    { nop; jal lr, many_args }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { ld32 r9, sp, 4; ld32 r10, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -73,29 +77,33 @@ define i32 @caller_with_stack_args() {
 define i32 @caller_no_stack_args() {
 ; CHECK-LABEL: caller_no_stack_args:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; addi32 r1, sp, 8 }
-; CHECK-NEXT:    { nop; st32 lr, r1, 0 }
-; CHECK-NEXT:    { nop; st32 r8, r1, 1 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 16
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 12 }
+; CHECK-NEXT:    { nop; st32 lr, r1, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r1, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r1, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset r8, -4
-; CHECK-NEXT:    .cfi_offset lr, -8
+; CHECK-NEXT:    .cfi_offset r9, -8
+; CHECK-NEXT:    .cfi_offset lr, -12
 ; CHECK-NEXT:    { addi32 r2, r0, 2; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r3, r0, 3 }
 ; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r5, r0, 5 }
 ; CHECK-NEXT:    { addi32 r12, r0, 0; addi32 r7, r0, 7 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; move32 r8, sp }
-; CHECK-NEXT:    { nop; s_sw_post_imm r12, r8, 2 }
+; CHECK-NEXT:    { nop; lui r9, many_args }
+; CHECK-NEXT:    { s_sw_post_imm r12, r8, 2; addi32 r9, r9, many_args }
 ; CHECK-NEXT:    { nop; st32 r12, r8, 0 }
-; CHECK-NEXT:    { nop; jal lr, many_args }
+; CHECK-NEXT:    { jalr lr, r9, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 2 }
-; CHECK-NEXT:    { nop; ld32 r8, sp, 3 }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { ld32 r8, sp, 5; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; P4 golden S_SW_POST_IMM Data_Latency=1: no writeback stall before reader.

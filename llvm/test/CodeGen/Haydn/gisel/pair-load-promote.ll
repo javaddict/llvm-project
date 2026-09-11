@@ -28,10 +28,16 @@
 ; @pair_pack is the report's idiom with an 8-aligned pair (variable base,
 ; low word at the base, high at +4) — the form the pack combine owns.
 ; @pair_pack_const_off is the constant-offset spelling (pair at p+8).
-; The pair must be 8-byte aligned in IR: the golden D_LDW* law requires
-; EA 8-aligned, and the selector's LD64 path splits to 2x LD32 otherwise
-; (see unaligned-i64-postinc.ll). If the combine regresses, MIR shows
-; G_SEXT/G_ZEXT/G_SHL feeding a G_OR and ASM shows sext32t64/or64.
+; D1.126: two consecutive i32s at +4 cannot both be 8-aligned. The 8-align
+; path is low-word only (golden D_LDW* EA); high is +4 / align 4.
+; MIR pretty-print omits default align==size, so Align(8) on s64 is
+; `(load (s64) from %ir.*)` not `align 8`. Function YAML `alignment: 4`
+; is Haydn fn-align, not the MMO. ISEL/ASM ld64 is the 8-align witness.
+; Product G_LOAD of two consecutive i32 is 4-aligned — @pair_pack_align4
+; must still form the s64 pair (no G_OR pack) and must not invent Align(8)
+; (selector splits; ASM is not the software-pack or64/sext32t64).
+; If the 8-align combine regresses, MIR shows G_SEXT/G_ZEXT/G_SHL feeding
+; a G_OR and ASM shows sext32t64/or64.
 ;
 ; If this test regresses: do not relax the CHECKs — the pack idiom is
 ; being missed (matcher too narrow) or mis-widened (apply bug); see the
@@ -39,7 +45,7 @@
 
 define i64 @pair_pack(ptr %p, i32 %i) {
 ; MIR-LABEL: name: pair_pack
-; MIR: G_HAYDN_PREINC_LOAD {{.*}}(s64)
+; MIR: G_HAYDN_PREINC_LOAD{{.*}} :: (load (s64) from %ir.{{[^,)]+}}){{$}}
 ; MIR-NOT: G_OR
 ; MIR-NOT: G_SHL
 ; ASM-LABEL: pair_pack:
@@ -54,7 +60,7 @@ entry:
   %plo = getelementptr i32, ptr %pi, i32 0
   %phi = getelementptr i32, ptr %pi, i32 1
   %lo = load i32, ptr %plo, align 8
-  %hi = load i32, ptr %phi, align 8
+  %hi = load i32, ptr %phi, align 4
   %lo64 = zext i32 %lo to i64
   %hi64 = sext i32 %hi to i64
   %his = shl i64 %hi64, 32
@@ -66,7 +72,7 @@ entry:
 ; imm6 1 in the golden D_LDW* RI6 law (EA = rs + (imm6 << 3)).
 define i64 @pair_pack_const_off(ptr %p) {
 ; MIR-LABEL: name: pair_pack_const_off
-; MIR: G_HAYDN_PREINC_LOAD {{.*}}(s64)
+; MIR: G_HAYDN_PREINC_LOAD{{.*}} :: (load (s64) from %ir.{{[^,)]+}}){{$}}
 ; MIR-NOT: G_OR
 ; ASM-LABEL: pair_pack_const_off:
 ; ASM: ld64 {{.*}}, 1
@@ -76,7 +82,49 @@ entry:
   %plo = getelementptr i32, ptr %p, i32 2
   %phi = getelementptr i32, ptr %p, i32 3
   %lo = load i32, ptr %plo, align 8
-  %hi = load i32, ptr %phi, align 8
+  %hi = load i32, ptr %phi, align 4
+  %lo64 = zext i32 %lo to i64
+  %hi64 = zext i32 %hi to i64
+  %his = shl i64 %hi64, 32
+  %d = or i64 %his, %lo64
+  ret i64 %d
+}
+
+; D1.126: product consecutive i32 is 4-aligned. Still form the pair (wide
+; s64, no G_OR). Do not invent Align(8) — ISel splits, so this is not the
+; D_LDW* path. The software-pack (or64/sext32t64) must be gone.
+define i64 @pair_pack_align4_var(ptr %p, i32 %i) {
+; MIR-LABEL: name: pair_pack_align4_var
+; MIR: {{(G_LOAD|G_HAYDN_.*INC_LOAD).*\(s64\).*align 4}}
+; MIR-NOT: G_OR
+; ASM-LABEL: pair_pack_align4_var:
+; ASM-NOT: sext32t64
+; ASM-NOT: or64
+entry:
+  %pi = getelementptr i32, ptr %p, i32 %i
+  %plo = getelementptr i32, ptr %pi, i32 0
+  %phi = getelementptr i32, ptr %pi, i32 1
+  %lo = load i32, ptr %plo, align 4
+  %hi = load i32, ptr %phi, align 4
+  %lo64 = zext i32 %lo to i64
+  %hi64 = sext i32 %hi to i64
+  %his = shl i64 %hi64, 32
+  %d = or i64 %his, %lo64
+  ret i64 %d
+}
+
+define i64 @pair_pack_align4(ptr %p) {
+; MIR-LABEL: name: pair_pack_align4
+; MIR: {{(G_LOAD|G_HAYDN_.*INC_LOAD).*\(s64\).*align 4}}
+; MIR-NOT: G_OR
+; ASM-LABEL: pair_pack_align4:
+; ASM-NOT: sext32t64
+; ASM-NOT: or64
+entry:
+  %plo = getelementptr i32, ptr %p, i32 2
+  %phi = getelementptr i32, ptr %p, i32 3
+  %lo = load i32, ptr %plo, align 4
+  %hi = load i32, ptr %phi, align 4
   %lo64 = zext i32 %lo to i64
   %hi64 = zext i32 %hi to i64
   %his = shl i64 %hi64, 32

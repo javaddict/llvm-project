@@ -16,8 +16,7 @@
 define i32 @switch_2_cases(i32 %x) {
 ; CHECK-LABEL: switch_2_cases:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }
@@ -65,8 +64,7 @@ default:
 define i32 @switch_3_cases(i32 %x) {
 ; CHECK-LABEL: switch_3_cases:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 3 }
@@ -132,8 +130,7 @@ define i32 @switch_consecutive(i32 %x) {
 ; check is emitted as a sltu32 + bnez_w pair (semantically equivalent).
 ; CHECK-LABEL: switch_consecutive:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
@@ -204,8 +201,7 @@ default:
 define i32 @switch_sparse(i32 %x) {
 ; CHECK-LABEL: switch_sparse:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1000 }
@@ -270,8 +266,7 @@ define i32 @switch_negative(i32 %x) {
 ; Cmp+branch fusion no longer fires; eq+branch lowered as seq32+bnez_w.
 ; CHECK-LABEL: switch_negative:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    .cfi_remember_state
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 1 }

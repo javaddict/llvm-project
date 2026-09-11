@@ -36,9 +36,8 @@
 # S2-LABEL: name: bot_replay_copy_nonparcel
 # S2:       bb.0:
 # S2:         $d1 = ADD64{{.*}}
-# INTER-NEXT: NOP
-# INTER-NEXT: NOP
-# INTER-NEXT: NOP
+# GR1.7: S2 pred-occupancy NOP replay is gone; dest-window pads sit
+# after the DSP in the successor.
 # INTER-NOT:  NOP
 # OFF-NOT:    NOP
 # S2:       bb.1:

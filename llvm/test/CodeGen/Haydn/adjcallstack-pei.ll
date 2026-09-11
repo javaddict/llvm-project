@@ -21,5 +21,5 @@ define i32 @caller_stack_args_pei() {
 ; CHECK-LABEL: name: caller_stack_args_pei
 ; CHECK-NOT: ADJCALLSTACK
 ; CHECK: SUBI32
-; CHECK: JAL_W
+; CHECK: JALR_CALL
 ; CHECK: ADDI32

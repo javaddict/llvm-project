@@ -20,7 +20,8 @@ define i32 @sup_add_mul_call(i32 %a, i32 %b) {
 ; CHECK-LABEL: name: sup_add_mul_call
 ; CHECK: ADD32
 ; CHECK: {{MUL|SLLI|ADD}}
-; CHECK: JAL
+; CHECK: LOAD_ADDR
+; CHECK: JALR_CALL
 ; CHECK: RET
   %s = add i32 %a, %b
   %p = mul i32 %s, 3
@@ -38,7 +39,7 @@ define i64 @sup_i64_arith(i64 %a, i64 %b) {
 
 define i32 @sup_indirect_call(ptr %fp, i32 %x) {
 ; CHECK-LABEL: name: sup_indirect_call
-; CHECK: {{JALR|PseudoCALLIndirect}}
+; CHECK: JALR_CALL
 ; CHECK: RET
   %r = call i32 %fp(i32 %x)
   ret i32 %r
@@ -64,7 +65,7 @@ define i32 @sup_select_s32(i1 %c, i32 %t, i32 %f) {
 
 define i64 @sup_select_s64(i1 %c, i64 %t, i64 %f) {
 ; CHECK-LABEL: name: sup_select_s64
-; CHECK: MOVT32
+; CHECK: MOVT64
 ; CHECK: RET
   %r = select i1 %c, i64 %t, i64 %f
   ret i64 %r
@@ -95,7 +96,8 @@ define i64 @sup_s64_mul(i64 %a, i64 %b) {
 define i32 @sup_s32_div(i32 %a, i32 %b) {
 ; CHECK-LABEL: name: sup_s32_div
 ; CHECK-NOT: LIBCALL_
-; CHECK: JAL
+; CHECK: LOAD_ADDR
+; CHECK: JALR_CALL
 ; CHECK: RET
   %r = sdiv i32 %a, %b
   ret i32 %r

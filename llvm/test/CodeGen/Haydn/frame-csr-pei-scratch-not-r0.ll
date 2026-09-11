@@ -4,7 +4,7 @@
 ; REGRESSION TEST: F21 — out-of-imm CSR offsets use a PEI scratch, not R0.
 ;
 ; Bug: emitCSRStore/emitCSRLoad materialized offsets outside the scaled
-; imm4/simm6 window into soft-zero R0 (ADDI32_W/LOADI32 R0), then
+; simm6 window into soft-zero R0 (ADDI32_W/LOADI32 R0), then
 ; ST64_REG/LD64_REG read R0, then XOR32 re-zeroed. Safety depended on
 ; intra-cycle RAW keeping the R0-def and its use out of one bundle.
 ; Historical JALR-writes-R0 already corrupted CSR restores this way.
@@ -14,8 +14,8 @@
 ; for the add. No XOR32 R0 on this path.
 ;
 ; Test design: 128-byte alloca + a call that keeps %a live in a CSR.
-; Frame >60 B so the LR/R8 slots miss ST32 imm4 [0,60]. The REG-offset
-; form must use r1-r12, never write r0 for the offset.
+; Frame exceeds ST32 scaled simm6 (element 31 = 124 B; D1.89). The
+; REG-offset form must use r1-r12, never write r0 for the offset.
 ;
 ; If this regresses, CHECK-NOT addi32_w r0 / loadi32 r0 fail.
 
@@ -26,12 +26,14 @@ declare void @clobber_all()
 
 define i32 @large_csr_offset(i32 %a) {
 ; CHECK-LABEL: large_csr_offset:
-; CHECK:       { nop; xor32 r0, r0, r0 }
+; CHECK:       xor32 r0, r0, r0
 ; CHECK:       subi32{{(_w)?}}{{.*}}sp
 ; CHECK-NOT:   addi32{{(_w)?}} r0,
 ; CHECK-NOT:   loadi32 r0,
 ; CHECK:       st32{{(_reg)?}}{{.*}}lr
-; CHECK:       { nop; jal lr, clobber_all }
+; CHECK:       lui r{{[0-9]+}}, clobber_all
+; CHECK:       addi32 r{{[0-9]+}}, r{{[0-9]+}}, clobber_all
+; CHECK:       jalr{{.*}}lr
 ; CHECK-NOT:   addi32{{(_w)?}} r0,
 ; CHECK-NOT:   loadi32 r0,
 ; CHECK:       ld32{{(_reg)?}}{{.*}}lr

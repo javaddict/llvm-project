@@ -30,8 +30,11 @@
 // (HaydnMemberSetDesc.h).
 //
 // Pipeline: addPreSched2 after PostMachineScheduler
-// (AIE2TargetMachine.cpp:242-244); addPreEmit after BR/Fixup/BR; closure
-// at addPostBBSections after the common executable tail.
+// (AIE2TargetMachine.cpp:242-244 wrap-only peer). Product S1 already
+// stamped packets+CFG including the one dest-window stall net; this pass
+// wraps residual singles without growing dest-window or EncodedBytes.
+// addPreEmit after LBN closer (wrap-only). addPostBBSections is empty
+// (GR2.9 read-only TPC default; TargetPassConfig.h:447).
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,6 +45,7 @@
 #include "HaydnBundleVerify.h"
 #include "HaydnFormatERecords.h"
 #include "HaydnInstrInfo.h"
+#include "HaydnLatencyStalls.h"
 #include "HaydnMachineFunctionInfo.h"
 #include "HaydnMemberSetDesc.h"
 #include "HaydnPackLegality.h"
@@ -50,6 +54,7 @@
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -60,11 +65,13 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineInstrBundle.h"
 #include "llvm/CodeGen/MachineOperand.h"
+#include "llvm/CodeGen/Register.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/MC/MCInstrDesc.h"
+#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetMachine.h"
@@ -80,6 +87,15 @@ namespace {
 // Port of AIEFinalizeBundle.cpp:22-36 isBundleCandidate.
 // AIE also skips isHardwareLoopEnd; Haydn PseudoLoopEnd is already
 // isMetaInstruction (skipped below). LoopDec/LoopJNZ are real and wrap.
+// AIE wraps remaining standalones including calls. Haydn keeps JALR_CALL
+// as a gMIR flag overlay: golden JALR members are isTerminator=1, so a
+// mid-block call never takes a member Desc in MIR. Encoder peels
+// JALR_CALL onto the same JALR member as jump. Wrapping it then
+// applyFinalDirectCompatibleSingleton bakes a terminator JALR and
+// clobbers LR occupancy (CoreMark BAD_PC 0x7ffffd8c). JAL*_TCO is the
+// same overlay (musttail); VerifyBundles admits them as standalone
+// peels. Wrap-only Finalize still wraps B (uncond gMIR); leftover bake
+// must not rewrite B onto catalog BEQZ.
 bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
   MachineInstr *MI = &*MII;
   if (MI->isMetaInstruction() || MI->isBundle() || MII->isBundled())
@@ -88,15 +104,10 @@ bool isBundleCandidate(MachineBasicBlock::instr_iterator MII) {
   // on the top-level MI. Wrapping it as a BUNDLE child drops the APP block.
   if (MI->isInlineAsm())
     return false;
-  // W67 non-tail fnptr call clone (JALR_MSP): golden JALR members are
-  // isTerminator=1, so the mid-block call never takes a member Desc in MIR.
-  // Bundle children must be member-encodable; this clone stays standalone.
-  if (MI->isCall() && !MI->isTerminator() && !MI->isPseudo()) {
-    MachineFunction *PMF = MI->getMF();
-    if (PMF && PMF->getSubtarget().getInstrInfo()->getName(MI->getOpcode())
-                   .ends_with("_MSP"))
-      return false;
-  }
+  const unsigned Opc = MI->getOpcode();
+  if (Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+      Opc == Haydn::JALR_TCO)
+    return false;
   return true;
 }
 
@@ -186,48 +197,9 @@ bool propagateEarliestMemberDebugLoc(MachineInstr &Root) {
   return true;
 }
 
-/// Rewrite Haydn::B (bare or bundled) to BEQZ_W_MSP R0 in place so a
-/// bundled uncond stays inside its BUNDLE. Catalog BEQZ_W is not a
-/// barrier (AIEPseudoBranchExpansion.cpp:70-75 uses a Barrier opcode;
-/// Haydn overlay is the JALR_MSP-style flag clone). Do not bake `_MSP`
-/// onto catalog BEQZ_W. Every seat expands B: the size-oracle Finalize
-/// (addPreSched2, before BR) included, because the MSP clone is
-/// isUnconditionalBranch and BranchRelaxation still sees a barrier uncond.
-bool expandUncondBToBeqz(MachineFunction &MF, const TargetInstrInfo &TII) {
-  bool Changed = false;
-  for (MachineBasicBlock &MBB : MF) {
-    for (MachineInstr &MI : llvm::make_early_inc_range(MBB.instrs())) {
-      if (MI.getOpcode() != Haydn::B)
-        continue;
-      MachineBasicBlock *Target = nullptr;
-      SmallVector<MachineOperand, 4> ExtraImplicits;
-      for (const MachineOperand &MO : MI.operands()) {
-        if (MO.isMBB() && !Target) {
-          Target = MO.getMBB();
-          continue;
-        }
-        if (MO.isReg() && MO.isImplicit())
-          ExtraImplicits.push_back(MO);
-      }
-      if (!Target)
-        report_fatal_error("Haydn FinalizeBundle: B has no MBB operand",
-                           /*GenCrashDiag=*/false);
-      while (MI.getNumOperands())
-        MI.removeOperand(MI.getNumOperands() - 1);
-      MI.setDesc(TII.get(Haydn::BEQZ_W_MSP));
-      MI.addOperand(MF, MachineOperand::CreateReg(Haydn::R0, /*isDef=*/false));
-      MI.addOperand(MF, MachineOperand::CreateMBB(Target));
-      for (const MachineOperand &MO : ExtraImplicits)
-        MI.addOperand(MF, MO);
-      Changed = true;
-    }
-  }
-  return Changed;
-}
-
-/// Leftover RET / BR_JT / PseudoCALLIndirect (bare or bundled). Always,
-/// including the size-oracle Finalize and -run-pass wrap: these are not the
-/// CFG uncond shell BranchRelaxation analyzes.
+/// Leftover RET / BR_JT / PseudoCALLIndirect (bare or bundled). S1 runs this
+/// before stamp; unstamped -run-pass Finalize still expands. These are not
+/// the CFG uncond shell BranchRelaxation analyzes.
 bool expandLeftoverRetJtCall(MachineFunction &MF) {
   bool Changed = false;
   const HaydnInstrInfo &TII =
@@ -245,11 +217,21 @@ bool expandLeftoverRetJtCall(MachineFunction &MF) {
   return Changed;
 }
 
+static void dropPoisonedBundleImplicitDefs(MachineFunction &MF) {
+  for (MachineBasicBlock &MBB : MF)
+    for (MachineInstr &MI : MBB)
+      if (MI.isBundle())
+        haydn::bundle::dropBundleImplicitRegsAbsentFromMembers(MI);
+}
+
 /// Wrap leftover bare real MIs as singleton BUNDLEs and stamp the row the
 /// child's InstSlot already occupies (AIE getSlotKind after setDesc,
-/// AIEBaseMCFormats.cpp:66-75). Logical leftovers have no e2/e3 slot and
-/// keep ProductDefaultRowID. Does not restamp already-bundled roots
-/// (AIEFinalizeBundle.cpp:40-59). Does not setDesc, resettle, or peel `_E3_`.
+/// AIEBaseMCFormats.cpp:66-75). Identity-bakes the singleton member first
+/// so the wrap is a complete packet template (inverse record included).
+/// Logical leftovers with no e2/e3 slot keep ProductDefaultRowID. Does not
+/// restamp already-bundled roots (AIEFinalizeBundle.cpp:40-59). Does not setDesc, resettle, or peel `_E3_`.
+/// Identity bake is applyFinalDirectCompatibleSingleton on the leftover
+/// logical, not a silent E2/E3 repair.
 bool wrapBareAndStamp(MachineFunction &MF) {
   bool Changed = false;
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
@@ -271,11 +253,14 @@ bool wrapBareAndStamp(MachineFunction &MF) {
             haydn::bundle::collectBundleMemberOpcodes(Root);
         const bool HasPad = haydn::bundle::bundleHasPadNop(Root);
         const auto Row = haydn::bundle::selectProductRowForOpcodes(Members);
+        // Same-row NOP wrap is AllEntriesReal: unused windows encode as
+        // architectural NOP. Do not splice pad children after a terminator.
         const auto Comp = haydn::bundle::selectCompletionForMembersAndPads(
             Row, Members.size(), HasPad);
         assert(haydn::bundle::isProductLegalCompletion(Comp) &&
                "singleton wrap must stamp full-slot product completion");
         haydn::bundle::stampBundleCommit(Root, Row, Comp);
+        haydn::bundle::dropBundleImplicitRegsAbsentFromMembers(Root);
         Changed = true;
       }
       ++MII;
@@ -425,8 +410,11 @@ void refuseLeftoverBakeHazards(ArrayRef<MachineInstr *> Reals,
 /// limited -run-pass / BR insert) take the one materialize bake site.
 /// Singleton leftovers prefer ProductDefaultRowID E2. Multi-member leftovers
 /// use exactSolveProductOpcodes after the shared hazard refuse. Not a
-/// Finalize DFS / name-peel / keep-map chooser.
-bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
+/// Finalize DFS / name-peel / keep-map chooser. PreserveStampedRow keeps an
+/// already-committed row after inverse bake (wrap-only post-stamp path;
+/// D1.164: unstamped wrap identity after the CFG wall).
+bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA,
+                                bool PreserveStampedRow) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
   const HaydnMCFormats &Fmts = haydnDefaultMCFormats();
   bool Changed = false;
@@ -442,7 +430,14 @@ bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
       return false;
     if (haydn::bundle::isPadNopOpcode(MI.getOpcode()))
       return false;
-    const StringRef Name = TII.getName(MI.getOpcode());
+    const unsigned Opc = MI.getOpcode();
+    // Flag overlays stay gMIR (encoder peels B / JALR_CALL / JAL_TCO /
+    // JALR_TCO). MultiSlot ADD32_MSP is not leftover bake here
+    // (scheduler setDesc).
+    if (Opc == Haydn::B || Opc == Haydn::JALR_CALL || Opc == Haydn::JAL_TCO ||
+        Opc == Haydn::JALR_TCO)
+      return false;
+    const StringRef Name = TII.getName(Opc);
     if (Name.ends_with("_MSP"))
       return false;
     return !isGeneratedFormatEMemberName(Name);
@@ -485,7 +480,8 @@ bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
       }
       // Mixed MemberId + leftover FieldSlot is the fail-closed wall: a
       // partial keep-map of a subset of children is exactly the silent
-      // repair W68.4 deletes (mixed_memberid_leftover_st8).
+      // repair W68.4 deletes (mixed_memberid_leftover_st8 dual-store).
+      // commitExact refuses to stamp mixed; packAdjacent sequentializes.
       if (AnyMemberKid && !Reals.empty()) {
         report_fatal_error(
             "Haydn FinalizeBundle: mixed MemberId and leftover FieldSlot "
@@ -545,8 +541,15 @@ bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
     // Existing hand/limited-pipeline row stamps are identity for roots
     // we did NOT bake; a root whose kids just took member Descs (the
     // reloc-CSR cutover) re-derives its row from the members — the dual
-    // ADD32+CSRW fixture rebinds e0/e1 onto E3 and restamps.
+    // ADD32+CSRW fixture rebinds e0/e1 onto E3 and restamps. Wrap-only
+    // after the S1 stamp must not reselect a committed row.
     const auto ExistingRow = haydn::bundle::getBundleRowID(*Root);
+    const bool ExistingComp =
+        haydn::bundle::getBundleCompletionID(*Root).has_value();
+    if (PreserveStampedRow && ExistingRow && ExistingComp) {
+      Changed |= Baked;
+      continue;
+    }
     const auto Row =
         (ExistingRow && !Baked)
             ? *ExistingRow
@@ -557,6 +560,7 @@ bool bakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA) {
                                                          HasPad));
     Changed = true;
   }
+  dropPoisonedBundleImplicitDefs(MF);
   return Changed;
 }
 
@@ -617,6 +621,21 @@ void refuseMixedMemberIdAndFieldSlot(MachineFunction &MF,
 
 } // namespace
 
+bool llvm::haydnExpandLeftoverRetJtCall(MachineFunction &MF) {
+  return expandLeftoverRetJtCall(MF);
+}
+
+bool llvm::haydnWrapBareAndStamp(MachineFunction &MF) {
+  bool Changed = wrapBareAndStamp(MF);
+  dropPoisonedBundleImplicitDefs(MF);
+  return Changed;
+}
+
+bool llvm::haydnBakeLeftoverLogicalBundles(MachineFunction &MF, AAResults *AA,
+                                           bool PreserveStampedRow) {
+  return bakeLeftoverLogicalBundles(MF, AA, PreserveStampedRow);
+}
+
 bool llvm::memberDescCompatible(const MachineInstr &MI, unsigned MemberOpc,
                                 const TargetInstrInfo &TII) {
   const MCInstrDesc &NewDesc = TII.get(MemberOpc);
@@ -641,33 +660,64 @@ void llvm::rewriteFieldSlotToMember(MachineInstr &MI, unsigned MemberOpc,
   for (unsigned NewI = 0; NewI != NewN; ++NewI)
     Kept.push_back(MI.getOperand((*Keep)[NewI]));
 
-  SmallVector<MachineOperand, 4> ImplicitTail;
-  for (unsigned I = MI.getNumOperands(); I > OldN; --I)
-    ImplicitTail.push_back(MI.getOperand(I - 1));
+  auto isOldDescImplicit = [&](const MachineOperand &MO) -> bool {
+    if (!MO.isReg() || !MO.isImplicit() || !MO.getReg().isPhysical())
+      return false;
+    const MCPhysReg R = MO.getReg().asMCReg();
+    if (MO.isDef())
+      return llvm::is_contained(OldDesc.implicit_defs(), R);
+    return llvm::is_contained(OldDesc.implicit_uses(), R);
+  };
+  SmallVector<MachineOperand, 4> Extra;
+  for (unsigned I = OldN, E = MI.getNumOperands(); I != E; ++I) {
+    const MachineOperand &MO = MI.getOperand(I);
+    if (isOldDescImplicit(MO))
+      continue;
+    Extra.push_back(MO);
+  }
 
   while (MI.getNumOperands())
     MI.removeOperand(MI.getNumOperands() - 1);
   MI.setDesc(NewDesc);
   for (unsigned NewI = 0; NewI != NewN; ++NewI)
     MI.addOperand(*MF, Kept[NewI]);
-  for (unsigned I = ImplicitTail.size(); I > 0; --I)
-    MI.addOperand(*MF, ImplicitTail[I - 1]);
+  for (MCPhysReg R : NewDesc.implicit_uses())
+    MI.addOperand(*MF, MachineOperand::CreateReg(R, /*isDef=*/false,
+                                                 /*isImp=*/true));
+  for (MCPhysReg R : NewDesc.implicit_defs())
+    MI.addOperand(*MF, MachineOperand::CreateReg(R, /*isDef=*/true,
+                                                 /*isImp=*/true));
+  for (const MachineOperand &Cand : Extra) {
+    if (Cand.isReg() && Cand.isImplicit() && Cand.getReg()) {
+      bool Dup = false;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isReg() && MO.isImplicit() && MO.getReg() == Cand.getReg() &&
+            MO.isDef() == Cand.isDef()) {
+          Dup = true;
+          break;
+        }
+      }
+      if (Dup)
+        continue;
+    }
+    MI.addOperand(*MF, Cand);
+  }
 }
 
 bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
   const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-
-  // GR2.7/D1.40 postcommit CFG identity wall: the FIRST Finalize run is the
-  // commit-normalization seat that closes the pre-S1 window opened by the
-  // normalization BranchRelaxation (HaydnTargetMachine addPreSched2). Stamp
-  // the per-function CFG identity snapshot write-once; after the stamp the
-  // postcommit CFG is identity-frozen: live count, block-ID numbering
-  // slack, and per-MBB identity tokens never change
-  // (HaydnVerifyBundles independently fails closed at every seat when they
-  // do; insertIndirectBranch refuses when stamped). Never re-stamped: later
-  // Finalize seats cannot legitimize postcommit CFG mutation (monotone
-  // ratchet).
-  MF.getInfo<HaydnMachineFunctionInfo>()->stampPostCommitCfgSnapshot(MF);
+  auto *MFI = MF.getInfo<HaydnMachineFunctionInfo>();
+  // GR1.2: product S1 already stamped at PostMachineScheduler exit.
+  // Isolated -run-pass / skipped-postmisched Finalize still expands,
+  // runs the one dest-window net, then arms the wall write-once.
+  const bool AlreadyStamped = MFI->hasPostCommitBlockBudget();
+  bool Changed = false;
+  if (!AlreadyStamped) {
+    if (expandLeftoverRetJtCall(MF))
+      Changed = true;
+  }
+  if (AlreadyStamped)
+    MFI->stampPostCommitCfgSnapshot(MF);
 
   // Mixed-stream inline-asm admission (fail closed): opaque inline asm
   // beside compiler packets is outside the exact Format E layout model.
@@ -688,10 +738,13 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
             CodeBearingAsm.push_back(&MI);
           continue;
         }
-        if (isBundleCandidate(II))
+        if (MI.isBundle() || isBundleCandidate(II))
           AnyBundleCandidate = true;
       }
     }
+    // Product S1 already wrapped leftover bares, so "any leftover
+    // candidate" is empty on the stamped path. Mixed-stream code-bearing
+    // asm is still fail-closed whenever this function has packets.
     if (AnyBundleCandidate) {
       for (const MachineInstr *MI : CodeBearingAsm) {
         std::string Msg;
@@ -705,24 +758,42 @@ bool HaydnFinalizeBundle::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  bool Changed = false;
-  if (expandLeftoverRetJtCall(MF))
-    Changed = true;
-  // Expand B to BEQZ_W_MSP (isBarrier uncond clone). Catalog BEQZ_W is
-  // isConditionalBranch and made BranchRelaxation dereference the last-block
-  // sentinel. The clone is isUnconditionalBranch, so expansion at every seat
-  // (size-oracle included) is BR-safe; mid/closure still catch insertBranch
-  // leftover B.
-  if (expandUncondBToBeqz(MF, TII))
-    Changed = true;
-  if (wrapBareAndStamp(MF))
-    Changed = true;
+  // Product stamped path is wrap-only (AIEFinalizeBundle.cpp:40-59).
+  // Wrap residual bares (post-stamp LBN/BR parcels; dest-window NOP
+  // parcels still bare) as complete packet templates: identity-bake the
+  // singleton member, wrap, stamp row+completion. Wrap is size-neutral
+  // on EncodedBytes already charged. Dest-window stall cycles do not
+  // run after the wall.
+  //
+  // Skipped-postmisched never ran S1. Stall net FIRST on the logical
+  // itinerary (ST32_POST dest-window before identity-bake), leftover
+  // already-bundled inverse bake, wrap remaining bares, then stamp —
+  // the S1 leaveFunction sequence. Wrap-then-stall bakes
+  // S_SW_POST_IMM Slot0_LS_WbLat[1] and erases the exposed-pipeline pad
+  // (stack-align regression). Baking leftover logicals after wrap with
+  // PreserveStampedRow=false restamped newly wrapped rows before/around
+  // the CFG wall (D1.164). S1 already charged logicals; do not walk
+  // twice (D1.33/D1.35).
   // HexagonVLIWPacketizer.cpp:90/205 addRequired AA; leftover-bake uses
   // getAnalysisIfAvailable so limited -run-pass stays fail-closed.
   AAResults *AA = nullptr;
   if (auto *AAR = getAnalysisIfAvailable<AAResultsWrapperPass>())
     AA = &AAR->getAAResults();
-  if (bakeLeftoverLogicalBundles(MF, AA))
+  if (!AlreadyStamped && MFI->getPostRASchedInvocations() == 0) {
+    if (haydnInsertExposedPipelineStalls(MF))
+      Changed = true;
+    if (bakeLeftoverLogicalBundles(MF, AA, /*PreserveStampedRow=*/false))
+      Changed = true;
+    if (haydnWrapBareAndStamp(MF))
+      Changed = true;
+  } else if (haydnWrapBareAndStamp(MF)) {
+    Changed = true;
+  }
+  if (!AlreadyStamped)
+    MFI->stampPostCommitCfgSnapshot(MF);
+  // After wrap+CFG stamp, leftover bake is wrap-only identity: keep a
+  // committed row/completion (no selectProductRowForOpcodes restamp).
+  if (bakeLeftoverLogicalBundles(MF, AA, /*PreserveStampedRow=*/true))
     Changed = true;
   if (stampUnstampedBundledRoots(MF))
     Changed = true;

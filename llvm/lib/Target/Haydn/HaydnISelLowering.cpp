@@ -157,9 +157,10 @@ bool HaydnTargetLowering::allowsMisalignedMemoryAccesses(
   if (SizeBits <= 8)
     return true; // byte — any alignment
 
-  // ABI DataLayout i64:32 / v64:32: 4-byte-aligned 64-bit scalar or DR
-  // vector is representable; ISel splits LD64/ST64 into LD32 pairs when
-  // MMO align < 8 (LD32 needs align 4). Accept Align>=4 for those shapes.
+  // ABI DataLayout i64:32 (scalar) / v64:64 (vector): a 4-byte-aligned
+  // 64-bit scalar or DR value is representable; ISel splits LD64/ST64 into
+  // LD32 pairs when MMO align < 8 (LD32 needs align 4). Accept Align>=4 for
+  // those shapes.
   if (SizeBits == 64 && (VT.isScalarInteger() || VT.isVector()))
     return Alignment >= Align(4);
 

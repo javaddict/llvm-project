@@ -1,0 +1,110 @@
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -run-pass=prologepilog,haydn-hwloops -verify-machineinstrs \
+# RUN:   %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
+# RUN:   -debug-only=haydn-hwloops \
+# RUN:   -run-pass=prologepilog,haydn-hwloops \
+# RUN:   %s -o /dev/null 2>&1 | FileCheck %s --check-prefix=DBG
+# REQUIRES: asserts, haydn-registered-target
+#
+# GR1.4 dedicated-exit: join Exit (entry bypass + Latch) is split to a
+# pred_size==1 block (AIE splitLoopEndJump AIEBaseHardwareLoops.cpp:232-272;
+# RISC-V insertIndirectBranch RestoreBB pred_size==1
+# RISCVInstrInfo.cpp:1433-1443). Restore LD32 lands in that block, not on
+# the join Exit. 20× NOP spacer forces StartOff overflow / demote.
+
+# CHECK-LABEL: name: gr14_dedicated_exit_restore
+# CHECK-NOT: SET_HWLOOP
+# CHECK: $r2 = SUBI32{{.*}}$r2, 1
+# CHECK: BNEZ{{.*}}$r2
+# CHECK: $r2 = {{S_LW_WITH_IMM|LD32}}
+# CHECK-LABEL: bb.3.exit:
+# CHECK: {{ST32|S_SW}}{{.*}}$r2
+
+# DBG: dedicated-exit split
+# DBG: demote restored live trip
+# DBG-NOT: LLVM ERROR
+
+--- |
+  define dso_local void @gr14_dedicated_exit_restore(ptr nocapture writeonly %out, i32 %trip) {
+  entry:
+    %cmp = icmp eq i32 %trip, 0
+    br i1 %cmp, label %exit, label %spacer
+  spacer:
+    br label %body
+  body:
+    store i32 0, ptr %out, align 4
+    br label %exit
+  exit:
+    store i32 %trip, ptr %out, align 4
+    br label %ret
+  ret:
+    ret void
+  }
+...
+---
+name:            gr14_dedicated_exit_restore
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14, $r15
+    successors: %bb.1, %bb.3
+    SET_HWLOOP_F2_W 0, %bb.2, %bb.2, $r2, implicit-def dead $sfr
+    NOP
+    NOP
+    NOP
+    BEQZ_W $r1, %bb.3, implicit-def dead $sfr
+
+  bb.1.spacer:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.2
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.body:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r6, $r7, $r8, $r9, $r10, $r11, $r12, $r14
+    successors: %bb.3
+    ST32 $r3, $r1, 0
+    $r1 = XOR32 $r1, $r1
+    $r3 = XOR32 $r3, $r3
+    $r4 = XOR32 $r4, $r4
+    $r5 = XOR32 $r5, $r5
+    $r6 = XOR32 $r6, $r6
+    $r7 = XOR32 $r7, $r7
+    $r8 = XOR32 $r8, $r8
+    $r9 = XOR32 $r9, $r9
+    $r10 = XOR32 $r10, $r10
+    $r11 = XOR32 $r11, $r11
+    $r12 = XOR32 $r12, $r12
+    $r14 = XOR32 $r14, $r14
+    NOP
+    NOP
+    NOP
+
+  bb.3.exit:
+    liveins: $r1, $r2
+    successors: %bb.4
+    ST32 $r2, $r1, 0
+
+  bb.4.ret:
+    liveins: $r15
+    RET implicit killed $r15

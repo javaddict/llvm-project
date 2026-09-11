@@ -14,7 +14,8 @@
 ; PEI WITH_REG remat shape directly.
 
 ; Every call must attach the call-preserved regmask (CSR_Haydn).
-; ISEL: JAL_W {{.*}}csr_haydn{{.*}}
+; ISEL: LOAD_ADDR
+; ISEL: JALR_CALL {{.*}}csr_haydn{{.*}}
 
 
 define i32 @test_call_has_modsi3(i32 %a, i32 %b) nounwind {

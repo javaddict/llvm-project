@@ -21,7 +21,7 @@
 
 ; CHECK-LABEL: widen_mac_ss:
 ; CHECK: mula64.ll
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 
 define i64 @widen_mac_ss(i32 %a, i32 %b, i64 %acc) {
   %aa = sext i32 %a to i64
@@ -33,7 +33,7 @@ define i64 @widen_mac_ss(i32 %a, i32 %b, i64 %acc) {
 
 ; CHECK-LABEL: widen_mac_uu:
 ; CHECK: mula64.ulul
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 define i64 @widen_mac_uu(i32 %a, i32 %b, i64 %acc) {
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
@@ -45,7 +45,7 @@ define i64 @widen_mac_uu(i32 %a, i32 %b, i64 %acc) {
 ; Second add order for unsigned (mul + acc) — both orders must fuse.
 ; CHECK-LABEL: widen_mac_uu_mul_first:
 ; CHECK: mula64.ulul
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 define i64 @widen_mac_uu_mul_first(i32 %a, i32 %b, i64 %acc) {
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64
@@ -56,7 +56,7 @@ define i64 @widen_mac_uu_mul_first(i32 %a, i32 %b, i64 %acc) {
 
 ; CHECK-LABEL: widen_mul_ss:
 ; CHECK: mul64.ll
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 define i64 @widen_mul_ss(i32 %a, i32 %b) {
   %aa = sext i32 %a to i64
   %bb = sext i32 %b to i64
@@ -66,7 +66,7 @@ define i64 @widen_mul_ss(i32 %a, i32 %b) {
 
 ; CHECK-LABEL: widen_mul_uu:
 ; CHECK: mul64.ulul
-; CHECK-NOT: jal{{(\.s[012])?}} {{.*}}__muldi3
+; CHECK-NOT: {{lui|addi32|jal}}{{.*}}__muldi3
 define i64 @widen_mul_uu(i32 %a, i32 %b) {
   %aa = zext i32 %a to i64
   %bb = zext i32 %b to i64

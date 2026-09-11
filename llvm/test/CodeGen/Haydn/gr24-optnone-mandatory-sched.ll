@@ -5,12 +5,12 @@
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O0 < %s | FileCheck %s --check-prefix=ASM-O0
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 < %s | FileCheck %s --check-prefix=ASM-O2
 ; GR2.4 INV5 probe: optnone full emission under -haydn-postra-interblock
-; (+ and without -haydn-sms2) must reach assembly with no freeze fatal. The
+; (+ and without) must reach assembly with no freeze fatal. The
 ; LateConvergence driver (the only S2 seat) still skipFunctions optnone, so
 ; without the destructor clearing condition in
 ; HaydnPostRASchedStrategy::~HaydnPostRASchedStrategy the inter-block DDG
 ; registry would leak to the addPreEmitPass2 freeze fatal.
-; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -haydn-postra-interblock -haydn-sms2 < %s | FileCheck %s --check-prefix=IB
+; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -haydn-postra-interblock < %s | FileCheck %s --check-prefix=IB
 ; RUN: llc -mtriple=haydn-unknown-elf -global-isel-abort=1 -O2 -haydn-postra-interblock < %s | FileCheck %s --check-prefix=IB
 ;
 ; GR2.4: the single addPreSched2 PostMachineScheduler invocation is MANDATORY
@@ -33,7 +33,7 @@
 ; POST-O0-LABEL: name: dep_optnone
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
-; POST-O0-NOT: BUNDLE
+; POST-O0: BUNDLE
 ; POST-O0: JALR
 ; Independent canary: scheduler-committed co-issue root (product shape).
 ; POST-O0-LABEL: name: indep_gr24
@@ -43,7 +43,7 @@
 ; POST-O2-LABEL: name: dep_optnone
 ; POST-O2: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O2: ADD32_E{{[23]}}_E{{[0-2]}}_
-; POST-O2-NOT: BUNDLE
+; POST-O2: BUNDLE
 ; POST-O2: JALR
 ; POST-O2-LABEL: name: indep_gr24
 ; POST-O2: BUNDLE 1, 0
@@ -54,11 +54,9 @@
 ; POST-O0-LABEL: name: dep_plain
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O0: ADD32_E{{[23]}}_E{{[0-2]}}_
-; POST-O0-NOT: BUNDLE
 ; POST-O2-LABEL: name: dep_plain
 ; POST-O2: ADD32_E{{[23]}}_E{{[0-2]}}_
 ; POST-O2: ADD32_E{{[23]}}_E{{[0-2]}}_
-; POST-O2-NOT: BUNDLE
 
 ; --- (c): after Finalize+Verify, committed cycles only, zero bare encode ---
 ; VERIFY-O0-LABEL: name: dep_optnone

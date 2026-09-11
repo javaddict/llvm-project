@@ -81,9 +81,10 @@ define i64 @conditional_mac(i64 %a, i64 %b, i64 %c, i32 %flag) {
 ; CHECK-DAG: mul64.ll
 ; CHECK-DAG: add64
 ; CHECK-DAG: seq32
-; CHECK-DAG: move32_dr_h
-; CHECK-DAG: move32_dr_l
-; CHECK-DAG: movt32
+; D1.62: i64 G_SELECT is DR64-native MOVEGPR2SFR + tied MOVT64.
+; CHECK-DAG: movegpr2sfr
+; CHECK-DAG: movt64
+; CHECK-NOT: movt32
   %cmp = icmp eq i32 %flag, 0
   %bc.5 = bitcast i64 %a to <2 x i32>
   %bc.6 = bitcast i64 %b to <2 x i32>

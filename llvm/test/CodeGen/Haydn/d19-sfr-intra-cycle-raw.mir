@@ -3,20 +3,20 @@
 #
 # Live SFR is same-cycle true RAW (Constraints simultaneous-read;
 # Data_Latency=1; no SFR forwarding exception). Freeze fatals the
-# product-shape writer-then-reader parcel and accepts the WAR reverse
-# (e0 reader then e1 writer). Generated members so freeze residual-logical
-# does not fire first. Do not retarget d14 leftover-dead-$sfr WAW pins.
+# product-shape writer-then-reader parcel. Field-order use-then-def is
+# still a same-cycle live SFR def+use (MOVT samples the old flag).
+# Generated members so freeze residual-logical does not fire first.
+# Do not retarget d14 leftover-dead-$sfr WAW pins.
 #
 # RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
 # RUN:   -run-pass=haydn-verify-bundles %t/raw-sfr-def-then-use.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=RAW
-# RUN: llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
-# RUN:   -run-pass=haydn-verify-bundles %t/war-sfr-use-then-def.mir -o - \
+# RUN: not --crash llc -mtriple=haydn-unknown-elf -haydn-freeze-verify \
+# RUN:   -run-pass=haydn-verify-bundles %t/war-sfr-use-then-def.mir -o - 2>&1 \
 # RUN:   | FileCheck %s --check-prefix=WAR
 #
 # RAW: intra-cycle RAW
-# WAR: X2MOVT32_E3_E0_ALU0_R
-# WAR: X2SLT32_E3_E1_ALU1_R
+# WAR: named same-cycle law
 
 #--- raw-sfr-def-then-use.mir
 --- |

@@ -59,7 +59,7 @@
 ; asm-only body owns control flow.
 ; inreg / nest / swift* / byref are not Haydn seats (were silently ignored).
 ; Formal byval is the defined stack-indirect pointer path (not fail-closed).
-; legal musttail sibcall is JAL_W_MSP (musttail-reject.ll);
+; legal musttail sibcall is JAL_TCO / JALR_W (musttail-reject.ll);
 ; ineligible musttail stays fail-closed in tailcall-isr-fail-closed.ll.
 ; frameaddress depth 0 is FP; depth>0 and cycle/named-register I/O have
 ; no golden product (legal-then-unselectable abort closed).

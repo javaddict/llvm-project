@@ -1,0 +1,2269 @@
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize,branch-relaxation \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=RELAX
+# REQUIRES: haydn-registered-target
+#
+# D1.64 HOLD va-arg-24: LateConvergence BR must not insertIndirectBranch
+# (postcommit CFG wall). Overlays:
+#   1) LUI/ADDI %bb dest recovery so cond+long-form JALR stays two-way.
+#   2) JALR_CALL (returning fnptr call) is not a CFG jump — dest-less dest
+#      recovery must not abort the walk (va-arg-24.c -O3 @verify: printf
+#      JALR_CALL then a far cond in the same MBB).
+#   3) Normalize already-long skip is LUI+ADDI+JALR only. A returning
+#      JALR_CALL is not that form; skipping the whole MBB left a far short
+#      uncond for LateConvergence BR::fixupUnconditionalBranch.
+#   4) Coissued short uncond B beside a cond (and beside JALR_CALL) stays
+#      the FBB. unwrap prefers the cond; hiding the sibling reports one-way
+#      cond + layout fall-through (va-arg-22 MEMORY_FAULT). Same for a
+#      coissued short uncond B, and for a sibling CFG JALR whose
+#      dest is recovered from preceding LUI/ADDI (bundle members).
+#   5) Far TBB on bundled dest recovery (cond_then_jalr_bundled,
+#      bundled_cond_with_jalr_dest) forces BranchRelaxation analyze —
+#      dest-scan miss is an analyzable-assert.
+# JAL_W is not an analyzable uncond terminator. Dest-less CFG
+# JALR/RET/computed-goto stay unanalyzable (never analyzable fall-through
+# — JALR is a barrier). getBranchDestBlock returns null on dest-less
+# JALR/RET/JALR_W/JAL-without-MBB, never UNREACHABLE.
+#
+# Layout: cond TBB is %bb.2, JALR FBB is layout-next %bb.1. 180 NOP parcels
+# in %bb.1 make entry→bb.2 miss WIDE_BranchSImm12 (byte PC+imm, ~2048B)
+# while FBB stays near so invert-swap does not create CFG. Bare generated
+# members match the MI opcode BR prints (not a BUNDLE root: GR2.7
+# isBranchOffsetInRange(BUNDLE) is always in-range). Singleton BUNDLE
+# roots (cond_then_jalr_bundled) are the Fixup/Finalize shape: dest
+# recovery must continue past JALR so the cond successor stays explained.
+# Peer: Hexagon analyzeBranch instr_iterator (HexagonInstrInfo.cpp:435-508);
+# RISC-V / AIE leave dest-less indirect unanalyzable
+# (RISCVInstrInfo.cpp:1325-1327, AIEBaseInstrInfo.cpp:186-188).
+
+--- |
+  define void @cond_then_jalr_e2(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @destless_jalr_ret() {
+    ret void
+  }
+  define void @destless_jalr_after_csrw() {
+    ret void
+  }
+  define void @destless_jalr_computed(ptr %p) {
+    indirectbr ptr %p, [label %a, label %b]
+  a:
+    ret void
+  b:
+    ret void
+  }
+  define void @destless_jalr_after_unrelated_lui() {
+    ret void
+  }
+  define void @cond_then_jalr_bundled(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @destless_jalr_bundled_ret() {
+    ret void
+  }
+  define void @destless_jalr_computed_after_cond(ptr %p, i32 %c) {
+    br i1 undef, label %b, label %indirect
+  indirect:
+    indirectbr ptr %p, [label %a, label %b]
+  a:
+    ret void
+  b:
+    ret void
+  }
+  define void @destless_bundled_jalr_with_cond(ptr %p, i32 %c) {
+    br i1 undef, label %b, label %indirect
+  indirect:
+    indirectbr ptr %p, [label %a, label %b]
+  a:
+    ret void
+  b:
+    ret void
+  }
+  define void @cond_after_jalr_call(i32 %c, ptr %p) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @bundled_cond_with_jalr_call(i32 %c, ptr %p) {
+    br i1 undef, label %b, label %a
+  a:
+    ret void
+  b:
+    ret void
+  }
+  define void @jalr_msp_then_far_uncond(ptr %p) {
+  entry:
+    call void %p()
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @bundled_far_uncond_with_jalr_msp(ptr %p) {
+  entry:
+    call void %p()
+    br label %far
+  pad:
+    ret void
+  far:
+    ret void
+  }
+  define void @bundled_jalr_msp_then_cond(i32 %c, ptr %p) {
+    br i1 undef, label %b, label %a
+  a:
+    ret void
+  b:
+    ret void
+  }
+  define void @bundled_jalr_msp_then_uncond_b(ptr %p) {
+    call void %p()
+    br label %dst
+  dst:
+    ret void
+  }
+  define void @jalr_msp_lui_then_cond(i32 %c) {
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @destless_ret() {
+    ret void
+  }
+  define void @destless_jalr_w_msp(ptr %p) {
+    ret void
+  }
+  define void @jal_w_not_analyzable_uncond() {
+    ret void
+  }
+  define void @jalr_msp_then_cond_long_jalr(i32 %c, ptr %p) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @cond_then_jalr_unrelated_add(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @bundled_cond_with_uncond_b(i32 %c) {
+  entry:
+    br i1 undef, label %taken, label %other
+  skip:
+    ret void
+  taken:
+    ret void
+  other:
+    ret void
+  }
+  define void @bundled_uncond_b_then_cond(i32 %c) {
+  entry:
+    br i1 undef, label %taken, label %other
+  skip:
+    ret void
+  taken:
+    ret void
+  other:
+    ret void
+  }
+  define void @bundled_cond_uncond_with_jalr_msp(i32 %c, ptr %p) {
+  entry:
+    br i1 undef, label %taken, label %other
+  skip:
+    ret void
+  taken:
+    ret void
+  other:
+    ret void
+  }
+  define void @bundled_cond_with_jalr_dest(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  far:
+    ret void
+  near:
+    ret void
+  }
+  define void @bundled_cond_with_beqz_w_msp(i32 %c) {
+  entry:
+    br i1 undef, label %taken, label %other
+  skip:
+    ret void
+  taken:
+    ret void
+  other:
+    ret void
+  }
+  define void @bundled_beqz_w_msp_then_cond(i32 %c) {
+  entry:
+    br i1 undef, label %taken, label %other
+  skip:
+    ret void
+  taken:
+    ret void
+  other:
+    ret void
+  }
+...
+---
+name:            cond_then_jalr_e2
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cond_then_jalr_e2
+    ; CHECK: bb.0.entry
+    ; Must compile (no analyzable assert). Invert-swap keeps a cond;
+    ; the far dest may become JALR.
+    ; CHECK: {{BNEZ|BEQZ}}
+    $r7 = LUI_E2_E0_ALU0_I12 %bb.1
+    $r7 = ADDI32_E2_E0_ALU0_RI20 $r7, %bb.1
+    BNEZ_E2_E0_ALU0_I12 $r1, %bb.2
+    $r7 = JALR_E2_E0_ALU0_RI12 $r7, 0
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            destless_jalr_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: destless_jalr_ret
+    ; Dest-less RET JALR is unanalyzable, never fall-through.
+    ; CHECK: $r0 = JALR_W $r15, 0
+    $r0 = JALR_W $r15, 0
+
+...
+---
+name:            destless_jalr_after_csrw
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: destless_jalr_after_csrw
+    ; SETCBR class: CSRW then RET JALR. CSRW is not a barrier; dest-less
+    ; JALR must not continue the walk into analyzable fall-through.
+    ; CHECK: CSRW_W 44, $r1
+    ; CHECK: $r0 = JALR_W $r15, 0
+    CSRW_W 44, $r1, implicit-def $sfr, implicit-def $cbr0
+    $r0 = JALR_W $r15, 0
+
+...
+---
+name:            destless_jalr_computed
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: destless_jalr_computed
+    ; Computed-goto: keep both successors; do not invent a fall-through.
+    ; CHECK: successors: %bb.1{{.*}}%bb.2
+    ; CHECK: $r0 = JALR_W $r1, 0
+    $r0 = JALR_W $r1, 0
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            destless_jalr_after_unrelated_lui
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r15
+    ; CHECK-LABEL: name: destless_jalr_after_unrelated_lui
+    ; Unrelated LUI/ADDI %bb.1 must not become the RET JALR dest (rs is
+    ; $r15, not $r7). CHECK the jump stays on LR.
+    ; CHECK: $r7 = LUI
+    ; CHECK: $r0 = JALR_W $r15, 0
+    $r7 = LUI %bb.1
+    $r7 = ADDI32_W $r7, %bb.1
+    $r0 = JALR_W $r15, 0
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cond_then_jalr_bundled
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: cond_then_jalr_bundled
+    ; CHECK: bb.0.entry
+    ; Singleton BUNDLE roots (Fixup/Finalize shape). Dest recovery must
+    ; continue past the JALR so the cond successor stays explained.
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: JALR
+    BUNDLE implicit-def $r7 {
+      $r7 = LUI %bb.1
+    }
+    BUNDLE implicit-def $r7, implicit $r7 {
+      $r7 = ADDI32_W $r7, %bb.1
+    }
+    BUNDLE implicit $r1 {
+      BNEZ_W $r1, %bb.2
+    }
+    BUNDLE implicit-def $r7, implicit $r7 {
+      $r7 = JALR_W $r7, 0
+    }
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            destless_jalr_bundled_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: destless_jalr_bundled_ret
+    ; Dest-less bundled RET JALR is unanalyzable, never fall-through.
+    ; CHECK: $r0 = JALR_W $r15, 0
+    BUNDLE implicit-def $r0, implicit $r15 {
+      $r0 = JALR_W $r15, 0
+    }
+
+...
+---
+name:            destless_jalr_computed_after_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: destless_jalr_computed_after_cond
+    ; Cond then dest-less computed JALR: keep both successors; do not
+    ; analyze as cond+fall-through (JALR is a barrier).
+    ; CHECK: successors: %bb.1{{.*}}%bb.2
+    ; CHECK: $r0 = JALR_W $r1, 0
+    BNEZ_W $r2, %bb.2
+    $r0 = JALR_W $r1, 0
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            destless_bundled_jalr_with_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r1, $r2, $r15
+    ; CHECK-LABEL: name: destless_bundled_jalr_with_cond
+    ; Unwrap may return the cond; dest-less sibling JALR must stay
+    ; unanalyzable (not cond+fall-through).
+    ; CHECK: successors: %bb.1{{.*}}%bb.2
+    ; CHECK: $r0 = JALR_W $r1, 0
+    BUNDLE implicit $r2, implicit-def $r0, implicit $r1 {
+      BNEZ_W $r2, %bb.2
+      $r0 = JALR_W $r1, 0
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cond_after_jalr_call
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r8', virtual-reg: '' }
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r8, $r10, $r15
+    ; CHECK-LABEL: name: cond_after_jalr_call
+    ; CHECK: bb.0.entry
+    ; va-arg-24 @verify shape: returning JALR_CALL then a far cond.
+    ; Must compile (no analyzable assert). Cond survives invert-swap.
+    ; CHECK: JALR_CALL
+    ; CHECK: {{BNEZ|BEQZ}}
+    $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    BNEZ_E2_E0_ALU0_I12 $r8, %bb.2
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_cond_with_jalr_call
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r8, $r10, $r15
+    ; CHECK-LABEL: name: bundled_cond_with_jalr_call
+    ; Coissued cond + returning JALR_CALL: unwrap must prefer the cond.
+    ; CHECK: successors: %bb.1{{.*}}%bb.2
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: JALR_CALL
+    BUNDLE implicit $r8, implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      BNEZ_W $r8, %bb.2
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+...
+
+---
+name:            jalr_msp_then_far_uncond
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r10, $r11, $r15
+    ; CHECK-LABEL: name: jalr_msp_then_far_uncond
+    ; Returning JALR_CALL then a far uncond B. Must compile.
+    ; CHECK: JALR_CALL
+    ; RELAX-LABEL: name: jalr_msp_then_far_uncond
+    ; RELAX: bb.0
+    ; RELAX: $r15 = JALR
+    ; RELAX: $r{{[0-9]+}} = JALR_W
+    $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    B %bb.2
+
+  bb.1.pad:
+    liveins: $r11, $r15
+    $r11 = ADDI32_W $r11, 0
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_far_uncond_with_jalr_msp
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r11', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2
+    liveins: $r10, $r11, $r15
+    ; CHECK-LABEL: name: bundled_far_uncond_with_jalr_msp
+    ; Last cycle coissues far uncond B with returning JALR_CALL. Opcode-only
+    ; already-long skip must not treat JALR_CALL as LUI+ADDI+JALR.
+    ; CHECK: JALR_CALL
+    ; RELAX-LABEL: name: bundled_far_uncond_with_jalr_msp
+    ; RELAX: bb.0
+    ; RELAX: $r15 = JALR
+    ; RELAX: $r{{[0-9]+}} = JALR_W
+    BUNDLE implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      B %bb.2
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    }
+
+  bb.1.pad:
+    liveins: $r11, $r15
+    $r11 = ADDI32_W $r11, 0
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_jalr_msp_then_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1, %bb.2
+    liveins: $r8, $r10, $r15
+    ; CHECK-LABEL: name: bundled_jalr_msp_then_cond
+    ; JALR_CALL listed first must not hide the sibling cond.
+    ; CHECK: successors: %bb.1{{.*}}%bb.2
+    ; CHECK: JALR_CALL
+    ; CHECK: {{BNEZ|BEQZ}}
+    BUNDLE implicit $r8, implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+      BNEZ_W $r8, %bb.2
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_jalr_msp_then_uncond_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r10, $r15
+    ; CHECK-LABEL: name: bundled_jalr_msp_then_uncond_b
+    ; JALR_CALL listed first must not hide the sibling uncond B.
+    ; CHECK: successors: %bb.1
+    ; CHECK: JALR_CALL
+    ; CHECK: B %bb.1
+    BUNDLE implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+      B %bb.1
+    }
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            jalr_msp_lui_then_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.1
+    liveins: $r8, $r15
+    ; CHECK-LABEL: name: jalr_msp_lui_then_cond
+    ; LUI/ADDI of JALR_CALL rs is not a CFG dest. %bb.3 is not a successor;
+    ; recovering it as FBB fails MachineVerifier. Cond stays one-way
+    ; (fall-through + TBB).
+    ; CHECK: successors: %bb.2{{.*}}%bb.1
+    ; CHECK: JALR_CALL
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK-NOT: JALR_W
+    $r10 = LUI %bb.3
+    $r10 = ADDI32_W $r10, %bb.3
+    $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    BNEZ_W $r8, %bb.2
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+  bb.2:
+    liveins: $r15
+    RET implicit $r15
+  bb.3:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            destless_ret
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r15
+    ; CHECK-LABEL: name: destless_ret
+    ; Dest-less RET: getBranchDestBlock returns null, not UNREACHABLE.
+    ; CHECK: RET
+    RET implicit $r15
+
+...
+---
+name:            destless_jalr_w_msp
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: destless_jalr_w_msp
+    ; Dest-less musttail JALR_W: Long-Branch Normalize must not
+    ; UNREACHABLE in getBranchDestBlock. Keep dest-less JALR_W.
+    ; CHECK: $r12 = JALR_W
+    $r12 = JALR_W $r1, 0, implicit $r15
+
+...
+---
+name:            jal_w_not_analyzable_uncond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.1
+    liveins: $r15
+    ; CHECK-LABEL: name: jal_w_not_analyzable_uncond
+    ; JAL_W is CallSImm20, not an analyzable uncond terminator.
+    ; CHECK: $r12 = JAL_W
+    ; CHECK-NOT: {{[[:space:]]}}B %bb.1
+    $r12 = JAL_W %bb.1
+  bb.1:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            jalr_msp_then_cond_long_jalr
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r10', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        true
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r10, $r15
+    ; CHECK-LABEL: name: jalr_msp_then_cond_long_jalr
+    ; CHECK: bb.0.entry
+    ; va-arg-24 @verify bb.22: returning JALR_CALL then LUI/ADDI %bb +
+    ; cond + CFG JALR. Dest recovery must keep the pair two-way.
+    ; CHECK: JALR_CALL
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: JALR
+    ; RELAX-LABEL: name: jalr_msp_then_cond_long_jalr
+    ; RELAX: JALR_CALL
+    ; RELAX: JALR
+    $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    BUNDLE implicit-def $r7 {
+      $r7 = LUI_E2_E0_ALU0_I12 %bb.1
+    }
+    BUNDLE implicit-def $r7, implicit $r7 {
+      $r7 = ADDI32_E2_E0_ALU0_RI20 $r7, %bb.1
+    }
+    BUNDLE implicit $r1 {
+      BNEZ_E2_E0_ALU0_I12 $r1, %bb.2
+    }
+    BUNDLE implicit-def $r7, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7, implicit $r7 {
+      $r7 = JALR_E2_E0_ALU0_RI12 $r7, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    }
+
+  bb.1.near:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            cond_then_jalr_unrelated_add
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r8', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r8, $r15
+    ; CHECK-LABEL: name: cond_then_jalr_unrelated_add
+    ; CHECK: bb.0.entry
+    ; Unrelated non-clobber between LUI and ADDI must not hide the
+    ; LUI+ADDI+JALR already-long skip (else dest recovery makes two-way
+    ; and ordered-tail fatals with no short uncond child).
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: JALR
+    ; RELAX-LABEL: name: cond_then_jalr_unrelated_add
+    ; RELAX: JALR
+    $r7 = LUI %bb.1
+    $r8 = ADDI32_W $r8, 0
+    $r7 = ADDI32_W $r7, %bb.1
+    BNEZ_W $r1, %bb.2
+    $r7 = JALR_W $r7, 0
+
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_cond_with_uncond_b
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.3
+    liveins: $r8, $r15
+    ; CHECK-LABEL: name: bundled_cond_with_uncond_b
+    ; Coissued cond + short uncond B. unwrap prefers the cond; the sibling
+    ; B dest must stay explained (va-arg-22 MEMORY_FAULT if analyze reports
+    ; one-way cond + layout fall-through). Layout-next %bb.1 is NOT a dest.
+    ; CHECK: successors: %bb.2{{.*}}%bb.3
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: B %bb.3
+    BUNDLE implicit $r8 {
+      BNEZ_W $r8, %bb.2
+      B %bb.3
+    }
+  bb.1.skip:
+    liveins: $r15
+    RET implicit $r15
+  bb.2.taken:
+    liveins: $r15
+    RET implicit $r15
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_uncond_b_then_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.3
+    liveins: $r8, $r15
+    ; CHECK-LABEL: name: bundled_uncond_b_then_cond
+    ; B listed first must not hide the sibling cond, and the cond must not
+    ; hide B.
+    ; CHECK: successors: %bb.2{{.*}}%bb.3
+    ; CHECK: B %bb.3
+    ; CHECK: {{BNEZ|BEQZ}}
+    BUNDLE implicit $r8 {
+      B %bb.3
+      BNEZ_W $r8, %bb.2
+    }
+  bb.1.skip:
+    liveins: $r15
+    RET implicit $r15
+  bb.2.taken:
+    liveins: $r15
+    RET implicit $r15
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_cond_uncond_with_jalr_msp
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.3
+    liveins: $r8, $r10, $r15
+    ; CHECK-LABEL: name: bundled_cond_uncond_with_jalr_msp
+    ; Cond + short B + returning JALR_CALL in one cycle. JALR_CALL is not a CFG
+    ; jump; sibling B stays FBB.
+    ; CHECK: successors: %bb.2{{.*}}%bb.3
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: B %bb.3
+    ; CHECK: JALR_CALL
+    BUNDLE implicit $r8, implicit-def $r15, implicit $r10, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7 {
+      BNEZ_W $r8, %bb.2
+      B %bb.3
+      $r15 = JALR_CALL $r10, 0, implicit-def $r1, implicit-def $r2, implicit-def $r3, implicit-def $r4, implicit-def $r5, implicit-def $r6, implicit-def $r7, implicit-def $r12, implicit-def $d0, implicit-def $d1, implicit-def $d2, implicit-def $d3, implicit-def $d4, implicit-def $d5, implicit-def $d6, implicit-def $d7
+    }
+  bb.1.skip:
+    liveins: $r15
+    RET implicit $r15
+  bb.2.taken:
+    liveins: $r15
+    RET implicit $r15
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_cond_with_jalr_dest
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r15
+    ; CHECK-LABEL: name: bundled_cond_with_jalr_dest
+    ; Coissued cond + CFG JALR. unwrap prefers the cond; JALR dest must
+    ; be recovered from preceding LUI/ADDI (bundle-member dest scan) so
+    ; the pair stays two-way — not one-way cond + layout fall-through.
+    ; CHECK: successors: %bb.2{{.*}}%bb.1
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: JALR
+    $r7 = LUI %bb.1
+    $r7 = ADDI32_W $r7, %bb.1
+    BUNDLE implicit $r1, implicit-def $r7, implicit $r7 {
+      BNEZ_W $r1, %bb.2
+      $r7 = JALR_W $r7, 0
+    }
+  bb.1.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_cond_with_beqz_w_msp
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.3
+    liveins: $r8, $r15
+    ; CHECK-LABEL: name: bundled_cond_with_beqz_w_msp
+    ; Short uncond B beside a cond. unwrap prefers the cond; the
+    ; sibling B dest must stay explained (same va-arg-22 hole
+    ; as short B). Layout-next %bb.1 is NOT a dest.
+    ; CHECK: successors: %bb.2{{.*}}%bb.3
+    ; CHECK: {{BNEZ|BEQZ}}
+    ; CHECK: B %bb.3
+    BUNDLE implicit $r8 {
+      BNEZ_W $r8, %bb.2
+      B %bb.3
+    }
+  bb.1.skip:
+    liveins: $r15
+    RET implicit $r15
+  bb.2.taken:
+    liveins: $r15
+    RET implicit $r15
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...
+---
+name:            bundled_beqz_w_msp_then_cond
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0:
+    successors: %bb.2, %bb.3
+    liveins: $r8, $r15
+    ; CHECK-LABEL: name: bundled_beqz_w_msp_then_cond
+    ; Uncond B listed first must not hide the sibling cond, and the
+    ; cond must not hide the B dest (va-arg-22).
+    ; CHECK: successors: %bb.2{{.*}}%bb.3
+    ; CHECK: B %bb.3
+    ; CHECK: {{BNEZ|BEQZ}}
+    BUNDLE implicit $r8 {
+      B %bb.3
+      BNEZ_W $r8, %bb.2
+    }
+  bb.1.skip:
+    liveins: $r15
+    RET implicit $r15
+  bb.2.taken:
+    liveins: $r15
+    RET implicit $r15
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+

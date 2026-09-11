@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Out-of-line verifyCommittedBundle / private-member lookup.
+// Out-of-line verifyCommittedBundle / private-member lookup /
+// verifyFrozenLayout (GR1.8 EncodedBytes re-walk).
 // Peer: AIEBaseInstrInfo.cpp:1595-1614 verifyInstruction fail-closed.
 //
 //===----------------------------------------------------------------------===//
@@ -14,8 +15,12 @@
 #include "HaydnBundleVerify.h"
 #include "Haydn.h"
 #include "HaydnBundlePortBudget.h"
+#include "HaydnHWLoopContracts.h"
+#include "HaydnInstrInfo.h"
 #include "HaydnIntraCycleRAW.h"
 #include "HaydnIntraCycleWAW.h"
+#include "HaydnLayoutSite.h"
+#include "HaydnMachineFunctionInfo.h"
 #include "HaydnPackLegality.h"
 #include "HaydnPortModel.h"
 // Opcode names come from the generated MC tables (HaydnMCTargetDesc.cpp
@@ -28,6 +33,7 @@
 #include "HaydnMspCloneFamily.h"
 #include "MCTargetDesc/HaydnMCFormats.h"
 #include "MCTargetDesc/HaydnMCTargetDesc.h"
+#include "MCTargetDesc/HaydnRelocLayout.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -35,11 +41,13 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/MachineFunction.h"
+#include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <utility>
 
@@ -671,6 +679,8 @@ haydnRejectFreezeResidualLogical(ArrayRef<unsigned> MemberOpcodes) {
       continue;
     if (lookupPrivateFormatEMember(Opc))
       continue;
+    if (haydn::msp::logicalOpcodeForMspClone(Opc) != 0)
+      continue;
     if (inverseOpcodeName(Opc).ends_with("_MSP"))
       continue;
     return std::string(
@@ -989,6 +999,263 @@ haydnCycleMembersHaveWAWSkipLeftoverSfr(ArrayRef<MachineInstr *> Kids,
   return false;
 }
 
+/// D1.54 — generated member descriptor/operand/tie/implicit/side-effect law.
+///
+/// One unconditional, descriptor-sourced validation of every real member of
+/// a committed cycle, BEFORE the port-budget re-check and the shared commit
+/// hazard predicates below. This is the freeze-contract member-shape wall:
+/// none of it may depend on the optional MachineVerifier. Authority split
+/// (no second table is invented):
+///   * arity and per-operand kinds come from the COMPILED member
+///     MCInstrDesc — the exact identity constraint #4 (direct alternate
+///     compatibility) freezes at setDesc time. The golden ledger census
+///     (FormatESetDescLedger.OperandCount / .OperandSignature) counts
+///     GOLDEN field roles and deliberately does NOT include compiler-only
+///     extras (tied acc, duplicated writeback fields — 1988 members carry
+///     them), so the compiled desc is the only positional authority for
+///     the MI's explicit operand block. The ledger row's presence is still
+///     verified: every generated member opcode must resolve to one.
+///   * ties come from the same compiled member MCInstrDesc: for a
+///     committed member the descriptor IS the generated tie authority, so
+///     a reg-use tie that disagrees with the desc's TIED_TO constraints
+///     is a corrupt setDesc/late-mutation artifact (one generic
+///     predicate — hasComplexRegisterTies — no second tie walk);
+///   * implicit operand closure: every implicit reg on a committed member
+///     must be named by the compiled member descriptor, be an implicit
+///     operand of the member's authored LOGICAL descriptor (the
+///     documented setDesc carry class, generate_format_e_records.py
+///     EXPECTED_IMPLICIT_DIVERGENT: conditional branches / CSRW carry
+///     Defs=[SFR], JAL/JALR carry the call-clobber list, MOVESFR2GPR /
+///     MOVT64 / X2MOVT32-class readers carry Uses=[SFR];
+///     rewriteFieldSlotToMember preserves that tail by design), or be the
+///     documented anonymous leftover implicit-def $sfr (countSFRPorts
+///     class (b) — charged to the SFR port ceiling, visible to the WAW
+///     law). Any other implicit reg is unattributed traffic: fail closed;
+///   * side-effect closure over the generated member defs: no member is
+///     both mayLoad and mayStore (the generated tables admit none), a
+///     store member must carry at least one MachineMemOperand (stores are
+///     the aliasing authority for the same-cycle overlap law — a store
+///     with no MMO makes every load pairing unverifiable, and the
+///     pipeline always stamps store MMOs), and an MMO on a member whose
+///     desc models no memory effect is stale unattributed aliasing
+///     evidence. Pure loads keep the historical hand-MIR shape (MMO
+///     optional on a lone load; the overlap law only consults a load when
+///     a store joins the cycle, where the missing MMO refuses the pair).
+///     The remaining side-effect surface (CSR/HWLoop/call/UA-CB classes'
+///     hasSideEffects bit) is enforced through the implicit-closure arm
+///     above plus the existing named same-cycle laws.
+///
+/// `_MSP` encode clones are NOT private members (no ledger row); they keep
+/// their logical descriptors and are validated by the inverse walk only —
+/// same class split as lookupPrivateFormatEMember. Pad NOP children are
+/// completion fill, not members. Residual/logical children (pre-cutover
+/// seats) return nullopt here: their descriptors are the logical schema's,
+/// and freeze rejects them independently (haydnRejectFreezeResidualLogical).
+///
+/// \returns nullopt on success; human-readable reason on failure.
+static std::optional<std::string>
+haydnVerifyMemberDescriptorLaws(const MachineInstr &Kid) {
+  const unsigned Opc = Kid.getOpcode();
+  if (Opc == 0 || isPadNopOpcode(Opc))
+    return std::nullopt;
+  const unsigned PrivId = privateMemberIdForOpcode(Opc);
+  if (PrivId == ~0u)
+    // Residual/logical child or `_MSP` clone: pre-cutover representation;
+    // the inverse walk and the freeze residual-logical wall own it.
+    return std::nullopt;
+  // Member opcode → MemberId → ledger row presence. The ledger is keyed by
+  // MemberId (FormatESetDescLedgerRec.MemberId), NOT by the opcode-census
+  // index: FormatEMemberOpcodes counts 4310 rows including NOP rows, the
+  // ledger 4182 non-NOP rows, so a member whose census index exceeds the
+  // ledger row count still HAS a row (S_LW_WITH_IMM_E3_E2_LOAD1_RI6,
+  // census index 4263, ledger MemberId row present). The census is a
+  // DenseMap<opcode, census-index>; PrivId from that map always satisfies
+  // FormatEMemberOpcodes[PrivId] == Opc, so that half of the old test was
+  // vacuous and the count half was wrong. Presence is decided by the
+  // member's own MemberId being named by some ledger row; a miss here is
+  // itself corruption of the member census.
+  if (PrivId >= format_e::FormatEMemberCount)
+    return std::string("member descriptor: generated member opcode has no "
+                       "member record: ") +
+           std::string(inverseOpcodeName(Opc));
+  {
+    static const DenseSet<uint16_t> LedgerMemberIds = [] {
+      DenseSet<uint16_t> S;
+      S.reserve(format_e::FormatESetDescLedgerCount);
+      for (unsigned I = 0; I < format_e::FormatESetDescLedgerCount; ++I)
+        S.insert(format_e::FormatESetDescLedger[I].MemberId);
+      return S;
+    }();
+    if (!LedgerMemberIds.contains(
+            format_e::FormatEMembers[PrivId].MemberId))
+      return std::string("member descriptor: generated member opcode has no "
+                         "setDesc ledger row: ") +
+             std::string(inverseOpcodeName(Opc));
+  }
+
+  const MCInstrInfo &MII = getHaydnSharedMCInstrInfo();
+  const MCInstrDesc &Desc = MII.get(Opc);
+
+  // Member's authored logical opcode — the implicit-carry class is keyed by
+  // the LOGICAL's implicit lists (setDesc keeps the tail; see
+  // rewriteFieldSlotToMember).
+  const unsigned Logical = format_e::logicalOpcodeOrSelf(Opc);
+  const MCInstrDesc &LogDesc = Logical == Opc ? Desc : MII.get(Logical);
+
+  // ---- Arity + operand kind census (compiled member descriptor) ----
+  // No generated member is variadic; the explicit block is exactly the
+  // compiled desc census. Count the MI's OWN leading non-implicit
+  // operands (MachineInstr::getNumExplicitOperands returns the DESC count
+  // for non-variadic defs, so it cannot see truncation; and regmask
+  // tails sit after the explicit block and are not reg operands).
+  // MIParser never arity-checks a non-variadic def, so a truncated or
+  // padded member reaches here intact.
+  const unsigned Expected = Desc.getNumOperands();
+  unsigned Explicit = 0;
+  for (const MachineOperand &MO : Kid.operands()) {
+    if (MO.isReg() && MO.isImplicit())
+      break;
+    if (MO.isRegMask())
+      break;
+    ++Explicit;
+  }
+  if (Explicit != Expected)
+    return std::string("member descriptor: explicit operand count "
+                       "disagrees with the generated member descriptor "
+                       "(expected ") +
+           std::to_string(Expected) + ", have " + std::to_string(Explicit) +
+           "): " + std::string(inverseOpcodeName(Opc));
+  // Operand-kind census, positional and fail-closed against the desc's own
+  // operand info: a reg slot (REGISTER type or a reg class) takes a reg
+  // operand; any other slot takes the imm/symbolic family the keep-map's
+  // kindOk admits (branch targets, globals, symbols, CPI/JTI). The arity
+  // arm above already failed any shape where the explicit block is not
+  // exactly Expected long, so indexing is in range.
+  for (unsigned I = 0; I != Expected; ++I) {
+    const MCOperandInfo &Info = Desc.operands()[I];
+    const MachineOperand &MO = Kid.getOperand(I);
+    const bool WantReg =
+        Info.OperandType == MCOI::OPERAND_REGISTER || Info.RegClass >= 0;
+    const bool KindOk =
+        WantReg ? MO.isReg()
+                : (MO.isImm() || MO.isMBB() || MO.isGlobal() ||
+                   MO.isSymbol() || MO.isCPI() || MO.isJTI() ||
+                   MO.isBlockAddress() || MO.isMCSymbol() ||
+                   MO.isTargetIndex());
+    if (!KindOk)
+      return std::string("member descriptor: operand kind disagrees with "
+                         "the generated member descriptor at index ") +
+             std::to_string(I) + ": " + std::string(inverseOpcodeName(Opc));
+  }
+
+  // ---- Tie closure (compiled member descriptor authority) ----
+  // hasComplexRegisterTies() is true exactly when some reg-use tie on the
+  // MI disagrees with the desc's TIED_TO constraint — the one generic
+  // predicate for "this MI's ties are not the descriptor's ties".
+  if (Kid.hasComplexRegisterTies())
+    return std::string("member descriptor: register tie disagrees with the "
+                       "generated member descriptor: ") +
+           std::string(inverseOpcodeName(Opc));
+
+  // ---- Implicit operand closure ----
+  for (const MachineOperand &MO : Kid.implicit_operands()) {
+    if (!MO.isReg())
+      continue;
+    const Register Reg = MO.getReg();
+    if (!Reg)
+      continue;
+    const MCPhysReg Phys = Reg.asMCReg();
+    if (Desc.hasImplicitDefOfPhysReg(Phys) ||
+        Desc.hasImplicitUseOfPhysReg(Phys))
+      continue;
+    // setDesc carry class: an implicit operand the authored LOGICAL names.
+    if (LogDesc.hasImplicitDefOfPhysReg(Phys) ||
+        LogDesc.hasImplicitUseOfPhysReg(Phys))
+      continue;
+    // Documented leftover (countSFRPorts class (b),
+    // haydnIsLeftoverUnnamedSfrDef): an anonymous implicit-def $sfr the
+    // logical shell carried onto a geometry-only member desc. It stays
+    // attributed traffic — charged to the SFR 1W port ceiling and visible
+    // to the WAW law — so it is not unattributed corruption. An implicit
+    // SFR USE is never in that class (readers name $sfr on the logical).
+    if (MO.isDef() && isHaydnSFRPortReg(Phys))
+      continue;
+    // Circular-buffer selection/programming carry (selector):
+    //   * addCircularBufferUse — CB members READ the cbr_sel-selected CBR
+    //     bank as an implicit use. Golden models cbr_sel as an immediate
+    //     FIELD (CBRI/CBRR member encodings), so neither the member nor
+    //     the authored logical descriptor names the bank register in
+    //     TableGen; the selector stamps it at ISel and
+    //     rewriteFieldSlotToMember keeps the tail.
+    //   * haydn_setcbr_begin/end — the CSRW_W setup WRITES the selected
+    //     bank as an implicit def (ordering barrier so CB loads/stores
+    //     cannot reorder past the boundary write; selector comment at
+    //     HaydnInstructionSelector.cpp:5695).
+    // Address-register stream carry (selector): PLDWWUA/PLQHWUA-class
+    // unaligned/post-inc streams and FLAR WRITE AR[ar_sel] as an implicit
+    // def (ar_sel is a golden immediate FIELD, AR WRITE_CONFLICT ordering
+    // barrier; HaydnInstructionSelector.cpp:6927-6967).
+    // CBR banks are reserved status/control registers
+    // (haydnIsSimplifiableReservedReg class); AR banks are the 2R/2W
+    // stream file — neither is named by golden member encodings, so the
+    // selector-stamped implicit operand is the only representation.
+    if (Phys == Haydn::CBR0 || Phys == Haydn::CBR1 || Phys == Haydn::AR0 ||
+        Phys == Haydn::AR1)
+      continue;
+    // Tied-writeback liveness carry (VirtRegRewriter /
+    // MachineInstr::addRegisterDefined class): a tied two-address def
+    // whose use was rewritten onto the SAME physreg keeps an implicit def
+    // of that register beside the explicit (dead) tied def — bundle
+    // liveness stamps it so the packet's def is visible to the
+    // bundle-level implicit list (D_LDW_CB_IMM `$d0, dead $r1 = ...
+    // killed $r1, ..., implicit-def $r1`). The register is already an
+    // EXPLICIT def of this member (or a super-register of one), so this
+    // is not new traffic — it names the member's own def. Admitted for
+    // defs only: an implicit USE this law cannot attribute stays
+    // unattributed traffic.
+    if (MO.isDef()) {
+      const TargetRegisterInfo *KidTRI =
+          Kid.getMF()->getSubtarget().getRegisterInfo();
+      bool NamesOwnDef = false;
+      for (const MachineOperand &D : Kid.all_defs()) {
+        if (&D == &MO || D.isImplicit())
+          continue;
+        if (D.getReg() == Phys ||
+            (D.getReg().isPhysical() && KidTRI &&
+             KidTRI->regsOverlap(D.getReg().asMCReg(), Phys)))
+          NamesOwnDef = true;
+      }
+      if (NamesOwnDef)
+        continue;
+    }
+    return std::string("member descriptor: implicit operand not named by "
+                       "the generated member or its authored logical "
+                       "descriptor: ") +
+           std::string(inverseOpcodeName(Opc));
+  }
+
+  // ---- Side-effect closure ----
+  const bool Loads = Desc.mayLoad(), Stores = Desc.mayStore();
+  const bool HasMMO = !Kid.memoperands().empty();
+  if (Loads && Stores)
+    return std::string("member descriptor: no generated member is both "
+                       "mayLoad and mayStore: ") +
+           std::string(inverseOpcodeName(Opc));
+  // Store members are the aliasing authority for the same-cycle overlap law
+  // (cycleHasMayAliasStoreLoad): a store with no MMO makes every pairing
+  // with a load unverifiable, so its own descriptor law refuses it here.
+  if (Stores && !HasMMO)
+    return std::string("member descriptor: store member carries no machine "
+                       "memory operand: ") +
+           std::string(inverseOpcodeName(Opc));
+  if (!Loads && !Stores && HasMMO)
+    return std::string("member descriptor: memory operand on a member whose "
+                       "generated descriptor models no memory effect: ") +
+           std::string(inverseOpcodeName(Opc));
+
+  return std::nullopt;
+}
+
 /// MIR entry: rebuild plan from BUNDLE root row + completion imms + children.
 /// Fail-closed: missing/unknown row imm or missing completion is an error.
 std::optional<std::string>
@@ -1028,6 +1295,18 @@ verifyCommittedBundle(const MachineInstr &BundleRoot, const HaydnBaseMCFormats &
   // writes (3xADD32) need >= 2 cycles under 2W even when E3 unit geometry
   // admits the entries.
   if (const MachineBasicBlock *MBB = BundleRoot.getParent()) {
+    // D1.54 member-shape wall first: unconditional generated
+    // descriptor/operand/tie/implicit/side-effect validation of every real
+    // member BEFORE any resource/inverse-hazard predicate can accept the
+    // cycle (never the optional MachineVerifier's job).
+    for (MachineBasicBlock::const_instr_iterator I =
+             std::next(BundleRoot.getIterator());
+         I != MBB->instr_end() && I->isBundledWithPred(); ++I) {
+      if (I->isMetaInstruction() || I->isDebugInstr() || I->isPosition())
+        continue;
+      if (auto DescErr = haydnVerifyMemberDescriptorLaws(*I))
+        return DescErr;
+    }
     SmallVector<MachineInstr *, 3> Kids;
     for (MachineBasicBlock::const_instr_iterator I =
              std::next(BundleRoot.getIterator());
@@ -1139,6 +1418,209 @@ verifyExactHardRootCommit(const MachineInstr &BundleRoot,
   if (Members.size() >= 3 && *Row != BundleFormatRowID::E96ThreeEntry)
     return std::string(
         "hard-root verify: three real members require E96ThreeEntry");
+  return std::nullopt;
+}
+
+static bool isJalrLogicalOpcode(unsigned Log) {
+  return Log == Haydn::JALR || Log == Haydn::JALR_W ||
+         Log == Haydn::JALR_CALL || Log == Haydn::JALR_TCO;
+}
+
+static bool isFreezeControlChild(const MachineInstr &MI,
+                                 const HaydnInstrInfo &TII) {
+  if (MI.isBundle() || MI.isMetaInstruction() || MI.isDebugInstr() ||
+      MI.isPosition() || MI.isKill() || MI.isImplicitDef() ||
+      MI.isCFIInstruction() || MI.isInlineAsm())
+    return false;
+  if (isPadNopOpcode(MI.getOpcode()))
+    return false;
+  if (TII.isHardwareLoopSetupInstr(MI))
+    return true;
+  return MI.isBranch(MachineInstr::IgnoreBundle) ||
+         MI.isCall(MachineInstr::IgnoreBundle);
+}
+
+std::optional<std::string> verifyFrozenLayout(MachineFunction &MF) {
+  // Independent terminal layout wall. Do not call isBranchOffsetInRange
+  // (safety-buffer false-fatals legal near-limit sites) and do not reuse
+  // computeLayoutBlockStarts (namedLateLayoutGrowthBytes overcounts SET).
+  const HaydnInstrInfo &TII = *static_cast<const HaydnInstrInfo *>(
+      MF.getSubtarget().getInstrInfo());
+  const HaydnMachineFunctionInfo *MFI =
+      MF.getInfo<HaydnMachineFunctionInfo>();
+  const unsigned Parcel = productParcelBytes().Value;
+
+  if (MFI) {
+    DenseMap<int, const MachineBasicBlock *> CounterHome;
+    for (const MachineBasicBlock &MBB : MF) {
+      const int FI = MFI->getHwLoopStackCounterFIForLatch(&MBB);
+      if (FI < 0)
+        continue;
+      auto [It, Inserted] = CounterHome.try_emplace(FI, &MBB);
+      if (!Inserted && It->second != &MBB)
+        return std::string("freeze layout: overlapping hwloop counter homes");
+    }
+  }
+
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (MI.isDebugInstr() || MI.isMetaInstruction() || MI.isPosition() ||
+          MI.isCFIInstruction() || MI.isKill() || MI.isImplicitDef())
+        continue;
+      for (const MachineOperand &MO : MI.operands()) {
+        if (MO.isReg() && MO.getReg().isVirtual())
+          return std::string("freeze layout: virtual register operand");
+        if (MO.isFI())
+          return std::string(
+              "freeze layout: unresolved frame-index operand");
+      }
+    }
+  }
+
+  DenseMap<const MachineInstr *, uint64_t> PacketPC;
+  DenseMap<const MachineBasicBlock *, uint64_t> BlockStart;
+  uint64_t Offset = 0;
+  for (const MachineBasicBlock &MBB : MF) {
+    BlockStart[&MBB] = Offset;
+    if (MBB.getAlignment() != Align(1) || MBB.getMaxBytesForAlignment() != 0)
+      return std::string("freeze layout: residual MBB alignment metadata");
+    if (Parcel != 0 && (Offset % Parcel) != 0)
+      return std::string("freeze layout: MBB offset not EncodedBytes-aligned");
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (MI.isInsideBundle() || !MI.isBundle())
+        continue;
+      PacketPC[&MI] = Offset;
+      Offset += committedEncodedBytes(MI).Value;
+    }
+  }
+
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (MI.isInsideBundle() || !MI.isBundle())
+        continue;
+      unsigned Controls = 0;
+      for (const MachineInstr *Kid : members(MI)) {
+        if (isFreezeControlChild(*Kid, TII))
+          ++Controls;
+      }
+      if (Controls > 1)
+        return std::string(
+            "freeze layout: duplicate-control in packet "
+            "(neutralized sibling must be a logical NOP)");
+    }
+  }
+
+  for (const MachineBasicBlock &MBB : MF) {
+    for (const MachineInstr &MI : MBB.instrs()) {
+      if (MI.isBundledWithPred())
+        continue;
+      HaydnJalrAddrMaterializeChain Chain =
+          TII.getJalrAddrMaterializeChain(MI);
+      if (!Chain.Control)
+        continue;
+      if (Chain.Incoherent || (Chain.Lui && Chain.Addi && !Chain.Dest))
+        return std::string("freeze layout: complete-tail/template identity");
+    }
+  }
+
+  LayoutSiteTable Table;
+  std::string CollectErr;
+  if (!Table.collect(MF, TII, CollectErr)) {
+    // Symbolic JALR is this wall (ISA-69). Unknown control / malformed
+    // SET stay on later freeze representation-escape and inverse seats
+    // so D1.55 FileCheck strings are not stolen.
+    if (StringRef(CollectErr).contains("symbolic JALR") ||
+        CollectErr == HaydnReloc::kUnsupportedSymbolicJalrDiag)
+      return std::string("freeze layout: ") + CollectErr;
+    return std::nullopt;
+  }
+
+  auto packetPCFor = [&](const LayoutSite &S) -> uint64_t {
+    if (S.Root && S.Root->isBundle()) {
+      auto It = PacketPC.find(S.Root);
+      if (It != PacketPC.end())
+        return It->second;
+    }
+    const MachineBasicBlock *Parent =
+        S.Root ? S.Root->getParent()
+               : (S.Member ? S.Member->getParent() : nullptr);
+    if (Parent) {
+      auto It = BlockStart.find(Parent);
+      if (It != BlockStart.end())
+        return It->second;
+    }
+    return 0;
+  };
+
+  auto destStart = [&](const MachineBasicBlock *Dest) -> std::optional<uint64_t> {
+    if (!Dest)
+      return std::nullopt;
+    auto It = BlockStart.find(Dest);
+    if (It == BlockStart.end())
+      return std::nullopt;
+    return It->second;
+  };
+
+  auto checkDisp = [&](HaydnReloc::RelocKind K,
+                       int64_t Disp) -> std::optional<std::string> {
+    if (K == HaydnReloc::RelocKind::None || K == HaydnReloc::RelocKind::Invalid)
+      return std::nullopt;
+    if (HaydnReloc::isSymbolicJalrReloc(K))
+      return std::string("freeze layout: ") +
+             HaydnReloc::kUnsupportedSymbolicJalrDiag;
+    HaydnReloc::RelocCompute C =
+        HaydnReloc::computeRelocValue(K, static_cast<uint64_t>(Disp));
+    if (C.OK)
+      return std::nullopt;
+    return std::string("freeze layout: ") +
+           (C.Err ? C.Err : "relocation compute failed");
+  };
+
+  for (const LayoutSite &S : Table.sites()) {
+    if (!S.Member)
+      continue;
+    if (isJalrLogicalOpcode(haydnLogicalOpcode(S.Member->getOpcode())))
+      continue;
+
+    const uint64_t PC = packetPCFor(S);
+    if (S.Kind == LayoutSiteKind::HWLoop) {
+      const unsigned SetBytes = S.Root ? committedEncodedBytes(*S.Root).Value
+                                       : productParcelBytes().Value;
+      if (S.Dest) {
+        auto DS = destStart(S.Dest);
+        if (!DS)
+          return std::string("freeze layout: missing HWLoop dest layout");
+        const int64_t AfterSet =
+            static_cast<int64_t>(*DS) - static_cast<int64_t>(PC + SetBytes);
+        const int64_t Anchored = ::llvm::haydn::hwloop::anchoredFromAfterSet(
+            AfterSet, static_cast<int64_t>(SetBytes));
+        if (auto Err = checkDisp(S.FieldKind, Anchored))
+          return Err;
+      }
+      if (S.Dest2) {
+        auto DS2 = destStart(S.Dest2);
+        if (!DS2)
+          return std::string("freeze layout: missing HWLoop dest2 layout");
+        const int64_t AfterSet2 =
+            static_cast<int64_t>(*DS2) - static_cast<int64_t>(PC + SetBytes);
+        const int64_t Anchored2 = ::llvm::haydn::hwloop::anchoredFromAfterSet(
+            AfterSet2, static_cast<int64_t>(SetBytes));
+        if (auto Err = checkDisp(S.FieldKind2, Anchored2))
+          return Err;
+      }
+      continue;
+    }
+
+    if (!S.Dest)
+      continue;
+    auto DS = destStart(S.Dest);
+    if (!DS)
+      return std::string("freeze layout: missing branch/call dest layout");
+    const int64_t Disp = static_cast<int64_t>(*DS) - static_cast<int64_t>(PC);
+    if (auto Err = checkDisp(S.FieldKind, Disp))
+      return Err;
+  }
+
   return std::nullopt;
 }
 

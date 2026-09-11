@@ -1,5 +1,5 @@
 # RUN: llc -mtriple=haydn-unknown-elf -mattr=+hwloop \
-# RUN:   -run-pass=haydn-fixup-hwloops -verify-machineinstrs %s -o - \
+# RUN:   -run-pass=haydn-hwloops -verify-machineinstrs %s -o - \
 # RUN:   | FileCheck %s --check-prefix=CHECK
 # REQUIRES: haydn-registered-target
 #
@@ -457,7 +457,11 @@ body:             |
 # CHECK-LABEL: name:            align16_long
 # The joint-grid pad pushes the true backedge past the single-charge
 # window: the terminal long latch is emitted (never an under-estimated
-# short BNEZ that BR would promote postcommit).
+# short BNEZ that BR would promote postcommit). Latch BNEZ_W $r2 is a
+# Latch-block terminator zero-test (erased by the L2 latch-terminator
+# sweep before SUBI32+BNEZ_W). It is not a live-in-body read, so Prefer
+# ($r2) remains the countdown.
+# CHECK: $r2 = SUBI32
 # CHECK: LUI
 # CHECK: ADDI32
 # CHECK: BEQZ{{.*}} $r2, {{.*}}bb.4
@@ -465,6 +469,7 @@ body:             |
 # CHECK-NOT: BNEZ
 #
 # CHECK-LABEL: name:            align8_long
+# CHECK: $r2 = SUBI32
 # CHECK: LUI
 # CHECK: ADDI32
 # CHECK: BEQZ{{.*}} $r2, {{.*}}bb.4

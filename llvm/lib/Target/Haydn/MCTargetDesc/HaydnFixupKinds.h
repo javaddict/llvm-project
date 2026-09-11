@@ -123,15 +123,15 @@ enum Fixups {
   // R_HAYDN_SImm16.
   FIXUP_HAYDN_LS_IMM,
 
-  // Format E JALR RI12 symbolic imm12 (HaydnRelocLayout JALRSImm12): signed
-  // 12-bit byte displacement from the parcel origin — E2 e0 @ parcel
-  // bits[43:32] (FieldLsb=32), E3 e0/e1 via resolveFieldLsb, ValueShift=0,
-  // Align=2. Execution is PC = rs + imm12; the kind types the assembler
-  // symbol convention imm = target - parcel.
-  // Distinct identity from FIXUP_HAYDN_WIDE_BranchSImm12_RI (same field
-  // numbers) so a JALR fixup can never borrow the branch row.
-  // Unresolved externals emit ELF R_HAYDN_JALRSImm12 (ELF 22). Call-indirect
-  // and JT dispatch pass a literal 0 and do not emit this fixup.
+  // Format E JALR RI12 imm12 (HaydnRelocLayout JALRSImm12): E2 e0 @ parcel
+  // bits[43:32] (FieldLsb=32), E3 e0/e1 via resolveFieldLsb, ValueShift=0.
+  // Execution is golden rs+imm12. Distinct identity from
+  // FIXUP_HAYDN_WIDE_BranchSImm12_RI (same field numbers) so a JALR fixup
+  // can never borrow the branch row. ELF 22 / this kind stay as residual
+  // identity — do not remint. Symbolic JALR is ISA-69 fail-closed (no
+  // golden relocation base); Align=2 is not a qualified symbolic ABI.
+  // Literal immediates, including odd, encode without this fixup (ISA-68 /
+  // p18-jalr-rs-rel-odd-imm.s). Call-indirect / JT pass a literal 0.
   FIXUP_HAYDN_JALRSImm12,
 
   // Format E CSR I8 uimm8 (HaydnRelocLayout CSR_UImm8): unsigned 8-bit

@@ -1,0 +1,456 @@
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=LAST
+# RUN: llc -mtriple=haydn-unknown-elf \
+# RUN:   -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 \
+# RUN:   -verify-machineinstrs %s -o - | FileCheck %s --check-prefix=NEAR
+# REQUIRES: haydn-registered-target
+#
+# D1.140: destInRange measures the retained near-cond from the cond's own
+# cycle, not Last (trailing uncond). Peer: HexagonBranchRelaxation.cpp:164-180
+# range-tests each analyzed terminator; RISC-V RISCVInstrInfo.cpp:1751 opcode
+# of the site MI; AIE has no BR. Buffer=4, parcel=12, window edge 2044.
+#
+#   last_anchor_would_fit: bb.0 = BEQZ_W(bb.3) + B(bb.2); bb.1 = 169 NOPs
+#     (layout pad, not a successor). bb.2 starts at 24+2028=2052.
+#     Last-anchor Off 2052-12=2040 <= 2044 would invert (the defect).
+#     Cond-cycle Off 2052 > 2044: FBB is not a proven near dest; pre-stamp
+#     leaves the short pair (no LUI/JALR).
+#   cond_cycle_still_near: FBB starts at 48 (2-NOP pad); TBB after 170 NOPs
+#     in FBB is far. Cond-cycle still proves FBB near; invert + JALR.
+#
+--- |
+  define dso_local void @last_anchor_would_fit() {
+  entry:
+    br i1 undef, label %far, label %near
+  pad:
+    ret void
+  near:
+    ret void
+  far:
+    ret void
+  }
+
+  define dso_local void @cond_cycle_still_near() {
+  entry:
+    br i1 undef, label %far, label %near
+  pad:
+    ret void
+  near:
+    ret void
+  far:
+    ret void
+  }
+...
+---
+name:            last_anchor_would_fit
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.2, %bb.3
+    BEQZ_W $r2, %bb.3, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.near:
+    liveins: $r15
+    RET implicit killed $r15
+
+  bb.3.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+...
+---
+name:            cond_cycle_still_near
+alignment:       1
+tracksRegLiveness: true
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r2, $r15
+    successors: %bb.2, %bb.3
+    BEQZ_W $r2, %bb.3, implicit-def dead $sfr
+    B %bb.2
+
+  bb.1.pad:
+    liveins: $r15
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.2.near:
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit killed $r15
+
+  bb.3.far:
+    liveins: $r15
+    RET implicit killed $r15
+
+# LAST-LABEL: name:            last_anchor_would_fit
+# LAST: bb.0.entry
+# LAST-NOT: LUI
+# LAST-NOT: JALR
+# LAST: BEQZ{{.*}} $r2, %bb.3
+# LAST: B %bb.2
+# LAST-NOT: LUI
+# LAST-NOT: JALR
+# LAST: bb.1.pad
+#
+# NEAR-LABEL: name:            cond_cycle_still_near
+# NEAR: bb.0.entry
+# NEAR: LUI{{.*}}%bb.3{{$}}
+# NEAR: ADDI32{{.*}}%bb.3{{$}}
+# NEAR-NOT: BEQZ{{.*}} $r2
+# NEAR: BNEZ{{.*}} $r2, %bb.2
+# NEAR-NOT: B %bb.
+# NEAR: JALR
+# NEAR-NOT: B %bb.
+# NEAR: bb.1.pad

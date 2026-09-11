@@ -97,8 +97,9 @@ namespace {
 // in this LLVM; Hexagon/RISCV leave Flags=0 and switch on kind here).
 // Mirrors HexagonMCCodeEmitter.cpp `addFixup`.
 static bool isHaydnPCRelFixupKind(unsigned Kind) {
-  // Single source: RelocFieldInfo.IsPCRel. JALR resolves through the
-  // dedicated JALRSImm12 row (never the RI12 branch row).
+  // Single source: RelocFieldInfo.IsPCRel. JALR schema routing uses the
+  // dedicated JALRSImm12 row (never the RI12 branch row); symbolic JALR
+  // is ISA-69 fail-closed and must not create a PC-relative fixup.
   const HaydnReloc::RelocKind R = HaydnReloc::mapFixupKind(Kind);
   if (R == HaydnReloc::RelocKind::Invalid)
     return false;
@@ -208,12 +209,10 @@ private:
                          APInt &Op, SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
-  // Entry qualification (typed (kind, entry, window) mapping): retarget a
-  // base fixup kind to its entry-qualified variant when the member's
-  // committed entry is not the base default window. Unmapped sites fatal.
-  // D1.17: HI12 / CSR_UImm8 also qualify (map/type is not member-unique on
-  // their I12/I8 sites); a second same-base-kind member in Composite is
-  // dual-at-origin and fatal (sibling scan compares baseKindFor).
+  // Entry qualification: retarget a base fixup kind to its entry-qualified
+  // twin from generated FieldLsbSites / RelocFieldInfo (qualifyRelocKindForMember).
+  // Unmapped HI12/CSR sites fatal. Dual same-base-kind members in Composite
+  // are dual-at-origin and fatal (sibling scan compares baseKindFor).
   unsigned qualifyFixupKindForEntry(unsigned Kind, uint8_t Mode,
                                     unsigned EntryIdx,
                                     const FormatEMemberRec &Mem,
@@ -265,7 +264,8 @@ resolveFormatETypeMember(const MCInst &MI, const MCInstrInfo &MII) {
 // generated TypeName + type-opcode + field size, not a logical-name
 // switch. Unknown types return nullopt. Callers refuse FIXUP_HAYDN_32.
 // JALR (RI12 opc 1) resolves to the dedicated JALRSImm12 row (rs+imm12;
-// never borrows the PC-rel branch row).
+// never borrows the PC-rel branch row). Symbolic JALR is ISA-69
+// fail-closed at emit time — schema identity only.
 // OpNo selects HWLoop Off1 (6-bit) vs Off2 (12-bit); unknown → Off1.
 static std::optional<unsigned> getExprFixupKind(const MCInst &MI,
                                                 const MCInstrInfo &MII,
@@ -814,13 +814,7 @@ static bool isFormatENopOpcode(unsigned Opc, const MCInstrInfo &MII) {
   // pads — occupancy empty is skip-Finalize, not NOP.
   if (!haydnIsGeneratedMemberName(Name))
     return false;
-  for (unsigned I = 0; I < FormatEMemberOpcodeCount; ++I) {
-    if (FormatEMemberOpcodes[I] != Opc)
-      continue;
-    return I < haydn::format_e::FormatEMemberCount &&
-           haydn::format_e::FormatEMembers[I].IsNop;
-  }
-  return false;
+  return haydnIsFormatENopMemberOpcode(Opc);
 }
 
 /// Unused-entry pad opcode from a generated IsNop record at (Mode, EntryIdx).
@@ -1339,148 +1333,92 @@ unsigned HaydnMCCodeEmitter::qualifyFixupKindForEntry(
     const FormatEMemberRec &Mem, const MCInst &Composite) const {
   using RK = HaydnReloc::RelocKind;
   const RK R = HaydnReloc::mapFixupKind(Kind);
-  switch (R) {
-  case RK::LO20:
-  case RK::PC_LO20:
-    // RI20 is E2-only; the non-default entry is E2 e1 ALU1 (@65).
-    if (Mode == 0 && EntryIdx == 1)
-      return R == RK::LO20 ? Haydn::FIXUP_HAYDN_LO20_E1
-                           : Haydn::FIXUP_HAYDN_PC_LO20_E1;
+  if (R == RK::Invalid)
     return Kind;
-  case RK::WIDE_CallSImm20:
-    if (Mode == 1 && EntryIdx == 1)
-      return Haydn::FIXUP_HAYDN_WIDE_CallSImm20_E3E1;
-    return Kind;
-  case RK::WIDE_BranchSImm12:
-    if (Mode == 1 && EntryIdx == 0)
-      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E0;
-    if (Mode == 1 && EntryIdx == 1)
-      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E1;
-    if (Mode == 1 && EntryIdx == 2)
-      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_E3E2;
-    return Kind;
-  case RK::WIDE_BranchSImm12_RI:
-    if (Mode == 1 && EntryIdx == 0)
-      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E0;
-    if (Mode == 1 && EntryIdx == 1)
-      return Haydn::FIXUP_HAYDN_WIDE_BranchSImm12_RI_E3E1;
-    return Kind;
-  case RK::JALRSImm12:
-    if (Mode == 1 && EntryIdx == 0)
-      return Haydn::FIXUP_HAYDN_JALRSImm12_E3E0;
-    if (Mode == 1 && EntryIdx == 1)
-      return Haydn::FIXUP_HAYDN_JALRSImm12_E3E1;
-    return Kind;
-  case RK::HI12:
-  case RK::CSR_UImm8: {
-    // D1.17: map/type is not member-unique on the HI12/CSR I12/I8 sites
-    // (branches share I12 with LUI; ZERO_* share I8 with CSRR/CSRW), so a
-    // symbolic HI12/CSR at a non-default site must carry its window in the
-    // TYPE, never in a sniff. Resolve the typed (Mode, EntryIdx, Unit)
-    // window from the generated sites (HaydnGenRelocFieldLsb.inc) and emit
-    // the entry-qualified twin whenever it differs from the base row.
+  const RK Base = HaydnReloc::baseKindFor(R);
+  // Drive the twin from generated FieldLsbSites matched against
+  // RelocFieldInfo of the 24..42 family (AIE findFixupfromFixupFields
+  // Offset lookup, AIEMCFixupKinds.cpp:36-65). Do not re-spell
+  // (Mode, Entry, Unit) literals beside the site table.
+  const RK Q = HaydnReloc::qualifyRelocKindForMember(Base, Mode, EntryIdx,
+                                                     Mem.Unit);
+  if (Q == RK::Invalid) {
     const unsigned TypedLsb = HaydnReloc::resolveFieldLsbForMember(
-        R, Mode, EntryIdx, Mem.Unit);
-    if (TypedLsb == HaydnReloc::getRelocFieldInfo(R).FieldLsb)
-      return Kind; // base-window site (E2 e0 @32) keeps the base kind
-    if (R == RK::HI12) {
-      if (Mode == 1 && EntryIdx == 0 && Mem.Unit == 2)
-        return Haydn::FIXUP_HAYDN_HI12_E3E0_ALU2;
-      if (Mode == 1 && EntryIdx == 0 && Mem.Unit == 0)
-        return Haydn::FIXUP_HAYDN_HI12_E3E0_ALU0;
-      if (Mode == 1 && EntryIdx == 1)
-        return Haydn::FIXUP_HAYDN_HI12_E3E1;
-      if (Mode == 1 && EntryIdx == 2 && Mem.Unit == 2)
-        return Haydn::FIXUP_HAYDN_HI12_E3E2_ALU2;
-      if (Mode == 1 && EntryIdx == 2 && Mem.Unit == 0)
-        return Haydn::FIXUP_HAYDN_HI12_E3E2_ALU0;
-    } else {
-      if (Mode == 1 && EntryIdx == 0 && Mem.Unit == 2)
-        return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU2;
-      if (Mode == 1 && EntryIdx == 0 && Mem.Unit == 0)
-        return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E0_ALU0;
-      if (Mode == 1 && EntryIdx == 1)
-        return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E1;
-      if (Mode == 1 && EntryIdx == 2)
-        return Haydn::FIXUP_HAYDN_CSR_UImm8_E3E2;
-    }
-    // Typed window exists but no qualified row is minted (e.g. a future
-    // golden E2 e1 I12/I8 site) — fail closed rather than fall to the
-    // base kind (the D1.24 wrong-window shape).
+        Base, Mode, EntryIdx, Mem.Unit);
     report_fatal_error(
         Twine("Haydn MC: symbolic member '") +
             MII.getName(SubInstOpcodeForMember(Mem)) +
             "' resolves a typed FieldLsb=" + Twine(TypedLsb) +
-            " with no entry-qualified row (mode=" + Twine(Mode) +
+            " with no entry-qualified row (mode=" + Twine(static_cast<unsigned>(Mode)) +
             " entry=" + Twine(EntryIdx) + " unit=" + Twine(Mem.Unit) +
             ") — refuse untyped sniff patch; no E2-e1 window is minted",
         /*GenCrashDiag=*/false);
   }
-  default:
-    // Uniqueness-by-law kinds keep the base kind at any unique entry so
-    // resolveFieldLsb sniffing stays the W25 path. Dual same-kind HI12 /
-    // CSR_UImm8 / HWLoopOff1 / HWLoopOff2 at one r_offset is
-    // sniff-ambiguous (no entry-qualified ELF row). Scan Composite
-    // siblings: another member that maps to the SAME RelocKind is
-    // dual-at-origin — fail closed. Per-kind compare only: one symbolic
-    // SET_HWLOOP legitimately emits the Off1+Off2 PAIR at one r_offset
-    // (distinct kinds; never refuse the pair). The sibling probe calls
-    // getExprFixupKind WITHOUT OpNo, so a SET sibling resolves to the
-    // Off1 kind (6-bit default) regardless of which operand was
-    // symbolic — sufficient for a dual-SET refusal, not an Off2 detect.
-    // Do not copy the LS_IMM EntryIdx!=0 fatal onto unique e1/e2
-    // LUI/CSR pins. Dual-SET is parse-unreachable at golden v2_2 (E2
-    // SET members entry0-only, E3 F2 members ALU0-only; evidence pin
-    // d112-dual-hwloop-set-unreachable.s) — the wall guards a future
-    // golden admission of SET at another entry/unit. Peer: AIE
-    // translateFixupsInComposite offset-0 + typed kind
-    // (AIEBaseMCCodeEmitter.cpp:189-232); Hexagon packet byte Offset is
-    // a different r_offset (HexagonMCCodeEmitter.cpp:365).
-    if (EntryIdx != 0 && R == RK::LS_IMM) {
+  Kind = HaydnReloc::mapRelocKindToFixup(Q);
+
+  // Uniqueness-by-law kinds keep the base kind at any unique entry so
+  // resolveFieldLsb sniffing stays the W25 path. Dual same-kind HI12 /
+  // CSR_UImm8 / HWLoopOff1 / HWLoopOff2 at one r_offset is
+  // sniff-ambiguous (no entry-qualified ELF row). Scan Composite
+  // siblings: another member that maps to the SAME RelocKind is
+  // dual-at-origin — fail closed. Per-kind compare only: one symbolic
+  // SET_HWLOOP legitimately emits the Off1+Off2 PAIR at one r_offset
+  // (distinct kinds; never refuse the pair). The sibling probe calls
+  // getExprFixupKind WITHOUT OpNo, so a SET sibling resolves to the
+  // Off1 kind (6-bit default) regardless of which operand was
+  // symbolic — sufficient for a dual-SET refusal, not an Off2 detect.
+  // Do not copy the LS_IMM EntryIdx!=0 fatal onto unique e1/e2
+  // LUI/CSR pins. Dual-SET is parse-unreachable at golden v2_2 (E2
+  // SET members entry0-only, E3 F2 members ALU0-only; evidence pin
+  // d112-dual-hwloop-set-unreachable.s) — the wall guards a future
+  // golden admission of SET at another entry/unit. Peer: AIE
+  // translateFixupsInComposite offset-0 + typed kind
+  // (AIEBaseMCCodeEmitter.cpp:189-232); Hexagon packet byte Offset is
+  // a different r_offset (HexagonMCCodeEmitter.cpp:365).
+  if (EntryIdx != 0 && Base == RK::LS_IMM) {
+    report_fatal_error(
+        Twine("Haydn MC: symbolic member '") +
+            MII.getName(SubInstOpcodeForMember(Mem)) +
+            "' carries LS_IMM at a non-default entry (mode=" + Twine(Mode) +
+            " entry=" + Twine(EntryIdx) +
+            ") with no entry-qualified row — dual symbolic loads in one "
+            "parcel would sniff-ambiguate; refuse",
+        /*GenCrashDiag=*/false);
+  }
+  if (Base == RK::HI12 || Base == RK::CSR_UImm8 || Base == RK::HWLoopOff1 ||
+      Base == RK::HWLoopOff2) {
+    const char *KindName = Base == RK::HI12         ? "HI12"
+                           : Base == RK::CSR_UImm8  ? "CSR_UImm8"
+                           : Base == RK::HWLoopOff1 ? "HWLoopOff1"
+                                                    : "HWLoopOff2";
+    // D1.17: HI12/CSR_UImm8 now qualify per entry, so the sibling probe
+    // must compare by baseKindFor — two LUI (or two CSR) fixups at two
+    // qualified entries of one parcel still refuse. A raw kind compare
+    // would let { lui@e1; lui@e2 } through as "different kinds".
+    for (unsigned I = 0, N = Composite.getNumOperands(); I != N; ++I) {
+      if (I == EntryIdx)
+        continue;
+      const MCOperand &OtherMO = Composite.getOperand(I);
+      if (!OtherMO.isInst() || !OtherMO.getInst())
+        continue;
+      const MCInst &Other = *OtherMO.getInst();
+      if (isFormatENopOpcode(Other.getOpcode(), MII))
+        continue;
+      const std::optional<unsigned> OtherFK = getExprFixupKind(Other, MII);
+      if (!OtherFK)
+        continue;
+      if (HaydnReloc::baseKindFor(HaydnReloc::mapFixupKind(*OtherFK)) != Base)
+        continue;
       report_fatal_error(
-          Twine("Haydn MC: symbolic member '") +
-              MII.getName(SubInstOpcodeForMember(Mem)) +
-              "' carries LS_IMM at a non-default entry (mode=" + Twine(Mode) +
-              " entry=" + Twine(EntryIdx) +
-              ") with no entry-qualified row — dual symbolic loads in one "
-              "parcel would sniff-ambiguate; refuse",
+          Twine("Haydn MC: dual ") + KindName +
+              " fields in one parcel at the same r_offset (members '" +
+              MII.getName(SubInstOpcodeForMember(Mem)) + "' and '" +
+              MII.getName(Other.getOpcode()) +
+              "') — sniff-ambiguous; refuse",
           /*GenCrashDiag=*/false);
     }
-    if (R == RK::HI12 || R == RK::CSR_UImm8 || R == RK::HWLoopOff1 ||
-        R == RK::HWLoopOff2) {
-      const char *KindName = R == RK::HI12        ? "HI12"
-                             : R == RK::CSR_UImm8 ? "CSR_UImm8"
-                             : R == RK::HWLoopOff1 ? "HWLoopOff1"
-                                                   : "HWLoopOff2";
-      // D1.17: HI12/CSR_UImm8 now qualify per entry, so the sibling probe
-      // must compare by baseKindFor — two LUI (or two CSR) fixups at two
-      // qualified entries of one parcel still refuse. A raw kind compare
-      // would let { lui@e1; lui@e2 } through as "different kinds".
-      for (unsigned I = 0, N = Composite.getNumOperands(); I != N; ++I) {
-        if (I == EntryIdx)
-          continue;
-        const MCOperand &OtherMO = Composite.getOperand(I);
-        if (!OtherMO.isInst() || !OtherMO.getInst())
-          continue;
-        const MCInst &Other = *OtherMO.getInst();
-        if (isFormatENopOpcode(Other.getOpcode(), MII))
-          continue;
-        const std::optional<unsigned> OtherFK = getExprFixupKind(Other, MII);
-        if (!OtherFK)
-          continue;
-        if (HaydnReloc::baseKindFor(HaydnReloc::mapFixupKind(*OtherFK)) != R)
-          continue;
-        report_fatal_error(
-            Twine("Haydn MC: dual ") + KindName +
-                " fields in one parcel at the same r_offset (members '" +
-                MII.getName(SubInstOpcodeForMember(Mem)) + "' and '" +
-                MII.getName(Other.getOpcode()) +
-                "') — sniff-ambiguous; refuse",
-            /*GenCrashDiag=*/false);
-      }
-    }
-    return Kind;
   }
+  return Kind;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1500,8 +1438,9 @@ unsigned HaydnMCCodeEmitter::getBranchFixupKind(const MCInst &MI) const {
 }
 
 unsigned HaydnMCCodeEmitter::getCallFixupKind(const MCInst &MI) const {
-  // Layout-derived. JAL → WIDE_CallSImm20; JALR → JALRSImm12 (dedicated
-  // row; never BranchSImm16 / WIDE_BranchSImm12_RI).
+  // Layout-derived. JAL → WIDE_CallSImm20; JALR schema → JALRSImm12
+  // (dedicated row; never BranchSImm16 / WIDE_BranchSImm12_RI). Symbolic
+  // JALR is refused at getSImm encode (ISA-69).
   if (std::optional<unsigned> Kind = getExprFixupKind(MI, MII))
     return *Kind;
   report_fatal_error(
@@ -1707,9 +1646,15 @@ void HaydnMCCodeEmitter::getSImmOpValueXStepWide(
     // Same layout lookup as getExprFixupKind. Do not fall back to the
     // baked EncoderMethod kind. calltarget_wide_ri12 is the one-reg JALR
     // window (not two-reg WIDE_BranchSImm12_RI). RI12 type-opcode 1 maps
-    // to JALRSImm12.
+    // to JALRSImm12; symbolic JALR is ISA-69 fail-closed.
     if (std::optional<unsigned> Kind =
             getExprFixupKind(MI, MII, OpNo, MO.getExpr())) {
+      const HaydnReloc::RelocKind R = HaydnReloc::mapFixupKind(*Kind);
+      if (HaydnReloc::isSymbolicJalrReloc(R)) {
+        Ctx.reportError(SMLoc(), HaydnReloc::kUnsupportedSymbolicJalrDiag);
+        Op = 0;
+        return;
+      }
       addHaydnFixup(Fixups, /*Offset=*/0, MO.getExpr(), *Kind);
     } else if (FixupKind != Haydn::FIXUP_HAYDN_NONE) {
       Ctx.reportError(SMLoc(),

@@ -16,7 +16,8 @@ noVRegs:         true
 body:             |
   bb.0:
     liveins: $r1, $r15
-    ; PRINTER: HaydnAsmPrinter: residual cycle-forming pseudo
-    ; PRINTER: SETCBR residual
+    ; Wrap bundles the injected residual; printer fail-closed is the bundled
+    ; cycle-forming diagnostic (standalone "SETCBR residual" line is gone).
+    ; PRINTER: residual cycle-forming pseudo
     SETCBR_END 0, $r1
     RET implicit $r15

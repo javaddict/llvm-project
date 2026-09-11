@@ -61,10 +61,10 @@ define void @probe_setcbr(i32 %val) {
 }
 
 ; CHECK-LABEL: probe_ua_stream:
-; CHECK: pldwwua
-; CHECK: d_ltwua_post
-; CHECK: flar
-; CHECK: wbarwua
+; CHECK-DAG: pldwwua
+; CHECK-DAG: d_ltwua_post
+; CHECK-DAG: flar
+; CHECK-DAG: wbarwua
 define i64 @probe_ua_stream(ptr %base, ptr %ptr, i32 %stride) {
   call void @llvm.haydn.pldwwua(i32 0, ptr %base)
   %v = call i64 @llvm.haydn.d.ltwua.post(ptr %ptr, i32 0, i32 %stride, i32 0)

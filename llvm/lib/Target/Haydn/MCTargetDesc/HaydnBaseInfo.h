@@ -19,6 +19,15 @@
 
 namespace llvm::Haydn {
 
+/// Product ProcessorModel names (HaydnGeneric.td).
+/// `-mcpu` / `-target-cpu` names the CPU. Empty and `"generic"` are the
+/// same full ISA as `"haydn"` (agu + cb + brev + hwloop + simd). There is
+/// no product feature-off CPU. `-mtune` / `-tune-cpu` selects the schedule
+/// model only (TuneImplies is empty). The haydn-unknown-elf default tune
+/// is `"haydn"`.
+inline constexpr const char *kDefaultCPUName = "generic";
+inline constexpr const char *kDefaultTuneCPUName = "haydn";
+
 //===----------------------------------------------------------------------===//
 // VLIW bundle constants
 //===----------------------------------------------------------------------===//

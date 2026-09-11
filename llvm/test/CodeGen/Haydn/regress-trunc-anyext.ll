@@ -48,15 +48,28 @@ define i32 @test_trunc_s32_to_s1(i32 %a, i32 %b, i32 %c, i32 %d) {
 ; Pack order is scheduler-owned. Pin that i1 phi/trunc selects (no crash)
 ; and that the branch uses a genuine 0/1 GPR (andi32 1 + bnez).
 ; CHECK-LABEL: test_trunc_s32_to_s1:
-; CHECK:       xor32 r0, r0, r0
-; CHECK-DAG:   seq32
-; CHECK-DAG:   sltu32
-; CHECK-DAG:   slt32
-; CHECK:       movt32
-; CHECK:       andi32 {{.*}}, 1
-; CHECK:       bnez
-; CHECK:       addi32 {{.*}}, 42
-; CHECK:       jalr r0, lr, 0
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    .cfi_remember_state
+; CHECK-NEXT:    { nop; sltu32 r1, r1, r4; seq32 r2, r1, r2 }
+; CHECK-NEXT:    { slt32 r3, r4, r3; xori32 r2, r2, 1 }
+; CHECK-NEXT:    { xori32 r3, r3, 1; xori32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; movt32 r3, r1, r2 }
+; CHECK-NEXT:    { nop; not32 r1, r3 }
+; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; bnez r1, .LBB0_2 }
+; CHECK-NEXT:  // %bb.1: // %yes
+; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; CHECK-NEXT:  .LBB0_2: // %no
+; CHECK-NEXT:    .cfi_restore_state
+; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp1 = icmp eq i32 %a, %b
   br i1 %cmp1, label %then, label %else
@@ -85,10 +98,15 @@ no:
 ; condition to s32 before the bitwise select expansion.
 define i32 @test_anyext_i1_to_i32(i32 %a, i32 %b, i32 %x, i32 %y) {
 ; CHECK-LABEL: test_anyext_i1_to_i32:
-; CHECK:       xor32 r0, r0, r0
-; CHECK:       slt32
-; CHECK:       movt32
-; CHECK:       jalr r0, lr, 0
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; slt32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; movt32 r4, r3, r1 }
+; CHECK-NEXT:    { nop; move32 r1, r4 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp slt i32 %a, %b
   %result = select i1 %cmp, i32 %x, i32 %y
@@ -101,11 +119,15 @@ entry:
 ; s32->s16 without buildCopy.
 define signext i16 @test_trunc_s32_to_s16(i32 %a, i32 %b) {
 ; CHECK-LABEL: test_trunc_s32_to_s16:
-; CHECK:       xor32 r0, r0, r0
-; CHECK:       add32
-; CHECK:       slli32 {{.*}}, 16
-; CHECK:       srai32 {{.*}}, 16
-; CHECK:       jalr r0, lr, 0
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; slli32 r1, r1, 16 }
+; CHECK-NEXT:    { nop; srai32 r1, r1, 16 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %sum = add i32 %a, %b
   %trunc = trunc i32 %sum to i16
@@ -117,9 +139,13 @@ entry:
 ; values live in GPR32, so anyext is constrain + replaceRegWith.
 define i32 @test_anyext_i16_to_i32(i16 signext %a, i32 %b) {
 ; CHECK-LABEL: test_anyext_i16_to_i32:
-; CHECK:       xor32 r0, r0, r0
-; CHECK:       add32
-; CHECK:       jalr r0, lr, 0
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %ext = sext i16 %a to i32
   %result = add i32 %ext, %b
@@ -132,12 +158,18 @@ entry:
 ; are handled by the s64 select path.
 define i64 @test_anyext_i1_condition_i64_select(i32 %a, i32 %b, i64 %x, i64 %y) {
 ; CHECK-LABEL: test_anyext_i1_condition_i64_select:
-; CHECK:       xor32 r0, r0, r0
-; CHECK-DAG:   move32_dr_l
-; CHECK-DAG:   move32_dr_h
-; CHECK-DAG:   seq32
-; CHECK:       movt32
-; CHECK:       jalr r0, lr, 0
+; CHECK:       // %bb.0: // %entry
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa_offset 8
+; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
+; CHECK-NEXT:    { nop; andi32 r1, r1, 1 }
+; CHECK-NEXT:    { nop; neg32 r1, r1 }
+; CHECK-NEXT:    { nop; nop; movegpr2sfr r1 }
+; CHECK-NEXT:    { nop; nop; movt64 d1, d0 }
+; CHECK-NEXT:    { nop; nop; or64 d0, d1, d1 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
+; CHECK-NEXT:    .cfi_def_cfa sp, 0
+; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   %cmp = icmp eq i32 %a, %b
   %result = select i1 %cmp, i64 %x, i64 %y

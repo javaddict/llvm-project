@@ -58,8 +58,8 @@ entry:
 ; CHECK: subi32
 ; CHECK: st32
 ; Call site survives (forces spill/copy pressure).
-; CHECK: jal
-; CHECK: ext
+; CHECK: {{lui|addi32}}{{.*}}ext
+; CHECK: jalr{{.*}}lr
 ; Reloads + epilogue restore.
 ; CHECK: ld32
 ; CHECK: jalr

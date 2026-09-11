@@ -15,9 +15,9 @@
 # displacement is 12 bytes LARGER than measured: an under-estimate left
 # the site short here and the post-stamp BranchRelaxation promoted it
 # into the CFG wall. Each tail TI is now measured from its OWN site
-# (haydn::hwloop::estimateLayoutInstrOffset); the post-rewrite measures
-# (destInRange / Arm B) intentionally stay Last-anchored — they model
-# the re-emitted site.
+# (haydn::hwloop::estimateLayoutInstrOffset). D1.140 destInRange measures
+# the retained near-cond from the cond's own cycle (not Last); Arm B still
+# range-tests the trailing uncond from Last because Last is that site.
 #
 # Sizing (buffer=4 so the window edge 2044 falls INSIDE the 12-byte band
 # the old measure hid; parcel=12):

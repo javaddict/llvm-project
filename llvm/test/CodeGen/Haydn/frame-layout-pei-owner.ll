@@ -42,7 +42,9 @@ define i32 @reg_only_call() {
 ;
 ; ASM-LABEL: reg_only_call:
 ; ASM:       .cfi_def_cfa_offset 16
-; ASM:       { nop; jal lr, seven }
+; ASM-DAG:   lui{{.*}}seven
+; ASM-DAG:   addi32{{.*}}seven
+; ASM-DAG:   jalr{{.*}}lr
 ; ASM:       { nop; jalr r0, lr, 0 }
   %r = call i32 @seven(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7)
   ret i32 %r
@@ -60,7 +62,9 @@ define i32 @stack_overflow_call() {
 ; ASM:       .cfi_def_cfa_offset 24
 ; ASM-NOT:   .cfi_def_cfa_offset 32
 ; ASM:       subi32{{(_w)?}}{{.*}}sp{{.*}}, 16
-; ASM:       { nop; jal lr, nine }
+; ASM-DAG:   lui{{.*}}nine
+; ASM-DAG:   addi32{{.*}}nine
+; ASM:       { {{.*}}jalr{{.*}}lr{{.*}} }
 ; ASM:       addi32{{(_w)?}}{{.*}}sp{{.*}}, 16
 ; ASM:       { nop; jalr r0, lr, 0 }
   %r = call i32 @nine(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,

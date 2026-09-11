@@ -10,7 +10,9 @@
 ; (offset-folded) instead of the fused pre-inc — same parcels, no dead
 ; writeback. The WAR hazard under test remains (ADD32 feeding the load).
 ; CHECK: S_LW_WITH_IMM
-; CHECK-NOT: BUNDLE
+; S1 wraps leftover singles as BUNDLE roots; WAR still must not
+; co-issue SLLI32 with a later write of the same physreg.
+; CHECK-NOT: SLLI32{{.*}}S_LW_WITH_IMM
 
 
 ; REGRESSION TEST: VLIW packetizer WAR (write-after-read) hazard.

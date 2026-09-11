@@ -1,5 +1,7 @@
 # RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj %s -o %t.o && \
 # RUN:   llvm-objdump -d -z --triple=haydn-unknown-elf %t.o | FileCheck %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf --defsym=SYMJALR=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=SYMJALR %s
 # REQUIRES: haydn-registered-target
 
 # Role: object — Round-trip test for branch instructions: asm → parse → print.
@@ -50,6 +52,13 @@ bltz r6, branch_target
 # Jump and link instructions
 jal r7, external_call
 
+.ifdef SYMJALR
 jalr r8, r9, external_call
+# SYMJALR: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# SYMJALR: refusing silent PC-relative R_HAYDN_JALRSImm12
+.else
+# Literal imm12=12 matches the previous symbolic-next-parcel encoding.
+jalr r8, r9, 12
+.endif
 
 external_call:

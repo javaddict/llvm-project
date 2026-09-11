@@ -45,8 +45,7 @@
 define i32 @test_args_return(i32 %a, i32 %b, i32 %c) nounwind {
 ; CHECK-LABEL: test_args_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -66,8 +65,7 @@ entry:
 define i32 @test_many_args(i32 %a, i32 %b, i32 %c, i32 %d, i32 %e, i32 %f, i32 %g) nounwind {
 ; CHECK-LABEL: test_many_args:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r4 }
@@ -92,8 +90,7 @@ entry:
 define i64 @test_i64_arg_return(i64 %a, i64 %b) nounwind {
 ; CHECK-LABEL: test_i64_arg_return:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -111,8 +108,7 @@ entry:
 define i32 @test_local_temps() nounwind {
 ; CHECK-LABEL: test_local_temps:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 15 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
@@ -142,58 +138,57 @@ entry:
 define i32 @test_forces_callee_saved() nounwind {
 ; CHECK-LABEL: test_forces_callee_saved:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 40 }
-; CHECK-NEXT:    { nop; addi32 r1, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, r1, 0 }
-; CHECK-NEXT:    { nop; st32 fp, r1, 1 }
-; CHECK-NEXT:    { nop; st32 r11, r1, 2 }
-; CHECK-NEXT:    { nop; st32 r10, r1, 3 }
-; CHECK-NEXT:    { nop; st32 r9, r1, 4 }
-; CHECK-NEXT:    { nop; st32 r8, r1, 5 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 48 }
+; CHECK-NEXT:    { nop; addi32 r1, sp, 24 }
+; CHECK-NEXT:    { nop; st32 lr, r1, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 fp, r1, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r11, r1, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r1, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r1, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r1, 5 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; lui r10, get_value }
+; CHECK-NEXT:    { nop; addi32 r10, r10, get_value }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 5; xor32 r0, r0, r0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; st32 r1, sp, 4; xor32 r0, r0, r0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { jalr lr, r10, 0 }
 ; CHECK-NEXT:    { nop; st32 r1, sp, 3; xor32 r0, r0, r0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
-; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; move32 r10, r1 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; move32 r11, r1 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; move32 fp, r1 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; move32 r8, r1 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; move32 r9, r1 }
-; CHECK-NEXT:    { nop; jal lr, get_value }
-; CHECK-NEXT:    { nop; ld32 r3, sp, 2 } // 4-byte Folded Reload
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 r11, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 fp, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 r8, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; move32 r9, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { ld32 r2, sp, 5; ld32 r3, sp, 4 } // 8-byte Folded Reload
+; CHECK-NEXT:    // 4-byte Reload4-byte Reload
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { nop; xor32 r0, r0, r0; add32 r2, r2, r3 }
+; CHECK-NEXT:    { nop; ld32 r3, sp, 3 } // 4-byte Folded Reload
 ; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { nop; ld32 r2, sp, 3 } // 4-byte Folded Reload
-; CHECK-NEXT:    // 4-byte Reload
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r3 }
-; CHECK-NEXT:    { nop; add32 r2, r2, r10 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r11 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, fp }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r8 }
 ; CHECK-NEXT:    { nop; add32 r2, r2, r9 }
-; CHECK-NEXT:    { nop; add32 r1, r2, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 4 }
-; CHECK-NEXT:    { nop; ld32 fp, sp, 5 }
-; CHECK-NEXT:    { nop; ld32 r11, sp, 6 }
-; CHECK-NEXT:    { nop; ld32 r10, sp, 7 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 8 }
-; CHECK-NEXT:    { nop; ld32 r8, sp, 9 }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 40 }
+; CHECK-NEXT:    { nop; add32 r1, r2, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { ld32 fp, sp, 7; ld32 lr, sp, 6 }
+; CHECK-NEXT:    { ld32 r10, sp, 9; ld32 r11, sp, 8 }
+; CHECK-NEXT:    { ld32 r8, sp, 11; ld32 r9, sp, 10 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 48 }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 entry:
   ; With 8 live values across calls, callee-saved GPRs R8-R11 hold 4 and the

@@ -1,0 +1,677 @@
+# D1.135 survivor-splice WAR guard. spliceTrailingNonTermsBeforeFirstControl
+# moves eraseSelectedBranch Keep defs before firstControlMI. Pre-rewrite the
+# survivor executes one cycle after the retained cond reads (legal WAR);
+# post-splice the cond would read the new value. Skipping splice is not a
+# verifier-legal tail (non-terminator after the first terminator). Overlap
+# refuses the rewrite (pre-stamp defer). Disjoint Keep still splices.
+# Peer: AIEBaseInstrInfo.cpp:237-266 / HexagonInstrInfo.cpp:605-625 /
+# RISCVInstrInfo.cpp:1361-1390 erase at most the trailing uncond (no VLIW
+# coissue-ALU overlay). LivePhysRegs.cpp:68-73 stepBackward; HaydnIntraCycleRAW.h:218-219.
+#
+# Far template (d150 law, buffer=4, parcel=12, window edge 2044):
+#   170 NOPs = 2040B. Each logical B/BEQZ/NOP/RET charges one parcel.
+#
+#   arm_b_war_overlap : unanalyzable two-cond tail, BUNDLE{$r4=ADD32, B far}.
+#     ADD32 defs the first BEQZ read. Refuse; original order preserved.
+#   arm_a_far_fbb_war : analyzable far FBB, BUNDLE{$r4=ADD32, B far} after
+#     BEQZ $r4 near. Refuse Arm A.
+#   arm_b_disjoint_ok : same Arm B shape as d150 multi_control ($r3=ADD32).
+#     Keep disjoint from BEQZ reads; splice + LUI/ADDI/JALR.
+#
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s
+# REQUIRES: haydn-registered-target
+
+--- |
+  define dso_local void @arm_b_war_overlap() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @arm_a_far_fbb_war() {
+  entry:
+    br i1 undef, label %near, label %far
+  near:
+    br label %far
+  far:
+    ret void
+  }
+
+  define dso_local void @arm_b_disjoint_ok() {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    br label %far
+  far:
+    ret void
+  }
+...
+---
+name:            arm_b_war_overlap
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r15
+    successors: %bb.1, %bb.2
+    ; CHECK-LABEL: name: arm_b_war_overlap
+    ; CHECK: bb.0.entry
+    ; BEQZ still reads incoming $r4; ADD32 def stays after it (not spliced).
+    ; CHECK: BEQZ{{.*}} $r4, %bb.1
+    ; CHECK: $r4 = ADD32{{.*}} $r1, $r2
+    ; CHECK: B %bb.2
+    ; CHECK-NOT: LUI
+    ; CHECK-NOT: JALR
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r4 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r1, $r2, $r4, $r5, $r15
+    ST32 $r4, $r4, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            arm_a_far_fbb_war
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r15
+    successors: %bb.1, %bb.2
+    ; CHECK-LABEL: name: arm_a_far_fbb_war
+    ; CHECK: bb.0.entry
+    ; CHECK: BEQZ{{.*}} $r4, %bb.1
+    ; CHECK: $r4 = ADD32{{.*}} $r1, $r2
+    ; CHECK: B %bb.2
+    ; CHECK-NOT: LUI
+    ; CHECK-NOT: JALR
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r4, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r4 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r1, $r2, $r4, $r15
+    ST32 $r4, $r4, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15
+
+---
+name:            arm_b_disjoint_ok
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+body:             |
+  bb.0.entry:
+    liveins: $r1, $r2, $r4, $r5, $r15
+    successors: %bb.1, %bb.2
+    ; CHECK-LABEL: name: arm_b_disjoint_ok
+    ; CHECK: bb.0.entry
+    ; CHECK: $r3 = ADD32{{.*}} $r1, $r2
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: LUI
+    ; CHECK: ADDI32
+    ; CHECK: BEQZ{{.*}} $r4, %bb.1
+    ; CHECK: BEQZ{{.*}} $r5, %bb.1
+    ; CHECK-NOT: B %bb.2
+    ; CHECK: JALR
+    ; CHECK-NOT: B %bb.2
+    BEQZ_W $r4, %bb.1, implicit-def dead $sfr
+    BEQZ_W $r5, %bb.1, implicit-def dead $sfr
+    BUNDLE 0, 0, implicit-def $r3, implicit-def dead $sfr, implicit $r1, implicit $r2 {
+      $r3 = ADD32 $r1, $r2, implicit-def dead $sfr
+      B %bb.2
+    }
+
+  bb.1.near:
+    successors: %bb.2
+    liveins: $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
+  bb.2.far:
+    liveins: $r1, $r2, $r3, $r4, $r5, $r15
+    ST32 $r3, $r3, 0, implicit-def dead $sfr :: (store (s32))
+    RET implicit killed $r15

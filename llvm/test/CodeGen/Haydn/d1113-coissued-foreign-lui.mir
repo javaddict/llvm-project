@@ -1,0 +1,261 @@
+# D1.113: a foreign LUI coissued with the addr pair is not on the JALR
+# rs-def chain and must not be rewritten by LBN retargetJalrAddrDest
+# (D1.117 owner). Sequential foreign LUI is d176; this pin is the
+# coissued member (mixed cycle between the pair).
+#
+# Layout (d1124/d176): 180 NOP parcels in bb.1 put TBB %bb.2 past
+# WIDE_BranchSImm12 (buffer=4); FBB %bb.1 stays near.
+#
+# RUN: llc -mtriple=haydn-unknown-elf -run-pass=haydn-longbranch-normalize \
+# RUN:   -haydn-branch-relax-safety-buffer=4 -verify-machineinstrs %s -o - \
+# RUN:   | FileCheck %s --check-prefix=LBN
+# insertBranch retargetLongFormUncond is PostCommit-only. A
+# finalize+branch-relaxation pin hits GR2.7 insertIndirectBranch refuse
+# and FinalizeBundle mixed MemberId/FieldSlot on leftover MIR. Do not
+# host generic BR. Sequential insertBranch foreign LUI remains d176.
+# REQUIRES: haydn-registered-target
+--- |
+  define void @lbn_coissued_foreign_lui(i32 %c) {
+  entry:
+    br i1 undef, label %far, label %near
+  near:
+    ret void
+  far:
+    ret void
+  other:
+    ret void
+  }
+...
+---
+name:            lbn_coissued_foreign_lui
+alignment:       1
+legalized:       true
+regBankSelected: true
+selected:        true
+tracksRegLiveness: true
+noPhis:          true
+isSSA:           false
+noVRegs:         true
+liveins:
+  - { reg: '$r1', virtual-reg: '' }
+  - { reg: '$r4', virtual-reg: '' }
+  - { reg: '$r6', virtual-reg: '' }
+  - { reg: '$r7', virtual-reg: '' }
+  - { reg: '$r15', virtual-reg: '' }
+frameInfo:
+  maxAlignment:    1
+  maxCallFrameSize: 0
+  hasCalls:        false
+body:             |
+  bb.0.entry:
+    successors: %bb.2, %bb.1
+    liveins: $r1, $r4, $r6, $r7, $r15
+    ; LBN-LABEL: name:            lbn_coissued_foreign_lui
+    ; LBN: bb.0.entry
+    ; LBN: $r6 = LUI %bb.2
+    ; LBN: $r7 = LUI %bb.3
+    ; LBN: ADDI32{{.*}}%bb.2
+    ; LBN: BEQZ{{.*}}%bb.1
+    ; LBN: JALR
+    $r6 = LUI %bb.1
+    BUNDLE implicit-def $r4, implicit-def $r7, implicit-def dead $sfr, implicit $r1 {
+      $r4 = ADD32 $r1, $r1, implicit-def dead $sfr
+      $r7 = LUI %bb.3
+    }
+    $r6 = ADDI32_W $r6, %bb.1
+    BNEZ_W $r1, %bb.2
+    $r6 = JALR_W $r6, 0
+
+  bb.1.near:
+    liveins: $r4, $r7, $r15
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    RET implicit $r15
+
+  bb.2.far:
+    liveins: $r15
+    RET implicit $r15
+
+  bb.3.other:
+    liveins: $r15
+    RET implicit $r15
+
+...

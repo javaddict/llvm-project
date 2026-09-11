@@ -13,7 +13,7 @@
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnAlternateDescriptors.h --check-prefix=ALT
 ; RUN: FileCheck %s --input-file=%S/../../../lib/Target/Haydn/HaydnPlacementAlternative.h --check-prefix=PLACE
 ; RUN: test -f %S/../../../utils/haydn/product_coverage_pin.sh
-; RUN: git -C %S/../../../.. merge-base --is-ancestor 98890c529be92fa35b3a1bc39270bf919eee395e HEAD
+; RUN: git -C %S/../../../.. merge-base --is-ancestor 4b6677f8bf87d12f20e4d0b0ff5ec10124dddf2f HEAD
 ; RUN: not git -C %S/../../../.. merge-base --is-ancestor 28700d57366a35a7d04e8adfbdf782743ec847e0 HEAD
 ; RUN: %python %S/../../../utils/haydn/parse_lit_summary.py --self-test
 ; RUN: %python %S/../../../utils/haydn/check_xfail_ledger.py --inventory-pin --llvm-src %S/../../../..
@@ -22,11 +22,12 @@
 
 ; Role: harness — PIPE-20 / DG0 / P19 / R15 / T7-ALIGN Goal 1 ledger + W55 inventory pins only.
 ; Inputs/ is a lit-excluded data dir; this file is the runnable owner seat.
-; DecisionGuard product registry stays absent. SMS/hwloop defaults stay OFF.
+; DecisionGuard product registry stays absent. Product hwloop default is ON;
+; SMS is generic pre-RA MachinePipeliner (post-RA host tombstone).
 ; Manual.td is a tombstone (moved; do not include). CMake golden-dir is
 ; env/-D only; skip if unset.
 ; Monorepo CLAUDE.md stays a symlink (R15 leftover docs stay outside this
-; code track). Rebound: 98890c529be9 is an ancestor; 28700d57 is not an ancestor.
+; code track). Rebound: 4b6677f8bf87 is an ancestor; 28700d57 is not an ancestor.
 ; AR0 phase-firewall inventory is closed (no pre-RA identity).
 
 ; PIPE20-DAG: Phase-firewall inventory (PIPE-20
@@ -42,13 +43,13 @@
 ; DG0-DAG: product_coverage_pin
 ; DG0-NOT: DecisionGuardRegistry
 
-; REBIND-DAG: 98890c529be9
+; REBIND-DAG: 4b6677f8bf87
 ; REBIND-DAG: 28700d57
 ; REBIND-DAG: not an ancestor
 ; REBIND-DAG: G_ANYEXT
 ; REBIND-DAG: adjustsStack
 ; REBIND-DAG: MaxParcels
-; REBIND-DAG: Late Finalize/Verify after BR
+; REBIND-DAG: Late Finalize/Verify after post-stamp LBN
 ; REBIND-DAG: P19 CMake leftover closed
 ; REBIND-DAG: ISA-64
 ; REBIND-DAG: pass-deep-review-2026-08-14
@@ -63,7 +64,7 @@
 ; REBIND-DAG: T-TI5 stored perf baselines
 ; REBIND-DAG: T-TI6 randomized codegen
 ; REBIND-DAG: do not invent a fuzz gate
-; REBIND-DAG: TOTAL=5
+; REBIND-DAG: TOTAL=1
 ; REBIND-DAG: T7-ALIGN schema tip-reconcile
 ; REBIND-DAG: no empty-cover / cross-row
 ; REBIND-DAG: no suffix discovery
@@ -120,8 +121,8 @@
 ; CMAKE-NOT: HAYDN_GOLDEN_DIR
 ; CMAKE-NOT: BUNDLESIM_GOLDEN_DIR
 
-; Highest existing ISA file is ISA-63; the next new file is ISA-64.
-; ISANEXT: next new file is `ISA-66`
+; Live ISA files are ISA-63, ISA-64, ISA-66..ISA-70 (ISA-65 archived).
+; ISANEXT: next new file is `ISA-71`
 
 ; Closed T1-ALIGN schema: PacketFormats full-cover only (AIEBundle.h:150-156).
 ; SCHEMA: no empty-cover first-match and no E2

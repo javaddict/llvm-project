@@ -307,12 +307,12 @@ define i32 @test_macq31(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mulssh r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; Lowered to ADD32(acc, MULL) or MULSSH for Q31 (phantom MACQ31 removed).
   %r = call i32 @llvm.haydn.macq31(i32 %a, i32 %b, i32 %c)
   ret i32 %r
@@ -325,12 +325,12 @@ define i32 @test_mac32(i32 %a, i32 %b, i32 %c) {
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
-; store-writeback): consumer now issues next parcel; stall parcel gone.
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply /
+; store-writeback): consumer now issues next parcel; stall parcel gone.
   %r = call i32 @llvm.haydn.mac32(i32 %a, i32 %b, i32 %c)
   ret i32 %r
 }
@@ -433,8 +433,8 @@ define i64 @test_mul64_ll(i32 %a, i32 %b) {
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
-; CHECK-NEXT:    { nop; {{(nop; )?}}sext32t64 d0, r1 }
-; CHECK-NEXT:    { nop; {{(nop; )?}}sext32t64 d1, r2 }
+; CHECK-NEXT:    { nop; sext32t64 d0, r1 }
+; CHECK-NEXT:    { nop; sext32t64 d1, r2 }
 ; CHECK-NEXT:    { nop; mul64.ll d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0

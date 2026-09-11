@@ -26,8 +26,7 @@ define i32 @one_local(i32 %x) {
 ; ld32 and ld32 are semantically identical loads.
 ; CHECK-LABEL: one_local:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
@@ -50,15 +49,16 @@ define i32 @three_locals(i32 %a, i32 %b, i32 %c) {
 ; last store co-issues with the first reload (no intra-bundle RAW).
 ; CHECK-LABEL: three_locals:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { addi32 r5, sp, 16; addi32 r4, sp, 20 }
 ; CHECK-NEXT:    { st32 r1, r4, 0; addi32 r6, sp, 12 }
 ; CHECK-NEXT:    { nop; st32 r2, r5, 0 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { st32 r3, r6, 0; ld32 r1, r4, 0 }
-; CHECK-NEXT:    { nop; ld32 r2, r5, 0 }
-; CHECK-NEXT:    { nop; ld32 r3, r6, 0 }
+; CHECK-NEXT:    { nop; nop }
+; CHECK-NEXT:    { ld32 r2, r5, 0; ld32 r3, r6, 0 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; add32 r1, r1, r3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
@@ -84,22 +84,21 @@ define i32 @local_with_call(i32 %a) {
 ; Stack for local + potential callee-save spills
 ; CHECK-LABEL: local_with_call:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; lui r2, use_i32 }
+; CHECK-NEXT:    { nop; addi32 r2, r2, use_i32 }
+; CHECK-NEXT:    { jalr lr, r2, 0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
   %p = alloca i32
   store i32 %a, ptr %p
@@ -116,20 +115,19 @@ define i64 @mixed_locals(i32 %a, i64 %b) {
 ; (both golden e0 LOADSTORE0 only). Address calcs stay sequential.
 ; CHECK-LABEL: mixed_locals:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
-; CHECK-NEXT:    { addi32 r3, sp, 20; addi32 r2, sp, 28 }
-; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; d_sw_l_with_imm d0, r3, 0 }
-; CHECK-NEXT:    { ld32 r2, r2, 0; addi32 r1, r3, 4 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 28 }
+; CHECK-NEXT:    { st32 r1, r2, 0; addi32 r3, sp, 20 }
+; CHECK-NEXT:    { nop; addi32 r1, r3, 4 }
+; CHECK-NEXT:    { d_sw_l_with_imm d0, r3, 0; ld32 r2, r2, 0 }
+; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { d_sw_h_with_imm d0, r1, 0; ld32 r3, r3, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r3, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 2; ld32 r1, r1, 0 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; sext32t64 d0, r2; ld32 r1, r1, 0 }
 ; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; st32 r1, sp, 3; sext32t64 d0, r2 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d1, sp, 1 } // 8-byte Folded Reload
@@ -156,8 +154,7 @@ define i32 @array_local(i32 %a) {
 ; (SFR-strip) changed bundle layout (denser packing) — SP restore hoisted; CHECK-DAG. Rebaselined.
 ; CHECK-LABEL: array_local:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
@@ -181,34 +178,39 @@ define i32 @full_frame(i32 %a) {
 ; Stack for: local + callee-save spills + outgoing stack arg
 ; CHECK-LABEL: full_frame:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32 r2, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r2, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r2, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r2, 2 }
-; CHECK-NEXT:    .cfi_def_cfa_offset 24
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { nop; addi32 r2, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, r2, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r2, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r2, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r2, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
-; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { addi32 r2, r0, 2; addi32 r12, sp, 8 }
-; CHECK-NEXT:    { st32 r1, r12, 0; addi32 r3, r0, 3 }
-; CHECK-NEXT:    { addi32 r5, r0, 5; addi32 r4, r0, 4 }
-; CHECK-NEXT:    { addi32 r7, r0, 7; addi32 r6, r0, 6 }
-; CHECK-NEXT:    { addi32 r9, r0, 9; addi32 r8, r0, 8 }
-; CHECK-NEXT:    { nop; ld32 r1, r12, 0 }
+; CHECK-NEXT:    .cfi_offset r10, -12
+; CHECK-NEXT:    .cfi_offset lr, -16
+; CHECK-NEXT:    { nop; addi32 r12, sp, 12 }
+; CHECK-NEXT:    { st32 r1, r12, 0; addi32 r2, r0, 2 }
+; CHECK-NEXT:    { addi32 r4, r0, 4; addi32 r3, r0, 3 }
+; CHECK-NEXT:    { addi32 r6, r0, 6; addi32 r5, r0, 5 }
+; CHECK-NEXT:    { addi32 r8, r0, 8; addi32 r7, r0, 7 }
+; CHECK-NEXT:    { addi32 r9, r0, 9; ld32 r1, r12, 0 }
 ; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    { nop; move32 r12, sp }
-; CHECK-NEXT:    { nop; s_sw_post_imm r8, r12, 2 }
+; CHECK-NEXT:    { nop; lui r10, many_params }
+; CHECK-NEXT:    { s_sw_post_imm r8, r12, 2; addi32 r10, r10, many_params }
 ; CHECK-NEXT:    { nop; st32 r9, r12, 0 }
-; CHECK-NEXT:    { nop; jal lr, many_params }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
-; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
-; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 4 }
+; CHECK-NEXT:    { ld32 r9, sp, 6; ld32 r10, sp, 5 }
+; CHECK-NEXT:    { nop; ld32 r8, sp, 7 }
+; CHECK-NEXT:    { nop; addi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
 ; P4 golden S_SW_POST_IMM Data_Latency=1: no writeback stall before reader.
@@ -225,26 +227,30 @@ define i32 @nested_call_chain(i32 %a, i32 %b) {
 ; First call result feeds into second call
 ; CHECK-LABEL: nested_call_chain:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 24 }
-; CHECK-NEXT:    { nop; addi32 r3, sp, 12 }
-; CHECK-NEXT:    { nop; st32 lr, r3, 0 }
-; CHECK-NEXT:    { nop; st32 r9, r3, 1 }
-; CHECK-NEXT:    { nop; st32 r8, r3, 2 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 24 }
+; CHECK-NEXT:    { nop; addi32 r3, sp, 8 }
+; CHECK-NEXT:    { nop; st32 lr, r3, 0 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r10, r3, 1 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r9, r3, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
+; CHECK-NEXT:    { nop; st32 r8, r3, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 24
 ; CHECK-NEXT:    .cfi_offset r8, -4
 ; CHECK-NEXT:    .cfi_offset r9, -8
-; CHECK-NEXT:    .cfi_offset lr, -12
-; CHECK-NEXT:    { nop; move32 r8, r2 }
-; CHECK-NEXT:    { nop; jal lr, use_i32 }
+; CHECK-NEXT:    .cfi_offset r10, -12
+; CHECK-NEXT:    .cfi_offset lr, -16
+; CHECK-NEXT:    { nop; lui r10, use_i32 }
+; CHECK-NEXT:    { move32 r8, r2; addi32 r10, r10, use_i32 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
 ; CHECK-NEXT:    { nop; move32 r1, r8; move32 r9, r1 }
 ; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; jal lr, use_i32 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; add32 r1, r9, r1 }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
-; CHECK-NEXT:    { nop; ld32 r9, sp, 4 }
+; CHECK-NEXT:    { jalr lr, r10, 0 }
+; CHECK-NEXT:    { nop; add32 r1, r9, r1; xor32 r0, r0, r0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 2 }
+; CHECK-NEXT:    { ld32 r9, sp, 4; ld32 r10, sp, 3 }
 ; CHECK-NEXT:    { nop; ld32 r8, sp, 5 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 24 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -260,18 +266,17 @@ define i32 @nested_call_chain(i32 %a, i32 %b) {
 define void @pass_stack_ptr(i32 %a) {
 ; CHECK-LABEL: pass_stack_ptr:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
-; CHECK-NEXT:    { nop; st32 lr, sp, 3 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { nop; st32 lr, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset lr, -4
 ; CHECK-NEXT:    { nop; addi32 r2, sp, 8 }
 ; CHECK-NEXT:    { nop; st32 r1, r2, 0 }
-; CHECK-NEXT:    { nop; nop }
-; CHECK-NEXT:    { nop; move32 r1, r2 }
-; CHECK-NEXT:    { nop; jal lr, use_ptr }
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; ld32 lr, sp, 3 }
+; CHECK-NEXT:    { nop; lui r3, use_ptr }
+; CHECK-NEXT:    { move32 r1, r2; addi32 r3, r3, use_ptr }
+; CHECK-NEXT:    { jalr lr, r3, 0 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; ld32 lr, sp, 3 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }

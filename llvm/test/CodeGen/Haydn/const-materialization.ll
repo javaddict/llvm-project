@@ -15,8 +15,7 @@
 define i32 @const_zero() {
 ; CHECK-LABEL: const_zero:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -28,8 +27,7 @@ define i32 @const_zero() {
 define i32 @const_one() {
 ; CHECK-LABEL: const_one:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -41,8 +39,7 @@ define i32 @const_one() {
 define i32 @const_neg_one() {
 ; CHECK-LABEL: const_neg_one:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -56,8 +53,7 @@ define i32 @const_neg_one() {
 define i32 @const_small_pos() {
 ; CHECK-LABEL: const_small_pos:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 42 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -69,8 +65,7 @@ define i32 @const_small_pos() {
 define i32 @const_255() {
 ; CHECK-LABEL: const_255:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 255 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -82,8 +77,7 @@ define i32 @const_255() {
 define i32 @const_max_simm16() {
 ; CHECK-LABEL: const_max_simm16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 32767 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -97,8 +91,7 @@ define i32 @const_max_simm16() {
 define i32 @const_small_neg() {
 ; CHECK-LABEL: const_small_neg:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -42 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -110,8 +103,7 @@ define i32 @const_small_neg() {
 define i32 @const_min_simm16() {
 ; CHECK-LABEL: const_min_simm16:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -32768 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -126,8 +118,7 @@ define i32 @const_min_simm16() {
 define i32 @const_0xFFFF() {
 ; CHECK-LABEL: const_0xFFFF:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 65535 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -140,8 +131,7 @@ define i32 @const_0xFFFF() {
 define i32 @const_all_ones() {
 ; CHECK-LABEL: const_all_ones:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -154,8 +144,7 @@ define i32 @const_all_ones() {
 define i32 @const_int_min() {
 ; CHECK-LABEL: const_int_min:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 0 }
@@ -169,8 +158,7 @@ define i32 @const_int_min() {
 define i32 @const_int_max() {
 ; CHECK-LABEL: const_int_max:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 2048 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
@@ -184,8 +172,7 @@ define i32 @const_int_max() {
 define i32 @const_deadbeef() {
 ; CHECK-LABEL: const_deadbeef:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 3563 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -147729 }
@@ -199,8 +186,7 @@ define i32 @const_deadbeef() {
 define i32 @const_12345678() {
 ; CHECK-LABEL: const_12345678:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; lui r1, 291 }
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 284280 }
@@ -214,8 +200,7 @@ define i32 @const_12345678() {
 define i32 @const_0x10000() {
 ; CHECK-LABEL: const_0x10000:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 65536 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -230,8 +215,7 @@ define i32 @const_0x10000() {
 define i32 @add_one(i32 %x) {
 ; CHECK-LABEL: add_one:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -245,8 +229,7 @@ define i32 @add_one(i32 %x) {
 define i32 @sub_one(i32 %x) {
 ; CHECK-LABEL: sub_one:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, -1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -260,8 +243,7 @@ define i32 @sub_one(i32 %x) {
 define i32 @or_all_ones(i32 %x) {
 ; CHECK-LABEL: or_all_ones:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, -1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -275,8 +257,7 @@ define i32 @or_all_ones(i32 %x) {
 define i32 @xor_all_ones(i32 %x) {
 ; CHECK-LABEL: xor_all_ones:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; not32 r1, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -290,8 +271,7 @@ define i32 @xor_all_ones(i32 %x) {
 define i32 @and_all_ones(i32 %x) {
 ; CHECK-LABEL: and_all_ones:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -304,8 +284,7 @@ define i32 @and_all_ones(i32 %x) {
 define i32 @mul_zero(i32 %x) {
 ; CHECK-LABEL: mul_zero:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 0 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

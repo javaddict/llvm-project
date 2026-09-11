@@ -26,8 +26,7 @@ define i32 @switch_16_cases(i32 %x) nounwind {
 ; entries are explicitly verified at lines 101-116 above.
 ; CHECK-LABEL: switch_16_cases:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 15 }
 ; CHECK-NEXT:    { nop; sltu32 r3, r1, r2 }
@@ -165,8 +164,7 @@ define i32 @switch_sparse_large(i32 %x) nounwind {
 ; lowering with slt32+beqz_w (not fused bge_w). Each pivot is a slt/beqz pair.
 ; CHECK-LABEL: switch_sparse_large:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 500 }
 ; CHECK-NEXT:    { nop; slt32 r3, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r3, r3, 1 }
@@ -274,8 +272,7 @@ define i32 @switch_all_default(i32 %x) nounwind {
 ; Detailed MIR verified at lines 278-307 (under switch_merged_cases).
 ; CHECK-LABEL: switch_all_default:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 2 }
 ; CHECK-NEXT:    { nop; seq32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB2_5 }
@@ -322,8 +319,7 @@ default: ret i32 99
 define i32 @switch_merged_cases(i32 %x) nounwind {
 ; CHECK-LABEL: switch_merged_cases:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 5 }
 ; CHECK-NEXT:    { nop; sltu32 r3, r1, r2 }
@@ -376,9 +372,8 @@ define i32 @switch_negative_cases(i32 %x) nounwind {
 ; previously an open-coded SLTU32 + BNEZ pair. Accept either shape.
 ; CHECK-LABEL: switch_negative_cases:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
-; CHECK-NEXT:    { addi32 r1, r1, 3; addi32 r2, r0, 4 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { addi32 r2, r0, 4; addi32 r1, r1, 3 }
 ; CHECK-NEXT:    { nop; sltu32 r2, r2, r1 }
 ; CHECK-NEXT:    { nop; bnez r2, .LBB4_7 }
 ; CHECK-NEXT:  // %bb.1: // %entry
@@ -438,8 +433,7 @@ define i32 @switch_single_case(i32 %x) nounwind {
 ; switch_single_case:
 ; CHECK-LABEL: switch_single_case:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; addi32 r2, r0, 42 }
 ; CHECK-NEXT:    { nop; seq32 r1, r1, r2 }
 ; CHECK-NEXT:    { nop; xori32 r1, r1, 1 }
@@ -465,8 +459,7 @@ define i32 @switch_all_same(i32 %x) nounwind {
 ; switch_all_same:
 ; CHECK-LABEL: switch_all_same:
 ; CHECK:       // %bb.0: // %entry
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    { nop; move32 r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 3 }
 ; CHECK-NEXT:    { nop; seq32 r3, r2, r1 }

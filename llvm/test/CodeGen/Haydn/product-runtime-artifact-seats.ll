@@ -15,6 +15,10 @@
 
 ; Role: harness — same-artifact compiler→sysroot→consumer seats.
 ;
+; Clang/llc hash drift is fail-closed unbound. Restamp is producer-only
+; (record_haydn_artifact_set.py --restamp). GOLDEN_INPUTS five-file pin
+; count is not a product fail.
+;
 ; Pins library identity (libc+libm / product_library_pin 35/456/491), product_ld bind
 ; (install_product_ld + .bak/.broken refuse + working-tree consumer install),
 ; user-printf.c + memset-2.c + strlen-5.c + va-arg-1.c + va-arg-2.c

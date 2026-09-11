@@ -10,8 +10,8 @@
 ; RUN:     %t/soft_tail.ll | FileCheck %s --check-prefix=SOFT
 ;
 ; Role: semantic — ineligible musttail (byval) and ISR stay fail-closed;
-; legal musttail sibcall is JAL_W_MSP (musttail-reject.ll). Soft tail is
-; JAL+RET. No product ISR vector / CC_ISR analog.
+; legal musttail sibcall is JAL_TCO / JALR_W (musttail-reject.ll).
+; Soft tail is JALR_CALL+RET. No product ISR vector / CC_ISR analog.
 
 ;--- musttail.ll
 %struct.by = type { [8 x i32] }
@@ -32,7 +32,8 @@ define void @isr() "interrupt"="machine" {
 declare i32 @sink(i32)
 define i32 @soft_tail(i32 %x) nounwind {
 ; SOFT-LABEL: name: soft_tail
-; SOFT: JAL{{.*}}@sink
+; SOFT: LOAD_ADDR{{.*}}@sink
+; SOFT: JALR_CALL
 ; SOFT: RET
   %r = tail call i32 @sink(i32 %x)
   ret i32 %r

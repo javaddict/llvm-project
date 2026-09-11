@@ -34,8 +34,7 @@ define void @void_leaf() {
 ; The load-bearing check: no redundant CFI directive
 ; CHECK-LABEL: void_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
@@ -46,8 +45,7 @@ define void @void_leaf() {
 define i32 @i32_leaf(i32 %x) {
 ; CHECK-LABEL: i32_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; addi32 r1, r1, 1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
@@ -60,18 +58,17 @@ define i32 @i32_leaf(i32 %x) {
 define i32 @i32_leaf_multi(i32 %a, i32 %b, i32 %c) {
 ; CHECK-LABEL: i32_leaf_multi:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; add32 r2, r1, r2 }
 ; CHECK-NEXT:    { nop; mull r2, r2, r3 }
-; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply): the
-; mull -> sub32 consumer now issues in the NEXT parcel; the old all-NOP
-; stall parcel is gone. Rebaselined; instruction stream is unchanged.
 ; CHECK-NEXT:    { nop; sub32 r1, r2, r1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa sp, 0
 ; CHECK-NEXT:    { nop; jalr r0, lr, 0 }
+; 2026-08-21 latency P3 (golden Data_Latency=1 fresh-dest multiply): the
+; mull -> sub32 consumer now issues in the NEXT parcel; the old all-NOP
+; stall parcel is gone. Rebaselined; instruction stream is unchanged.
   %s1 = add i32 %a, %b
   %s2 = mul i32 %s1, %c
   %s3 = sub i32 %s2, %a
@@ -81,8 +78,7 @@ define i32 @i32_leaf_multi(i32 %a, i32 %b, i32 %c) {
 define i64 @i64_leaf(i64 %a, i64 %b) {
 ; CHECK-LABEL: i64_leaf:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 8 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 8 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 8
 ; CHECK-NEXT:    { nop; nop; add64 d0, d0, d1 }
 ; CHECK-NEXT:    { nop; addi32 sp, sp, 8 }

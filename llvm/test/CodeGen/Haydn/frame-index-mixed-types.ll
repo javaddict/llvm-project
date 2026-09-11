@@ -11,18 +11,16 @@
 define void @mixed_allocas() {
 ; CHECK-LABEL: mixed_allocas:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { addi32 r4, r0, 42; addi32 r1, sp, 28 }
-; CHECK-NEXT:    { st32 r4, r1, 0; addi32 r2, sp, 20 }
+; CHECK-NEXT:    { nop; st32 r4, r1, 0 }
 ; CHECK-NEXT:    { nop; lui r1, 3402 }
-; CHECK-NEXT:    { addi32 r3, r2, 4; addi32 r1, r1, 331776 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 2 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32 r1, r1, 331776 }
+; CHECK-NEXT:    { st32 r1, sp, 2; addi32 r2, sp, 20 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r1, r0, 232 }
-; CHECK-NEXT:    { nop; st32 r1, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r1, sp, 3; addi32 r3, r2, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload
@@ -47,8 +45,7 @@ define void @mixed_allocas() {
 define void @i32_only_allocas() {
 ; CHECK-LABEL: i32_only_allocas:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 16 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 16 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    { addi32 r3, r0, 1; addi32 r1, sp, 12 }
 ; CHECK-NEXT:    { st32 r3, r1, 0; addi32 r2, sp, 8 }
@@ -70,16 +67,14 @@ define void @i32_only_allocas() {
 define void @i64_only_allocas() {
 ; CHECK-LABEL: i64_only_allocas:
 ; CHECK:       // %bb.0:
-; CHECK-NEXT:    { nop; xor32 r0, r0, r0 }
-; CHECK-NEXT:    { nop; subi32 sp, sp, 32 }
+; CHECK-NEXT:    { xor32 r0, r0, r0; subi32 sp, sp, 32 }
 ; CHECK-NEXT:    .cfi_def_cfa_offset 32
 ; CHECK-NEXT:    { nop; lui r3, 2145 }
-; CHECK-NEXT:    { addi32 r1, sp, 24; addi32 r3, r3, -139399 }
-; CHECK-NEXT:    { st32 r3, sp, 2; addi32 r2, r1, 4 } // 4-byte Folded Spill
+; CHECK-NEXT:    { nop; addi32 r3, r3, -139399 }
+; CHECK-NEXT:    { st32 r3, sp, 2; addi32 r1, sp, 24 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
-; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; addi32 r3, r0, 28744 }
-; CHECK-NEXT:    { nop; st32 r3, sp, 3 } // 4-byte Folded Spill
+; CHECK-NEXT:    { st32 r3, sp, 3; addi32 r2, r1, 4 } // 4-byte Folded Spill
 ; CHECK-NEXT:    // 4-byte Spill
 ; CHECK-NEXT:    { nop; nop }
 ; CHECK-NEXT:    { nop; ld64 d0, sp, 1 } // 8-byte Folded Reload

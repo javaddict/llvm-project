@@ -242,38 +242,25 @@ def PseudoCALLIndirect : HaydnPseudo<(outs GPR32:$rd), (ins GPR32:$rs),
 }
 }
 
-// W67 representation expansion target for PseudoCALLIndirect (fnptr call):
-// a real MIR JALR register-indirect CALL shape. The catalog JALR_W is
-// isTerminator=1 (its RET use) — a raw JALR_W mid-block would make the
-// machine verifier reject every non-tail call (ADJCALLSTACKUP / the return
-// follow the call in the same block), and the generated JALR_* Format E
-// members are golden-frozen isTerminator=1 as well. This clone carries the
-// JAL_W call flag shape (isCall, NOT isTerminator/isBarrier) so a mid-block
-// call is CFG/verifier-legal. `_MSP` peels to catalog JALR in
-// peelLogicalOpcodeName (same law as JALR_W_MSP), so occupancy/alternate
-// lookup and late member cutover see the JALR logical, not a new one. The
-// imm12 offset operand is the JALR member's (rs, imm12) register-indirect
-// window (rs + imm12; no PC-relative field), so imm 0 is the exact fnptr
-// call semantics. isCodeGenOnly keeps the clone out of the decoder.
+// Honest gMIR returning fnptr call (D1.130). Catalog JALR_W is
+// isTerminator (RET / computed-goto) — a raw JALR_W mid-block would
+// make the machine verifier reject every non-tail call (ADJCALLSTACKUP
+// / the return follow the call in the same block). Musttail jalr is
+// JALR_TCO (HaydnInstrGISel.td), not this opcode and not catalog JALR_W.
+// JALR_CALL is isCall, NOT isTerminator/isBarrier/isIndirectBranch, so a
+// mid-block call is CFG/verifier-legal. Encoder peels to catalog JALR
+// via msp::logicalOpcodeForMspClone (D1.74 one table). The imm12 offset
+// is the JALR member's (rs, imm12) register-indirect window (rs + imm12;
+// no PC-relative field), so imm 0 is the exact fnptr-call semantics.
+// isCodeGenOnly keeps this opcode out of the decoder. Not an `_MSP`
+// flag overlay: gMIR names the role.
 let isCodeGenOnly = 1, isCall = 1, hasSideEffects = 1,
     Defs = [R1, R2, R3, R4, R5, R6, R7, R12,
             D0, D1, D2, D3, D4, D5, D6, D7] in
-def JALR_MSP : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
-                                 (ins GPR32:$rs,
-                                      calltarget_wide_ri12:$offset),
-                                 "jalr_w\t$rt, $rs, $offset", []>;
-
-// Uncond B expansion: same bits as catalog BEQZ_W (Fmt48_WideBR_I12 0x2C)
-// with isBarrier so MachineVerifier accepts an unconditional exit.
-// AIE expands a pseudo branch by setDesc plus a delay-slot Barrier opcode
-// (AIEPseudoBranchExpansion.cpp:70-75). Haydn has no delay-slot barrier
-// instruction; the flag clone is the same overlay as JALR_MSP. `_MSP`
-// peels to BEQZ_W for occupancy/encode. Identity bake must not rewrite
-// this clone onto catalog BEQZ_W (not a barrier).
-let isCodeGenOnly = 1, isBranch = 1, isTerminator = 1, isBarrier = 1 in
-def BEQZ_W_MSP : Fmt48_WideBR_I12<0x2C, (outs),
-                                  (ins GPR32:$rs, brtarget_wide_i12:$offset),
-                                  "beqz_w\t$rs, $offset", []>;
+def JALR_CALL : Fmt48_WideBR_RI12<0x30, (outs GPR32:$rt),
+                                  (ins GPR32:$rs,
+                                       calltarget_wide_ri12:$offset),
+                                  "jalr_w\t$rt, $rs, $offset", []>;
 
 let isBarrier = 1, isTerminator = 1, isBranch = 1, isIndirectBranch = 1 in
 def BR_JT : HaydnPseudo<(outs), (ins GPR32:$addr, i32imm:$jt),
