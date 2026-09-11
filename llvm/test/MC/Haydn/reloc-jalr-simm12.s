@@ -1,51 +1,47 @@
 # REQUIRES: haydn-registered-target
-# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=KIND=1 %s \
-# RUN:   | FileCheck --check-prefix=KIND %s
-# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=EXT=1 %s \
-# RUN:   -o %t.ext.o
-# RUN: llvm-readobj -r -h %t.ext.o | FileCheck --check-prefix=EXT %s
-# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALRW=1 %s \
-# RUN:   -o %t.jalrw.o
-# RUN: llvm-readobj -r %t.jalrw.o | FileCheck --check-prefix=JALRW %s
-# RUN: llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=IN_RANGE=1 %s \
-# RUN:   -o %t.in.o
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t.in.o | \
-# RUN:   FileCheck --check-prefix=IN %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=KIND=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=KIND %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=EXT=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=EXT %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=JALRW=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=JALRW %s
+# RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=IN_RANGE=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=IN %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=OOR_POS=1 %s \
 # RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=OOR-POS %s
 # RUN: not llvm-mc -triple=haydn-unknown-elf -filetype=obj --defsym=ODD=1 %s \
 # RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=ODD %s
+# RUN: llvm-mc -triple=haydn-unknown-elf -show-encoding --defsym=LITERAL=1 %s \
+# RUN:   | FileCheck --check-prefix=LITERAL %s
 
-# Symbolic JALR uses the dedicated JALRSImm12 row (ELF 22). The baked
-# calltarget_wide_ri12 EncoderMethod kind is WIDE_BranchSImm12; layout
-# lookup must override it so unresolved externals never borrow a branch
-# reloc. Local same-section symbols share the branch even-byte Align=2
-# window (signed 12-bit [-2048, +2046]); odd *literals* stay legal.
-# Objects keep EM_HAYDN=259 / EF_HAYDN_E96=0x1 (no replacement e_machine).
+# ISA-69: symbolic JALR has no golden relocation base. Assembly must
+# refuse identifier / specifier / non-absolute immediates rather than
+# emit FIXUP_HAYDN_JALRSImm12 or R_HAYDN_JALRSImm12 (ELF 22). Do not
+# treat the leftover PC-relative table row as ABI. Literal jalr
+# immediates, including odd, remain legal (ISA-68 /
+# p18-jalr-rs-rel-odd-imm.s).
 
 .ifdef KIND
 jalr_local:
 	jalr r1, r2, jalr_local
-# KIND: fixup A - offset: 0, value: jalr_local, kind: FIXUP_HAYDN_JALRSImm12
+# KIND: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# KIND: refusing silent PC-relative R_HAYDN_JALRSImm12
+# KIND-NOT: kind: FIXUP_HAYDN_JALRSImm12
 # KIND-NOT: kind: FIXUP_HAYDN_WIDE_BranchSImm12
-# KIND-NOT: kind: FIXUP_HAYDN_WIDE_BranchSImm12_RI
-# KIND-NOT: kind: FIXUP_HAYDN_BranchSImm16
 .endif
 
 .ifdef EXT
 	jalr r1, r2, ext_sym
-# EXT: Machine: 0x103
-# EXT: Flags [ (0x1)
-# EXT: R_HAYDN_JALRSImm12 ext_sym
-# EXT-NOT: R_HAYDN_WIDE_BranchSImm12
-# EXT-NOT: R_HAYDN_WIDE_BranchSImm12_RI
+# EXT: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# EXT: refusing silent PC-relative R_HAYDN_JALRSImm12
+# EXT-NOT: R_HAYDN_JALRSImm12
 .endif
 
 .ifdef JALRW
 	jalr_w r1, r2, ext_sym
-# JALRW: R_HAYDN_JALRSImm12 ext_sym
-# JALRW-NOT: R_HAYDN_WIDE_BranchSImm12
-# JALRW-NOT: R_HAYDN_WIDE_BranchSImm12_RI
+# JALRW: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# JALRW: refusing silent PC-relative R_HAYDN_JALRSImm12
+# JALRW-NOT: R_HAYDN_JALRSImm12
 .endif
 
 .ifdef IN_RANGE
@@ -54,7 +50,7 @@ jalr_local:
 	.space 2028
 pos_ok:
 	{ add32 r0, r0, r0 }
-# IN: jalr{{.*}}2040
+# IN: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
 .endif
 
 .ifdef OOR_POS
@@ -62,7 +58,8 @@ pos_ok:
 	.space 2036
 pos_bad:
 	{ add32 r0, r0, r0 }
-# OOR-POS: relocation offset out of range
+# OOR-POS: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# OOR-POS-NOT: relocation offset out of range
 .endif
 
 .ifdef ODD
@@ -70,5 +67,15 @@ pos_bad:
 	.space 1
 oddtgt:
 	{ nop; nop; xor32 r0, r0, r0 }
-# ODD: mis-aligned relocation target
+# ODD: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# ODD-NOT: mis-aligned relocation target
+.endif
+
+.ifdef LITERAL
+	jalr r1, r2, 0
+	jalr r1, r2, 1
+	jalr r1, r2, -3
+# LITERAL: jalr{{.*}}encoding:
+# LITERAL: jalr{{.*}}encoding:
+# LITERAL: jalr{{.*}}encoding:
 .endif

@@ -40,8 +40,11 @@ public:
                  CallLoweringInfo &Info) const override;
 
 private:
-  // AIE AIECallLowering.cpp:592 / :622. JAL_W_MSP / JALR_W_MSP are the
-  // isReturn+isCall+isTerminator seats (AIE2 PseudoJ_TCO_jump_*).
+  // AIE AIECallLowering.cpp:592 / :622. Musttail jalr is JALR_TCO
+  // (AIE2 PseudoJ_TCO_jump_ind). Musttail direct is JAL_TCO
+  // (PseudoJ_TCO_jump_imm). Non-tail fnptr is JALR_CALL. Soft tail is
+  // JALR_CALL+RET. Short JAL_W is cycle-neutral LLD encoding relax, not
+  // a second ISel path.
   bool isEligibleForTailCallOptimization(
       MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const;
 

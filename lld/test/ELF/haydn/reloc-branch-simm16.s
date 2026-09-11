@@ -4,9 +4,9 @@
 # RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
 # RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
 #
-# REGRESSION: Format E BEQ/BNE/BEQZ/BLT patch PC-relative imm12 (÷2) at the
-# product FieldLsb. Linked branches must disassemble with non-zero targets.
-# Parcel stride is EncodedBytes=12 (addresses advance 0xc).
+# REGRESSION: Format E BEQ/BNE/BEQZ/BLT patch byte PC+imm (ValueShift=0)
+# at the product FieldLsb. Linked branches must disassemble with non-zero
+# targets. Parcel stride is EncodedBytes=12 (addresses advance 0xc).
 
 # Same-section labels are resolved by MC (no reloc) for near targets.
 # RELOCS: Relocations [

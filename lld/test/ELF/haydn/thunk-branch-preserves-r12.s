@@ -1,16 +1,17 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
-# RUN: ld.lld %t.o -o %t -T %S/haydn-far-branch.ld
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
+# RUN: not ld.lld %t.o -o %t -T %S/haydn-far-branch.ld 2>&1 | FileCheck %s
 #
-# Far BEQ veneer borrows soft-zero R0 only — live R12 is never written by the
-# veneer (no free AT / no R12 stack dance).
+# D1.57 fail-closed restamp: the R0-borrowing far-branch veneer is retired
+# (JALR wrote the link into soft-zero R0; mid-function arrivals could see
+# R0 dirty — wrong-code). There is no "preserves R12" veneer to test: an
+# out-of-range BEQ is a link error naming the veneer ABI gap. The R12
+# sentinel stays as the site shape.
 
 .section .text
 .globl _start
 _start:
-    # Live R12 sentinel — veneer must not clobber it.
+    # Live R12 sentinel — site shape for the far branch below.
     addi32 r12, r0, 0x55
     beq r0, r1, far_target
     .size _start, .-_start
@@ -21,12 +22,5 @@ far_target:
     add32 r2, r2, r2
     .size far_target, .-far_target
 
-# NM: __haydn_thunk_far_target
-
-# CHECK-LABEL: <_start>:
-# CHECK: addi32{{.*}}r12
-# CHECK: beq
-# CHECK-LABEL: <__haydn_thunk_far_target>:
-# CHECK-NOT: lui{{.*}}r12
-# CHECK-NOT: st32{{.*}}r12
-# CHECK-NOT: ld32{{.*}}r12
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_WIDE_BranchSImm12_RI to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

@@ -1204,19 +1204,22 @@ void applyLaneStore(MachineInstr &Store, MachineRegisterInfo &MRI,
 //      high half — ext(load hi) shifted left by exactly 32 — and a
 //      zext'd low half (ext(load lo)).
 //   3. Both words: plain G_LOAD, s32, non-volatile, non-atomic, MMO
-//      align >= 8, one non-dbg use, addressed off ONE shared virtual base
+//      align >= 4, one non-dbg use, addressed off ONE shared virtual base
 //      register at constant byte offsets (offset 0 allowed: the base may
 //      itself be a variable-index address; the high word sits at +4).
-//   4. Non-zero pair offset must be encodable in the golden D_LDW* RI6
-//      law EA = rs + (imm6 << 3) — a multiple of 8 within signed imm6<<3 —
-//      so Base+offset+4 rides the same base register.
-//   5. Golden D_LDW* alignment law: EA = Base + pair offset must be
-//      8-byte aligned (instruction_type_index.json "Required_Alignment"
-//      for the D_LDW* family: "the value rs + (imm6 << 3) should be
-//      aligned 8-byte"). We cannot see the runtime base, so require both
-//      source MMOs align >= 8 (the same IR guarantee the selector's LD64
-//      path relies on). Under-aligned pairs fail closed and keep the
-//      scalar LD32 sequence.
+//   4. D_LDW* path (low MMO align >= 8): non-zero pair offset must be
+//      encodable in the golden D_LDW* RI6 law EA = rs + (imm6 << 3) — a
+//      multiple of 8 within signed imm6<<3 — so Base+offset+4 rides the
+//      same base register. Offset 0 needs no encoding. Product 4-align
+//      does not use D_LDW*; the pair address is the low word's existing
+//      pointer and ISel splits the wide load.
+//   5. D1.126: two consecutive i32s at +4 cannot both be 8-aligned.
+//      Apply must-copies the LOW MMO's getAlign() onto the wide s64 MMO.
+//      Low align >= 8 stays Align(8) → D_LDW*/LD64. Product G_LOAD of
+//      consecutive i32 is 4-aligned; that path still forms the pair and
+//      must not be skipped, and must not invent Align(8). Empty-MMO
+//      Align(4) fallback must not run over a present 8-align low MMO.
+//      High-word align 4 is expected.
 //   6. Both loads and the G_OR in one MBB; no load-fold barrier (store,
 //      call, unmodeled side effect) strictly between the earliest and
 //      latest of the three.
@@ -1225,12 +1228,14 @@ void applyLaneStore(MachineInstr &Store, MachineRegisterInfo &MRI,
 //      program point still sees pre-store memory.
 //
 // Apply: one G_LOAD Dst, PairAddr, MMO(load (s64) at the low word's
-// address, align 8) inserted at the LOW load; the OR/shift/ext chain, both
-// scalar loads, and the dead G_PTR_ADD of the absorbed word are erased.
-// The wide load then flows through the EXISTING paths unchanged: the AGU
-// rule of this same pass folds the address (G_HAYDN_PREINC_LOAD) and
-// selection emits the golden D_LDW* pair load (d_ldw_pre_imm/reg,
-// d_ldw_post_imm, or LD64 with folded offset).
+// address, Align copied from the low MMO's getAlign()) inserted at the
+// LOW load; the OR/shift/ext chain, both scalar loads, and the dead
+// G_PTR_ADD of the absorbed word are erased. The wide load then flows
+// through the EXISTING paths: AGU may fold the address
+// (G_HAYDN_PREINC_LOAD) and selection emits D_LDW*/LD64 when the copied
+// MMO is 8-aligned, or the existing s64 align-split (LD32×2 +
+// MOV_GPR_TO_DR64) when it is 4. MIR pretty-print omits default align==
+// size, so Align(8) on s64 prints as `(load (s64))` not `align 8`.
 //===----------------------------------------------------------------------===//
 
 struct HaydnPairLoadInfo {
@@ -1285,7 +1290,10 @@ static bool matchPairLoadWord(Register R, MachineRegisterInfo &MRI,
   for (MachineMemOperand *MMO : L->memoperands()) {
     if (MMO->isVolatile() || MMO->isAtomic())
       return false;
-    if (MMO->getAlign() < Align(8))
+    // Size-4 i32 word. Floor is natural i32 align. Pair 8-align is a
+    // low-word-only witness (D1.126): two i32 MMOs 4 bytes apart cannot
+    // both be 8-aligned. Product consecutive i32 is 4-aligned.
+    if (MMO->getAlign() < Align(4))
       return false;
     auto Sz = MMO->getSize();
     if (!Sz.hasValue() || Sz.getValue() != 4)
@@ -1388,19 +1396,28 @@ bool matchCombinePairLoad(MachineInstr &MI, MachineRegisterInfo &MRI,
   if (Hi.OffBytes != Lo.OffBytes + 4)
     return false;
 
-  // Non-zero pair offset must be encodable in the golden D_LDW* RI6 law
-  // EA = rs + (imm6 << 3): a multiple of 4 within signed imm6<<3, so the
-  // high word's +4 rides the same base register. Offset 0 (the report's
-  // variable-index form: low word at the computed base, high at +4) needs
-  // no offset at all and is always encodable.
+  // D1.126: high word is +4 and cannot be 8-aligned. Requiring both i32
+  // MMOs Align(8) is unsatisfiable. The LOW MMO is the pair-EA witness
+  // (apply must-copies getAlign(); never invent Align(8)):
+  //   >= 8 → D_LDW* encoding + Align(8) on the wide load
+  //   >= 4 → still form the pair; ISel splits
+  // Non-zero pair offset. Offset 0 (variable-index: low at the computed
+  // base, high at +4) needs no encoding. The D_LDW* RI6 law EA =
+  // rs + (imm6 << 3) applies only when the low MMO is 8-aligned; do not
+  // refuse product 4-align pairs whose offset is a word multiple but not
+  // an 8-multiple.
   if (Lo.OffBytes != 0) {
-    if ((Lo.OffBytes % 4) != 0 || !strideFitsScaledImm6(Lo.OffBytes, 3))
+    if ((Lo.OffBytes % 4) != 0)
       return false;
-    // Golden D_LDW* alignment: EA = Base + pair offset must be 8-byte
-    // aligned. The offset must be a multiple of 8 so the promoted access
-    // stays on the golden law whenever Base itself is 8-aligned (per the
-    // MMO align >= 8 requirement above).
-    if ((Lo.OffBytes % 8) != 0)
+    bool PairEAIs8 = true;
+    for (MachineMemOperand *MMO : Lo.Load->memoperands()) {
+      if (MMO->getAlign() < Align(8)) {
+        PairEAIs8 = false;
+        break;
+      }
+    }
+    if (PairEAIs8 &&
+        ((Lo.OffBytes % 8) != 0 || !strideFitsScaledImm6(Lo.OffBytes, 3)))
       return false;
   }
   // The pair address is anchored at the LOW word: its pointer is the s64
@@ -1447,18 +1464,25 @@ void applyCombinePairLoad(MachineInstr &MI, MachineRegisterInfo &MRI,
   MachineFunction &MF = *MI.getMF();
   B.setInstrAndDebugLoc(*Info.LowLoad);
 
-  // Wide MMO (load (s64), align >= 8 per the golden D_LDW* law): copy the
-  // LOW word's MMO widened to s64, anchored at the low word's address —
-  // exactly the address the s64 load reads (PairAddr below), so the 8-byte
-  // alias window is [PairAddr, PairAddr+8).
+  // Wide MMO: s64 at the low word's address (PairAddr below), alias
+  // window [PairAddr, PairAddr+8). Must-copy the LOW MMO's getAlign()
+  // as BaseAlign: Align(8) stays 8 (D_LDW*/LD64); product 4 stays 4
+  // (ISel split). Never invent 8. Empty-MMO fallback is Align(4) and
+  // must not run when a low MMO is present (would clobber 8 → 4).
   MachineMemOperand *MMO;
   if (Info.LowLoad->memoperands_empty()) {
     MMO = MF.getMachineMemOperand(MachinePointerInfo(),
-                                  MachineMemOperand::MONone, LLT::scalar(64),
-                                  Align(8));
+                                  MachineMemOperand::MOLoad, LLT::scalar(64),
+                                  Align(4));
   } else {
     const MachineMemOperand *SrcMMO = *Info.LowLoad->memoperands_begin();
-    MMO = MF.getMachineMemOperand(SrcMMO, /*Offset=*/0, LLT::scalar(64));
+    Align PairAlign = SrcMMO->getAlign();
+    MMO = MF.getMachineMemOperand(SrcMMO->getPointerInfo(), SrcMMO->getFlags(),
+                                  LLT::scalar(64), PairAlign,
+                                  SrcMMO->getAAInfo(), nullptr,
+                                  SrcMMO->getSyncScopeID(),
+                                  SrcMMO->getSuccessOrdering(),
+                                  SrcMMO->getFailureOrdering());
   }
   Register PairAddr =
       Info.PairPtrAdd ? Info.PairPtrAdd->getOperand(0).getReg() : Info.Base;

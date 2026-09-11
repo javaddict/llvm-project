@@ -27,10 +27,12 @@ class Symbol;
 class Thunk;
 
 // Factory invoked from the shared `elf::addThunk()` dispatcher when
-// `ctx.arg.emachine == EM_HAYDN`. Selects the Haydn long-branch thunk for
-// out-of-range BranchSImm16 / CallSImm20 / WIDE_BranchSImm12[_RI] /
-// WIDE_CallSImm20 relocations (must match Haydn::needsThunk).
-// Veneer geometry is 3 × production EncodedBytes (registry), Align-4.
+// `ctx.arg.emachine == EM_HAYDN`. FAIL CLOSED (D1.57): the Haydn veneer ABI
+// is not approved (ISA-70), so every thunk-eligible relocation — the base
+// BranchSImm16 / CallSImm20 / WIDE_BranchSImm12[_RI] / WIDE_CallSImm20
+// kinds and the D1.58 E3-qualified rows that Haydn::needsThunk arms — is
+// rejected with an explicit ABI-gap diagnostic. No R0-writing thunk bytes
+// are emitted; no long-branch thunk class exists.
 std::unique_ptr<Thunk> addThunkHaydn(Ctx &ctx, const InputSection &isec,
                                      Relocation &rel, Symbol &s);
 

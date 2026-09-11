@@ -1,10 +1,10 @@
 ; REQUIRES: haydn-registered-target
 ; RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -O2 -global-isel-abort=1 \
-; RUN:   -haydn-sms2 -verify-machineinstrs < %s | FileCheck %s
+; RUN: -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -O2 -global-isel-abort=1 \
 ; RUN:   -verify-machineinstrs < %s | FileCheck %s
 ; RUN: llc -mtriple=haydn-unknown-elf -mcpu=haydn -O2 -global-isel-abort=1 \
-; RUN:   -haydn-sms2 -filetype=obj < %s -o %t.o
+; RUN: -filetype=obj < %s -o %t.o
 ; RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=OBJ
 
 ; Role: end-to-end — entry-qualified relocations under the late-convergence

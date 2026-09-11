@@ -1,0 +1,40 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %S/Inputs/far-call-e96.yaml -o %t.call.o
+# RUN: yaml2obj %S/Inputs/far-target-e96.yaml -o %t.far.o
+# Stamp product EF_HAYDN_E96 (e_flags=0x1); yaml2obj has no Haydn e_flags
+# bit names and LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.call.o
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.far.o
+#
+# D1.57 (P0 linker wrong-code) fail-closed pin, assembler-independent:
+# an out-of-range branch/call must fail the link with the explicit
+# veneer-ABI-gap diagnostic instead of materializing the retired
+# HaydnLongThunk (LUI R0 / ADDI32 R0,R0 / JALR R0,R0,0), whose JALR wrote
+# the link into soft-zero R0. No R0-writing thunk bytes may reach a
+# written image: the link fails, so there is no output to inspect.
+#
+# RUN: not ld.lld %t.call.o %t.far.o -o %t -T %S/thunk-e96-geometry.ld 2>&1 | FileCheck %s
+#
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_CallSImm20 to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70){{.*}}retired R0-borrowing template left the JALR link in soft-zero R0{{.*}}{{[Rr]}}efusing to emit R0-writing thunk bytes
+# CHECK-NOT: __haydn_thunk
+#
+# In-range control: a near call site must link unchanged — no thunk seat is
+# consulted and no error is raised. Uses the assembler path (the yaml2obj
+# fixtures above only carry the far R_HAYDN_CallSImm20 site).
+# RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.inrange.o
+# RUN: ld.lld %t.inrange.o -o %t.inrange --section-start=.text=0x10000
+# RUN: llvm-nm %t.inrange | FileCheck --check-prefix=INRANGE %s
+#
+# INRANGE-NOT: __haydn_thunk
+# INRANGE: _start
+
+.section .text
+.globl _start
+_start:
+    jal lr, near_callee
+    .size _start, .-_start
+
+.globl near_callee
+near_callee:
+    add32 r1, r1, r1
+    .size near_callee, .-near_callee

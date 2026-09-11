@@ -1,23 +1,16 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
-# RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
+# RUN: not ld.lld %t.o -o %t --section-start=.text=0x10000 2>&1 | FileCheck %s
 #
-# Call veneer uses soft-zero R0 only — never R1–R7 (args) or R12.
-# Geometry: 3 × production EncodedBytes.
-
-# NM: __haydn_thunk_callee
-
-# CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK-NOT: lui{{.*}}r1,
-# CHECK-NOT: r12
+# D1.57 fail-closed restamp: there is no call veneer whose register
+# discipline could be pinned (the retired one borrowed soft-zero R0 and
+# left the JALR link there). The far call over the 1.25 MB gap is now an
+# explicit link error naming the veneer ABI gap; no thunk bytes that could
+# touch R0–R7 or R12 are emitted. The R1–R7 loads stay as the site shape.
 
 .section .text
 .globl _start
 _start:
-    # CHECK-LABEL: <_start>:
-    # CHECK: addi32{{.*}}r1,{{.*}}r0,{{.*}}42
     addi32 r1, r0, 42
     addi32 r2, r0, 43
     addi32 r3, r0, 44
@@ -30,7 +23,9 @@ _start:
 
 .globl callee
 callee:
-    # CHECK-LABEL: <callee>:
     add32 r1, r1, r1
     .size callee, .-callee
     .size _start, .-_start
+
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_WIDE_CallSImm20 to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

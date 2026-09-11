@@ -506,10 +506,15 @@ HaydnLegalizerInfo::HaydnLegalizerInfo(const HaydnSubtarget &ST) {
                                  {S32, P0, S8, 8},
                                  {S32, P0, S16, 16},
                                  // DR SIMD mem (v2i32/v4i16/v8i8): ABI is
-                                 // v64:32 so natural IR align is 4. ISel splits
-                                 // LD64→LD32×2 when MMO align < 8 (LD32 needs
-                                 // align 4). Min AlignInBits=32 keeps align-4
-                                 // vectors legal; align-2 residual SLP/LV
+                                 // v64:64 so natural IR align is 8 (golden
+                                 // D_LDW/D_SDW 8-byte EA law) and natural
+                                 // vector mem selects LD64/ST64. ISel still
+                                 // splits LD64→LD32×2 when MMO align < 8
+                                 // (LD32 needs align 4). Min AlignInBits=32
+                                 // stays: under-aligned (align-4) vectors
+                                 // remain legal and split — D1.62 changed
+                                 // natural IR alignment only, not the
+                                 // legality ladder; align-2 residual SLP/LV
                                  // (coremark matrix_add_const, yarpgen seed1
                                  // store <4 x i16> into align-2 struct) must
                                  // scalarize — type-only legality used to

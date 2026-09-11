@@ -1,15 +1,14 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
-# RUN: ld.lld %t.o -o %t -T %S/haydn-far-branch.ld
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-readobj --symbols %t | FileCheck --check-prefix=SYM %s
-# RUN: llvm-objdump -d -z --no-show-raw-insn --triple=haydn-unknown-elf %t | \
-# RUN:   FileCheck %s
+# RUN: not ld.lld %t.o -o %t -T %S/haydn-far-branch.ld 2>&1 | FileCheck %s
 #
-# ThunkSection::assignOffsets calls alignToPowerOf2(offset, Thunk::alignment).
-# EncodedBytes=12 is not 2^n (and a missing registry read is 0); either value
-# aborts ld.lld. Veneer policy is Hexagon Align-4 plus 3 x EncodedBytes.
-# Island spacing is 0 mod EncodedBytes so the entry stays on the .text phase.
+# D1.57 fail-closed restamp: this used to pin that Thunk::alignment stayed
+# a power of two (Hexagon Align-4; EncodedBytes=12 is not 2^n) so
+# ThunkSection::assignOffsets could not abort. No Haydn thunk or thunk
+# island exists now (no spacing override, no pre-created ThunkSections),
+# so the out-of-range branch is an explicit link error naming the veneer
+# ABI gap. The power-of-two-alignment law returns with the ISA-70 template
+# if one is approved; this test then restamps its geometry pin.
 
 .section .text
 .globl _start
@@ -23,13 +22,5 @@ far_target:
     ADD32 R2, R2, R2
     .size far_target, .-far_target
 
-# NM: __haydn_thunk_far_target
-
-# SYM: Name: __haydn_thunk_far_target
-# SYM: Size: 36
-
-# CHECK-LABEL: <__haydn_thunk_far_target>:
-# CHECK-NEXT:  {{.*}} lui{{.*}}r0
-# CHECK-NEXT:  {{.*}} addi32{{.*}}r0
-# CHECK-NEXT:  {{.*}} jalr{{.*}}r0
-# CHECK-NOT: r12
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_WIDE_BranchSImm12_RI to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

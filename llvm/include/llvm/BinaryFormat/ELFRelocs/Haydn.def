@@ -41,15 +41,17 @@ ELF_RELOC(R_HAYDN_PC_LO20,       15)
 // mapping clobbered whichever fixup ran second because both wrote to bits[15:0].
 ELF_RELOC(R_HAYDN_HWLoopOff1,     16)
 ELF_RELOC(R_HAYDN_HWLoopOff2,     17)
-// WIDE branch/call fields under product Format E parcels (encoding_manual.md
-// §5.5, ÷2 per §5.14 D1). Geometry is Format E entry windows (12-byte parcels);
-// FE8 retired Bundle128 / 16-byte product packing:
+// WIDE branch/call fields under product Format E parcels. Geometry is
+// Format E entry windows (12-byte parcels); FE8 retired Bundle128 /
+// 16-byte product packing:
 //   R_HAYDN_WIDE_BranchSImm12    -- I12  one-reg (BEQZ_W/…): imm12 @ bits[15:4]
 //   R_HAYDN_WIDE_CallSImm20      -- I20  call (JAL family): imm20 @ bits[23:4]
 //   R_HAYDN_WIDE_BranchSImm12_RI -- RI12 two-reg (BEQ_W/BNE_W/…): imm12 @
 //                                  bits[19:8] (CB-94; was MC-only → llvm-mc
 //                                  crash on unresolved external_target)
-// PC-relative, halfword-scaled (ValueShift=1) unless noted otherwise.
+// Typed RelocFieldInfo is byte PC+imm (ValueShift=0, RelocTrans::None).
+// Branch/JAL symbolic alignment is the existing even-byte Align=2 table
+// (MinBundleAddressAlignBytes). Do not reintroduce a halfword scale.
 ELF_RELOC(R_HAYDN_WIDE_BranchSImm12,    18)
 ELF_RELOC(R_HAYDN_WIDE_CallSImm20,      19)
 ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI, 20)
@@ -57,10 +59,14 @@ ELF_RELOC(R_HAYDN_WIDE_BranchSImm12_RI, 20)
 // Distinct from R_HAYDN_LO20 (ALU RI20 / retired WIDE LSOff20 geometry @
 // bits[31:50]). Must not alias R_HAYDN_SImm16 (16-bit field at bit 0).
 ELF_RELOC(R_HAYDN_LS_IMM,               21)
-// Format E JALR RI12 symbolic imm12 @ the same window as the RI12 branch
-// row (parcel bits[43:32] E2 e0; E3 via resolveFieldLsb). Distinct identity
+// Format E JALR RI12 imm12 @ the same window as the RI12 branch row
+// (parcel bits[43:32] E2 e0; E3 via resolveFieldLsb). Distinct identity
 // so a JALR fixup never borrows R_HAYDN_WIDE_BranchSImm12_RI (W27 / M23).
-// ValueShift=0, Align=2; execution stays golden PC = rs + imm12.
+// ELF 22 is residual identity — do not remint. Execution is golden
+// rs+imm12. Literal immediates (including odd) currently encode (ISA-68 /
+// p18-jalr-rs-rel-odd-imm.s). Symbolic JALR has no golden relocation base
+// (ISA-69): assembly, object emission, and linking refuse rather than
+// treat the leftover PC-relative table row or Align=2 as a qualified ABI.
 ELF_RELOC(R_HAYDN_JALRSImm12,           22)
 // Format E CSR I8 uimm8 (CSRW/CSRR). Absolute unsigned 8-bit CSR address
 // at the golden I8 window (E2 e0 @ parcel bits[39:32]; E3 via
@@ -83,7 +89,8 @@ ELF_RELOC(R_HAYDN_CSR_UImm8,            23)
 //   R_HAYDN_WIDE_CallSImm20_E3E1 — JAL I20 at E3 e1, imm @48.
 //   R_HAYDN_WIDE_BranchSImm12_E3{E0,E1,E2} — I12 cond at E3, imm @23/54/81.
 //   R_HAYDN_WIDE_BranchSImm12_RI_E3{E0,E1} — RI12 cond at E3, imm @23/54.
-//   R_HAYDN_JALRSImm12_E3{E0,E1} — JALR RI12 at E3, imm @23/54.
+//   R_HAYDN_JALRSImm12_E3{E0,E1} — residual JALR RI12 identity at E3,
+//     imm @23/54; ISA-69 fail-closed (same as base ELF 22).
 //   R_HAYDN_HI12_E3* / CSR_UImm8_E3* — D1.17: HI12/CSR_UImm8 map/type is
 //     NOT member-unique (E3 e1/e0/e2 ALU0 I12 hosts LUI(opc=1) alongside
 //     BEQZ/BNEZ/BGEZ/BLTZ(4..7); I8 hosts CSRR(4)/CSRW(5) alongside

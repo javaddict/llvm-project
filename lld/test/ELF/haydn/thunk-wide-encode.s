@@ -1,17 +1,13 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
-# RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-readobj -x .text %t | FileCheck --check-prefix=HEX %s
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
+# RUN: not ld.lld %t.o -o %t --section-start=.text=0x10000 2>&1 | FileCheck %s
 #
-# Far call veneer: LUI + ADDI32 + JALR on soft-zero R0.
-# 3 × production EncodedBytes parcels at offsets 0 / N / 2N (Align-4).
-# Geometry from the object-encoding registry; no Format E 16-byte path.
-#
-#   0x10000: parcel 0 (LUI)
-#   0x1000c: parcel 1 (ADDI32)   — N = production EncodedBytes
-#   0x10018: parcel 2 (JALR)
+# D1.57 fail-closed restamp: the retired call veneer wrote
+# LUI + ADDI32 + JALR on soft-zero R0 (3 × production EncodedBytes at
+# offsets 0 / N / 2N, Align-4). That byte-emission contract is gone: the
+# far call is an explicit link error naming the veneer ABI gap, and no
+# R0-writing thunk bytes appear in any output. Veneer geometry belongs to
+# the ISA-70 template when one is approved.
 
 .section .text
 .globl _start
@@ -25,16 +21,5 @@ callee:
     .size callee, .-callee
     .size _start, .-_start
 
-# NM: __haydn_thunk_callee
-
-# Three product parcels: 3 * EncodedBytes. With production EncodedBytes = 12,
-# veneer is 36 bytes starting at the section base used for the far call site.
-# HEX: Hex dump of section '.text':
-# First parcel (LUI) is non-zero in the HI12 window; third parcel (JALR) is non-zero.
-# Exact imm bits depend on the materialised target VA.
-
-# CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK-NOT: r12
-# CHECK-NOT: xor32
-# CHECK-NOT: lui_w
-# CHECK-NOT: jalr_w
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_WIDE_CallSImm20 to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

@@ -1,0 +1,74 @@
+# REQUIRES: haydn
+# RUN: yaml2obj %s -o %t.o
+# Stamp product ELFFlagsValue (e_flags=0x1). yaml2obj has no Haydn e_flags
+# bit names; LLD rejects unprofiled zero flags fail-closed.
+# RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.o
+# RUN: llvm-readobj -r %t.o | FileCheck %s --check-prefix=OBJ
+# RUN: ld.lld -m elf32haydn %t.o -o %t --defsym=ext_csr=0x40 \
+# RUN:   --section-start=.text=0x10000 --section-start=.rodata=0xa2004
+# RUN: llvm-objcopy -O binary --only-section=.text %t %t.bin
+# RUN: %python -c "import pathlib,sys;b=pathlib.Path(sys.argv[1]).read_bytes();f=lambda o,l,w: (int.from_bytes(b[o:o+12],'little')>>l)&((1<<w)-1);g=(f(0,23,12),f(12,83,12),f(24,23,8));e=(1,1,0x40); assert g==e, (g,e)" %t.bin
+
+# D1.60: assembler-independent positive LLD pins for the three
+# entry-qualified HI12/CSR twins that hand assembly cannot force
+# (unit/entry placement). Entry-qualified kinds carry FieldLsb in the
+# TYPE — tryResolveFieldLsb must not sniff. Types 0x23/0x25/0x28 are
+# ELF 35/37/40 (Haydn.def); do not remint.
+#   R_HAYDN_HI12_E3E0_ALU0  FieldLsb=23  HI12=(0xa2004+0x80000)>>20 = 1
+#   R_HAYDN_HI12_E3E2_ALU2  FieldLsb=83  same
+#   R_HAYDN_CSR_UImm8_E3E0_ALU0 FieldLsb=23  uimm8=0x40
+# Content is three valid E3 xor parcels (not LUI/CSRR encodings): this
+# pins the typed window, not MC member selection.
+
+# OBJ: Relocations [
+# OBJ:   R_HAYDN_HI12_E3E0_ALU0 high_sym
+# OBJ:   R_HAYDN_HI12_E3E2_ALU2 high_sym
+# OBJ:   R_HAYDN_CSR_UImm8_E3E0_ALU0 ext_csr
+# OBJ-NOT: R_HAYDN_HI12{{ }}
+# OBJ-NOT: R_HAYDN_CSR_UImm8{{ }}
+
+--- !ELF
+FileHeader:
+  Class:   ELFCLASS32
+  Data:    ELFDATA2LSB
+  Type:    ET_REL
+  Machine: 0x103
+Sections:
+  - Name:    .text
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC, SHF_EXECINSTR ]
+    AddressAlign: 4
+    Content: '074b21220000000000000000074b31330000000000000000074b41440000000000000000'
+  - Name:    .rela.text
+    Type:    SHT_RELA
+    Link:    .symtab
+    Info:    .text
+    Relocations:
+      - Offset: 0
+        Symbol: high_sym
+        Type:   0x23
+      - Offset: 12
+        Symbol: high_sym
+        Type:   0x25
+      - Offset: 24
+        Symbol: ext_csr
+        Type:   0x28
+  - Name:    .rodata
+    Type:    SHT_PROGBITS
+    Flags:   [ SHF_ALLOC ]
+    AddressAlign: 4
+    Content: '00000000'
+Symbols:
+  - Name:    _start
+    Section: .text
+    Value:   0
+    Size:    36
+    Binding: STB_GLOBAL
+    Type:    STT_FUNC
+  - Name:    high_sym
+    Section: .rodata
+    Value:   0
+    Size:    4
+    Binding: STB_GLOBAL
+  - Name:    ext_csr
+    Binding: STB_GLOBAL

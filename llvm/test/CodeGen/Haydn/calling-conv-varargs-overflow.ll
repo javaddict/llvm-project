@@ -54,8 +54,9 @@ declare i64 @varargs_five_i64_callee(i64, i64, i64, i64, i64, ...)
 define i64 @call_five_i64_overflow() nounwind {
 ; CHECK-LABEL: call_five_i64_overflow:
 ; Stack-passed overflow args: st64 / d_sdw to SP slots before the call.
-; CHECK: st64
-; CHECK: jal{{(\.s[012])?}} {{.*}}, varargs_five_i64_callee
+; CHECK-DAG: st64
+; CHECK-DAG: {{lui|addi32}}{{.*}}varargs_five_i64_callee
+; CHECK-DAG: jalr{{.*}}lr
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
 entry:
   %r = call i64 (i64, i64, i64, i64, i64, ...) @varargs_five_i64_callee(

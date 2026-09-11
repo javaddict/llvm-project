@@ -1,5 +1,7 @@
 # REQUIRES: haydn
 # RUN: FileCheck %s --input-file=%S/../../../../llvm/lib/Target/Haydn/FormatE/GOLDEN_INPUTS.sha256 --check-prefix=GOLDEN
+# RUN: not llvm-mc -filetype=obj -triple=haydn-unknown-elf --defsym=SYMJALR=1 %s \
+# RUN:   -o /dev/null 2>&1 | FileCheck --check-prefix=SYMJALR %s
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: llvm-readobj -r -h %t.o | FileCheck --check-prefix=RELOCS %s
 # RUN: llvm-readelf -r %t.o | FileCheck --check-prefix=ELFNUM %s
@@ -8,13 +10,12 @@
 # RUN: llvm-objdump -s -j .rodata %t | FileCheck --check-prefix=RODATA %s
 # RUN: llvm-readobj --file-headers %t | FileCheck --check-prefix=LINKED %s
 #
-# Same-artifact pin vs the nine-file layout hashes: symbolic jalr is
-# R_HAYDN_JALRSImm12 (ELF 22, rs+imm12, ValueShift=0), never the RI12
-# branch row. Call-indirect jalr rd, rs, 0 bakes imm12=0 and must not mint
-# a second JALR ELF kind. PIC/JT `.long ext_sym - jt` is R_HAYDN_32_PCREL.
-# Objects keep EM_HAYDN=259 / EF_HAYDN_E96=0x1 (provisional; 259 collides
-# with Kalray KVX — do not invent a replacement e_machine).
-# Same-file global target at the next parcel so the patched imm12 is 12.
+# ISA-69: symbolic jalr is refused at assemble time (no golden relocation
+# base). This file keeps the non-JALR same-artifact pins: call-indirect
+# jalr rd, rs, 0 (no JALR reloc) and PIC/JT `.long ext_sym - jt`
+# (R_HAYDN_32_PCREL). A crafted R_HAYDN_JALRSImm12 is
+# reloc-jalr-simm12-reject.test. Objects keep EM_HAYDN=259 /
+# EF_HAYDN_E96=0x1.
 #
 # GOLDEN-DAG: 2a2b43cb394a16cf89173538f2a673235fdb6e4ed04cb6e4e75e72520cf7ffdb  format_e_bit_layout_v2_2.xlsx
 # GOLDEN-DAG: c436793cc8d3295088dda2271e68e5b53074eeb4bce3341d443ebac3e828dcba  format_e_bit_layout_v2_2.json
@@ -26,32 +27,29 @@
 # GOLDEN-DAG: e0d7f7f0e7ce06622f4ae90dc9366caf16da48993c7f803c02d460473fd9b56a  VLIW_Engine_Compiler_Constraints.md
 # GOLDEN-DAG: 550dac0c82c160397c510bd403116056e046a43d8df41cd34d81ab678cd9b49b  VLIW_Engine_Reference_Manual.docx
 #
+# SYMJALR: Haydn symbolic JALR is unsupported (ISA-69: no golden relocation base)
+# SYMJALR: refusing silent PC-relative R_HAYDN_JALRSImm12
+#
 # RELOCS: Machine: 0x103
 # RELOCS: Flags [ (0x1)
 # RELOCS:      Relocations [
-# RELOCS-NEXT:   Section ({{.*}}) .rela.text {
-# RELOCS-NEXT:     0x0 R_HAYDN_JALRSImm12 ext_sym
-# RELOCS-NEXT:   }
 # RELOCS-NEXT:   Section ({{.*}}) .rela.rodata {
 # RELOCS-NEXT:     0x0 R_HAYDN_32_PCREL ext_sym
 # RELOCS-NEXT:     0x4 R_HAYDN_32_PCREL ext_sym
 # RELOCS-NEXT:   }
 # RELOCS-NEXT: ]
+# RELOCS-NOT: R_HAYDN_JALRSImm12
 # RELOCS-NOT: R_HAYDN_WIDE_BranchSImm12
-# RELOCS-NOT: R_HAYDN_WIDE_BranchSImm12_RI
 # RELOCS-NOT: R_HAYDN_GOT
 #
-# ELF32 r_info low byte is the type: 0x16 = ELF 22.
-# ELFNUM: {{[0-9a-fA-F]+}}16 R_HAYDN_JALRSImm12
 # ELFNUM: R_HAYDN_32_PCREL
+# ELFNUM-NOT: R_HAYDN_JALRSImm12
 # ELFNUM-NOT: R_HAYDN_WIDE_BranchSImm12
 #
 # CHECK-LABEL: <_start>:
-# CHECK: 10000: {{.*}} jalr{{.*}}r2, 12
+# CHECK: 10000: {{.*}} jalr{{.*}}r3, 0
 # CHECK-LABEL: <ext_sym>:
 # CHECK: {{.*}} add32
-# CHECK-LABEL: <call_indirect>:
-# CHECK: {{.*}} jalr{{.*}}r3, 0
 #
 # RODATA: Contents of section .rodata:
 # RODATA: 20000 0c00ffff 0c00ffff
@@ -76,21 +74,20 @@
 # REJECT2: incompatible e_flags 0x2
 # REJECT2: expected Format E ABI flag 0x1
 
+.ifdef SYMJALR
+	jalr r1, r2, ext_sym
+.endif
+
 .section .text
 .globl _start
 _start:
-    jalr r1, r2, ext_sym
+    jalr_w lr, r3, 0
     .size _start, .-_start
 
 .globl ext_sym
 ext_sym:
     { add32 r0, r0, r0 }
     .size ext_sym, .-ext_sym
-
-.globl call_indirect
-call_indirect:
-    jalr_w lr, r3, 0
-    .size call_indirect, .-call_indirect
 
 .section .rodata
 .globl jt

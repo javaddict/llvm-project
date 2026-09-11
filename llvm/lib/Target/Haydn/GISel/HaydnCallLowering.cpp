@@ -38,6 +38,29 @@ using namespace llvm;
 
 #define DEBUG_TYPE "haydn-call-lowering"
 
+// AIE AIE1InstrInfo.cpp:688 getCallOpcode(IsIndirect) → JAL vs JAL_IND.
+// RISC-V peer: ISel emits AUIPC+JALR; LLD relaxCall may delete AUIPC and
+// shrink to jal (bytes and fetch cycles both drop).
+// Haydn overlay: ISel still emits the general call (LOAD_ADDR HI12/LO20 +
+// JALR_CALL). Short CallSImm20 JAL is a later encoding relaxation of that
+// form when |disp| is proven in range — not a subtarget feature and not
+// an LLD veneer (D1.57 / ISA-70).
+// Bundle law (pipeline.md): after the one durable commit, relaxation may
+// shorten a member and replace a vacated LUI/ADDI child with the generated
+// same-row NOP. It must not delete packets, collapse the committed cycle
+// grid, or repack siblings. RISC-V's "drop the AUIPC instruction" is
+// illegal here. On E96 every product packet is 12 bytes, so cycle-neutral
+// relax is also byte-neutral until an unequal-width family is admitted.
+static Register materializeCalleeAddr(MachineIRBuilder &MIRBuilder,
+                                      MachineRegisterInfo &MRI,
+                                      const MachineOperand &Callee) {
+  Register Addr = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+  if (const auto *RBI = MIRBuilder.getMF().getSubtarget().getRegBankInfo())
+    RBI->constrainGenericRegister(Addr, Haydn::GPR32RegClass, MRI);
+  MIRBuilder.buildInstr(Haydn::LOAD_ADDR).addDef(Addr).add(Callee);
+  return Addr;
+}
+
 namespace {
 // The Haydn GPR argument registers, R1–R7. R0 is reserved as soft-zero and is
 // not used for argument passing (CLAUDE.md register map). Used by the varargs
@@ -399,8 +422,8 @@ static bool isUnsupportedABIType(Type *Ty) {
 
 // Interrupt and stack-protector have no Haydn ABI. AIE rejects interrupt
 // at return lowering (AIE1ISelLowering.cpp:964). ISR stays fail-closed
-// (no CC_ISR). musttail uses JAL_W_MSP / JALR_W_MSP when the call is a
-// register-only sibcall.
+// (no CC_ISR). musttail jalr is JALR_TCO; musttail direct is JAL_TCO.
+// Short JAL_W is cycle-neutral LLD relax.
 //
 // Naked is a supported product seat (RISCV model): the default C CC
 // lowers formals to unused vregs, clang guarantees an asm-only body, and
@@ -409,6 +432,8 @@ static bool isUnsupportedABIType(Type *Ty) {
 // insertPrologEpilogCode). The compiler contributes no instructions
 // beyond mandatory terminators; the asm body owns control flow
 // (naked-fn.ll). Product libc setjmp/longjmp are this seat.
+// lowerReturn is a no-op and saveVarArgRegisters is skipped: both would
+// emit compiler code against a frame PEI will not create.
 static bool hasUnsupportedFnABI(const Function &F) {
   if (F.hasFnAttribute("interrupt"))
     return true;
@@ -508,6 +533,7 @@ bool HaydnCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
   // parcel after the body's own return (naked-fn.ll). Clang-canonical
   // naked bodies end in unreachable and never reach here;
   // HaydnEnsureTerminators holds the matching gate for that dead-end shape.
+  // saveVarArgRegisters is the matching formal-side skip (no frame).
   if (F.hasFnAttribute(Attribute::Naked))
     return true;
 
@@ -562,7 +588,7 @@ bool HaydnCallLowering::lowerFormalArguments(
   // byref/inalloca/inreg formals before mutation (IR attrs first so
   // setArgFlags never asserts on unsupported seats). Naked is a product
   // seat: formals lower through CC_Haydn into unused vregs (the asm-only
-  // body never reads them — naked-fn.ll).
+  // body never reads them — naked-fn.ll); saveVarArgRegisters is skipped.
   if (!isSupportedCallingConv(F.getCallingConv()))
     return false;
   if (hasUnsupportedFnABI(F))
@@ -617,16 +643,24 @@ bool HaydnCallLowering::lowerFormalArguments(
   // in the machine function info; VASTART stores the frame address into the
   // va_list pointer. Previously the offset was hardcoded 0 and VASTART was a
   // no-op, so va_arg read garbage. See -varargs-reg-save-area.
-  if (F.isVarArg()) {
+  //
+  // Naked has no frame: generic PEI skips insertPrologEpilogCode, so these
+  // spills would store into the caller's region (no subi32, no RET). AIE has
+  // no naked seat. RISC-V GISel still saves unconditionally
+  // (RISCVCallLowering.cpp:568-569); ARMFrameLowering.cpp:2436 refuses CSR
+  // spill for Naked for the same no-frame reason. Haydn's product law is
+  // zero compiler instructions (naked-fn.ll). VASTART already no-ops when
+  // HasVarArgsSaveAreas is unset (HaydnLegalizerInfo.cpp:1446).
+  if (F.isVarArg() && !F.hasFnAttribute(Attribute::Naked))
     saveVarArgRegisters(MIRBuilder, Assigner);
-  }
 
   return true;
 }
 
 // AIE AIECallLowering.cpp:592. Target-independent IsTailCall plus no
 // byval formals. Interrupt/GHC/stack/varargs stay fail-closed.
-// JAL_W_MSP / JALR_W_MSP are the tail opcodes.
+// Musttail jalr is JALR_TCO; musttail direct is JAL_TCO.
+// Short JAL_W is cycle-neutral LLD relax when CallSImm20 fits.
 bool HaydnCallLowering::isEligibleForTailCallOptimization(
     MachineIRBuilder &MIRBuilder, CallLoweringInfo &Info) const {
   MachineFunction &MF = MIRBuilder.getMF();
@@ -666,17 +700,19 @@ bool HaydnCallLowering::isEligibleForTailCallOptimization(
     if (!A.Flags.empty() && A.Flags[0].isByVal())
       return false;
   }
-  // Direct JAL_W_MSP / indirect JALR_W_MSP use the same reloc as JAL_W /
-  // JALR_W. AIE AIECallLowering.cpp:592 has no PIC DSO-local veto; Haydn
-  // is ELF-only, so do not import AArch64 MachO's PIC restriction.
+  // Tail opcodes: JALR_TCO (register callee) / JAL_TCO (direct symbol).
+  // AIE AIECallLowering.cpp:592 has no PIC DSO-local veto; Haydn is
+  // ELF-only, so do not import AArch64 MachO's PIC restriction.
   return true;
 }
 
 // AIE AIECallLowering.cpp:622 emits TII.getCallOpcode(..., /*isTailCall*/true)
-// (AIE2InstrInfo.td:459 PseudoJ_TCO_jump_{imm,ind}). Haydn overlay:
-// JAL_W_MSP / JALR_W_MSP are isReturn+isCall+isTerminator; rt is R12 so
-// incoming LR (R15) stays live. Sibcall only: stack args would die in the
-// epilogue. Soft `tail` stays JAL_W + RET in lowerCall.
+// (AIE2InstrInfo.cpp:72-76 TCO_jump_ind vs TCO_jump_imm;
+// AIE2InstrInfo.td:444-463). Haydn overlay: JAL_TCO / JALR_TCO are
+// isReturn+isCall+isTerminator+isBarrier. Catalog JALR_W stays RET /
+// computed-goto. rt is R12 so incoming LR (R15) stays live. Sibcall
+// only: stack args would die in the epilogue. Soft `tail` stays ordinary
+// call + RET in lowerCall.
 bool HaydnCallLowering::lowerTailCall(MachineIRBuilder &MIRBuilder,
                                       CallLoweringInfo &Info) const {
   Info.LoweredTailCall = false;
@@ -716,12 +752,14 @@ bool HaydnCallLowering::lowerTailCall(MachineIRBuilder &MIRBuilder,
     }
   }
 
-  const unsigned Opc =
-      Info.Callee.isReg() ? Haydn::JALR_W_MSP : Haydn::JAL_W_MSP;
-  MachineInstrBuilder MIB = MIRBuilder.buildInstrNoInsert(Opc);
-  // Scratch link dest: must not be R15 (incoming return address).
+  // Direct musttail is JAL_TCO. Register musttail is JALR_TCO (isReturn so
+  // IRTranslator skips the ret and PEI inserts epilogue before the jump).
+  // Catalog JALR_W stays RET / computed-goto. Soft tail stays JALR_CALL+RET.
+  const bool Indirect = Info.Callee.isReg();
+  MachineInstrBuilder MIB = MIRBuilder.buildInstrNoInsert(
+      Indirect ? Haydn::JALR_TCO : Haydn::JAL_TCO);
   MIB.addReg(Haydn::R12, RegState::Define);
-  if (Info.Callee.isReg()) {
+  if (Indirect) {
     Register CalleeReg = Info.Callee.getReg();
     if (CalleeReg.isVirtual())
       if (auto *RBI = MF.getSubtarget().getRegBankInfo())
@@ -762,10 +800,10 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const DataLayout &DL = MF.getDataLayout();
 
-  // Soft `tail` is an ordinary JAL_W + RET. musttail has no fallthrough —
-  // lowerTailCall emits JAL_W_MSP / JALR_W_MSP when the call is a
-  // register-only sibcall, otherwise fail closed (no ordinary-call
-  // fallthrough). Interrupt/i128 stay fail-closed below.
+  // Soft `tail` is an ordinary JALR_CALL + RET. musttail has no fallthrough —
+  // lowerTailCall emits JALR_TCO / JAL_TCO when the call is a register-only
+  // sibcall, otherwise fail closed (no ordinary-call fallthrough).
+  // Interrupt/i128 stay fail-closed below.
   if (Info.IsMustTailCall)
     return lowerTailCall(MIRBuilder, Info);
   Info.IsTailCall = false;
@@ -847,24 +885,24 @@ bool HaydnCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
       .addImm(static_cast<int64_t>(CallFrameBytes))
       .addImm(0);
 
-  // Direct: real JAL_W with callee MO (GlobalAddress / ExternalSymbol) and
-  // call-preserved regmask. Peer: AArch64CallLowering.cpp:1079,1192 (BL +
-  // addRegMask). Do not emit PseudoCALL — ExpandPseudos does not expand it.
-  // Indirect: PseudoCALLIndirect (printer → JALR_W); constrain callee vreg
-  // to GPR32 so the $rs operand verifies.
-  MachineInstrBuilder MIB;
+  // AIE JAL_IND: LOAD_ADDR + JALR_CALL (honest gMIR returning fnptr
+  // call; encoder peels to catalog JALR). Direct symbols use the same
+  // general form; short JAL_W is a CallSImm20 relaxation when |disp| is
+  // proven in range. Do not emit PseudoCALL; ExpandPseudos does not
+  // expand it.
+  MachineInstrBuilder MIB =
+      MIRBuilder.buildInstrNoInsert(Haydn::JALR_CALL);
+  MIB.addReg(Haydn::R15, RegState::Define); // link register ($rd)
   if (Info.Callee.isReg()) {
-    MIB = MIRBuilder.buildInstrNoInsert(Haydn::PseudoCALLIndirect);
-    MIB.addReg(Haydn::R15, RegState::Define); // link register ($rd)
     Register CalleeReg = Info.Callee.getReg();
     if (CalleeReg.isVirtual())
       if (auto *RBI = MF.getSubtarget().getRegBankInfo())
         RBI->constrainGenericRegister(CalleeReg, Haydn::GPR32RegClass, MRI);
-    MIB.addReg(CalleeReg); // function pointer ($rs)
+    MIB.addReg(CalleeReg);
+    MIB.addImm(0);
   } else {
-    MIB = MIRBuilder.buildInstrNoInsert(Haydn::JAL_W);
-    MIB.addReg(Haydn::R15, RegState::Define); // link register
-    MIB.add(Info.Callee);
+    MIB.addReg(materializeCalleeAddr(MIRBuilder, MRI, Info.Callee));
+    MIB.addImm(0);
   }
 
   // Call-preserved regmask: CSR bank R8–R11, R14, R15, D8–D15.

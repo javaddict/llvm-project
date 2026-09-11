@@ -1,11 +1,13 @@
 # REQUIRES: haydn
 # RUN: llvm-mc -filetype=obj -triple=haydn-unknown-elf %s -o %t.o
 # RUN: llvm-readobj -r %t.o | FileCheck --check-prefix=RELOC %s
-# RUN: ld.lld %t.o -o %t --section-start=.text=0x10000
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-objdump -d --triple=haydn-unknown-elf %t | FileCheck %s
+# RUN: not ld.lld %t.o -o %t --section-start=.text=0x10000 2>&1 | FileCheck %s
 #
-# Call veneer honors addend (callee+16). Geometry: 3 × production EncodedBytes.
+# D1.57 fail-closed restamp: the retired R0-borrowing call veneer used to
+# honor the relocation addend (callee+16) with 3 × production EncodedBytes
+# parcels. No veneer exists now, so the addend-carrying far call is an
+# explicit link error naming the veneer ABI gap (D1.57 / ISA-70). The
+# addend is still visible in the reloc record (RELOC pin).
 
 # Product call reloc is WIDE under Format E; addend 0x10 preserved.
 # RELOC: R_HAYDN_WIDE_CallSImm20 callee 0x10
@@ -26,9 +28,5 @@ skip_pad:
     .size callee, .-callee
     .size _start, .-_start
 
-# NM: __haydn_thunk_callee
-
-# CHECK-LABEL: <__haydn_thunk_callee>:
-# CHECK-NOT: xor32
-# CHECK-LABEL: <skip_pad>:
-# CHECK: add32{{.*}}r4
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_WIDE_CallSImm20 to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

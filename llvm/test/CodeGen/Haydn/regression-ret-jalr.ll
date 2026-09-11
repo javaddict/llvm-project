@@ -42,7 +42,9 @@ define i32 @ret_after_arith(i32 %a, i32 %b) nounwind {
 declare i32 @helper_fn(i32)
 define i32 @ret_after_call(i32 %a) nounwind {
 ; CHECK-LABEL: ret_after_call:
-; CHECK: jal{{(\.s[012])?}} {{.*}}, helper_fn
+; CHECK: lui{{.*}}helper_fn
+; CHECK: addi32{{.*}}helper_fn
+; CHECK: jalr{{.*}}lr
 ; CHECK: jalr{{(\.s[012])?}} r0, lr, 0
   %r = call i32 @helper_fn(i32 %a)
   ret i32 %r

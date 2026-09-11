@@ -5,16 +5,15 @@
 # names; LLD rejects unprofiled zero flags fail-closed (matches BundleSim).
 # RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.call.o
 # RUN: %python -c "import struct,sys;f=open(sys.argv[1],'r+b');f.seek(36);f.write(struct.pack('<I',1));f.close()" %t.far.o
-# RUN: ld.lld %t.call.o %t.far.o -o %t -T %S/thunk-e96-geometry.ld
-# RUN: llvm-nm %t | FileCheck --check-prefix=NM %s
-# RUN: llvm-readobj --symbols %t | FileCheck --check-prefix=SYM %s
+# RUN: not ld.lld %t.call.o %t.far.o -o %t -T %S/thunk-e96-geometry.ld 2>&1 | FileCheck %s
 #
-# Assembler-independent geometry proof for Format E product hard cut:
-#   * Out-of-range R_HAYDN_CallSImm20 produces a long-call veneer
-#   * Veneer Defined::size == 3 × production EncodedBytes (registry → 36)
-#   * No writeFormatELE / 48-byte Format E product path
+# D1.57 fail-closed restamp (assembler-independent, yaml2obj path): an
+# out-of-range R_HAYDN_CallSImm20 must NOT produce a veneer — the retired
+# R0-borrowing template was wrong-code. The link fails with the explicit
+# veneer-ABI-gap diagnostic (D1.57 / ISA-70); no __haydn_thunk symbol and
+# no 3 × EncodedBytes Defined::size = 36 object are created. The base
+# (non-WIDE) CallSImm20 kind is pinned here — it is the legacy row the
+# shared dispatch historically accepted.
 
-# NM: __haydn_thunk_far_fn
-
-# SYM: Name: __haydn_thunk_far_fn
-# SYM: Size: 36
+# CHECK: error: {{.*}}.o:({{.*}}relocation R_HAYDN_CallSImm20 to '{{.*}}' needs a linker range-extension veneer{{.*}}Haydn veneer ABI is not approved (D1.57 / ISA-70)
+# CHECK-NOT: __haydn_thunk

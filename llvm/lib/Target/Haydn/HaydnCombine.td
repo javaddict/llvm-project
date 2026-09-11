@@ -229,6 +229,9 @@ def form_lane_store : GICombineRule<
 // path (one mechanism, no side table): the wide G_LOAD is exactly what
 // `AE_L32X2_XC` lowers to, so ordinary C gets the pair load for free.
 // Fail-closed: adjacency / domination / barrier checks fail → no change.
+// D1.126: low-word MMO is the align witness (high is +4, never 8). Align 8
+// → D_LDW*. Product consecutive i32 is 4-aligned and still forms the pair
+// (wide G_LOAD, ISel split). Never require 8-align on both i32 MMOs.
 def pair_load_matchdata : GIDefMatchData<"HaydnPairLoadInfo">;
 def form_pair_load : GICombineRule<
   (defs root:$root, pair_load_matchdata:$matchinfo),

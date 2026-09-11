@@ -21,13 +21,24 @@
 //   R_HAYDN_CallSImm20 — signed call field (range via HaydnRelocLayout).
 //   R_HAYDN_WIDE_BranchSImm12/_RI — narrow signed branch field.
 //   R_HAYDN_WIDE_CallSImm20 — wide signed call field.
-//   R_HAYDN_JALRSImm12 — JALR RI12 symbolic imm12 (rs+imm12 execution;
-//     assembler symbol convention is parcel-relative, same R_PC as B/JAL).
+//   R_HAYDN_JALRSImm12 / _E3E0 / _E3E1 — residual ELF 22/32/33 identity
+//     (do not remint). Execution is golden rs+imm12. Symbolic JALR has
+//     no golden relocation base (ISA-69): getRelExpr/relocate fail closed
+//     and return R_NONE; never silent R_PC. Literal jalr rd, rs, 0 does
+//     not emit this kind.
 //   R_HAYDN_CSR_UImm8 — Format E CSR I8 uimm8 (absolute unsigned CSR
 //     address; reloc CSRW_W / CSRR). Not R_HAYDN_8 (data .byte).
 //   R_HAYDN_HWLoopOff1/Off2 — unsigned Format E SET_HWLOOP displacement
 //     fields (<<2 law; FieldLsb via HaydnRelocLayout / resolveFieldLsb).
-//   Out-of-range branch/call sites get long-branch thunks (needsThunk).
+//   Out-of-range branch/call sites fail closed with a D1.57 veneer-ABI
+//   diagnostic (needsThunk arms addThunkHaydn; no Haydn thunk exists).
+//   In-range returning calls (HI12+LO20+JALR rd=LR, rs=LUI.rd) may
+//   rewrite the JALR parcel in place to JAL when CallSImm20 fits
+//   (HaydnCallRelax). LUI+ADDI stay — they write the address temp, which
+//   later jalr lr, temp (CoreMark iterate crc) still reads. Idling those
+//   parcels is RISC-V AUIPC-delete and jumps later sites to stack.
+//   Long jumps and mismatched JALR.rs stay JALR. Packet/cycle count
+//   stays identical. Not a veneer.
 //   R_HAYDN_HI20/LO16 — LUI+ADDI32 pair for 32-bit absolute addressing.
 //   R_HAYDN_HI12 — LUI I12 high 12 (RelocTrans::Hi12; specifier %hi12).
 //     Producer emission is D1.17 TYPED: non-default E3 sites arrive as the
@@ -54,8 +65,10 @@
 #include "InputSection.h"
 #include "Symbols.h"
 #include "Target.h"
+#include "HaydnCallRelax.h"
 #include "HaydnFormat.h"
 #include "HaydnRelocLayout.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/bit.h"
 #include "llvm/BinaryFormat/ELF.h"
@@ -117,8 +130,11 @@ public:
     pltEntrySize = 0;
     defaultMaxPageSize = 4096;
 
-    // Enable thunk generation for long branches/calls whose PC-relative
-    // offsets fail HaydnRelocLayout::computeRelocValue (inBranchRange).
+    // Stay armed so out-of-range long branches/calls (Haydn::needsThunk)
+    // reach addThunkHaydn and fail closed with the named D1.57 veneer-ABI
+    // gap instead of a generic range failure; in-range sites link directly.
+    // No Haydn thunk exists until ISA-70 approves a non-clobbering veneer
+    // template, so island spacing keeps the 0 default below.
     needsThunks = true;
 
     // Executable padding: whole product parcels only (function/.text pack
@@ -171,18 +187,13 @@ public:
     case R_HAYDN_WIDE_BranchSImm12_RI_E3E1:
       return R_PC;
     case R_HAYDN_JALRSImm12:
-      // Dedicated ELF 22. Assembler symbol convention is parcel-relative
-      // (same R_PC as B/JAL). Execution is rs+imm12; never the RI12 branch
-      // row. ValueShift=0 lives in HaydnRelocLayout — do not remint here.
-      // FieldLsb is typed per member: E2 e0 @32, E3 e0 @23, E3 e1 @54
-      // (resolveFieldLsb / resolveFieldLsbForMember). Call-indirect / JT
-      // jalr-with-zero is not this kind; PIC/JT label-diff is
-      // R_HAYDN_32_PCREL (R_PC on a 32-bit data word).
-      return R_PC;
     case R_HAYDN_JALRSImm12_E3E0:
     case R_HAYDN_JALRSImm12_E3E1:
-      // Qualified twins of ELF 22 (same R_PC; window is typed per kind).
-      return R_PC;
+      // ISA-69: no golden relocation base. Do not return R_PC (that was
+      // the unapproved S+A-P convention). ELF numbers stay; refuse.
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << llvm::HaydnReloc::kUnsupportedSymbolicJalrDiag;
+      return R_NONE;
     case R_HAYDN_PC_LO20_E1:
       // Qualified twin of R_HAYDN_PC_LO20.
       return R_PC;
@@ -262,9 +273,6 @@ public:
     case R_HAYDN_WIDE_CallSImm20:
     case R_HAYDN_WIDE_BranchSImm12:
     case R_HAYDN_WIDE_BranchSImm12_RI:
-    case R_HAYDN_JALRSImm12:
-    case R_HAYDN_JALRSImm12_E3E0:
-    case R_HAYDN_JALRSImm12_E3E1:
     case R_HAYDN_WIDE_CallSImm20_E3E1:
     case R_HAYDN_WIDE_BranchSImm12_E3E0:
     case R_HAYDN_WIDE_BranchSImm12_E3E1:
@@ -278,6 +286,11 @@ public:
       int64_t Offset = static_cast<int64_t>(dst - src);
       return HaydnReloc::computeRelocValue(R, static_cast<uint64_t>(Offset)).OK;
     }
+    case R_HAYDN_JALRSImm12:
+    case R_HAYDN_JALRSImm12_E3E0:
+    case R_HAYDN_JALRSImm12_E3E1:
+      // ISA-69: no qualified relocation-base range oracle.
+      return false;
     default:
       return true;
     }
@@ -301,8 +314,8 @@ public:
     case R_HAYDN_WIDE_BranchSImm12_RI_E3E0:
     case R_HAYDN_WIDE_BranchSImm12_RI_E3E1:
       return !inBranchRange(type, branchAddr, s.getVA(ctx, a));
-    // JALRSImm12 shares the signed-12 range oracle (inBranchRange) but is
-    // never veneered: execution is rs+imm12, not a PC-relative long-branch.
+    // JALRSImm12 is never veneered (ISA-69 fail-closed; not a PC-relative
+    // long-branch).
     default:
       return false;
     }
@@ -360,6 +373,12 @@ public:
                   "(no PIC/GOT/PLT product ABI); refusing silent R_GOT";
       return;
     }
+    if (type == R_HAYDN_JALRSImm12 || type == R_HAYDN_JALRSImm12_E3E0 ||
+        type == R_HAYDN_JALRSImm12_E3E1) {
+      Err(ctx) << getErrorLoc(ctx, loc)
+               << llvm::HaydnReloc::kUnsupportedSymbolicJalrDiag;
+      return;
+    }
     if (type > R_HAYDN_CSR_UImm8_E3E2) {
       Err(ctx) << getErrorLoc(ctx, loc) << "unrecognized relocation " << type;
       return;
@@ -373,7 +392,7 @@ public:
       return;
     }
     const HaydnReloc::RelocFieldInfo &FI = HaydnReloc::getRelocFieldInfo(R);
-    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} / JALRSImm12 / HI12: E2 e0
+    // WIDE_CallSImm20 / WIDE_BranchSImm12{,_RI} / HI12: E2 e0
     // table FieldLsb; E3 e0/e1/e2 (and E2 e1 LO20/PC_LO20) via
     // tryResolveFieldLsb. D1.42: the hwloop arm resolves windows ONLY from
     // the generated HwLoopSniffSites table; an unrecognized hwloop site is
@@ -436,19 +455,9 @@ public:
     return Expected;
   }
 
-  // Pre-create ThunkSections so far sites inside a large .text can still
-  // reach an island. Narrowest thunked reloc is WIDE_BranchSImm12 / _RI.
-  // Spacing is a whole number of EncodedBytes so islands keep the section's
-  // parcel phase. Veneer geometry is Align-4 + 3×EncodedBytes (HaydnLongThunk);
-  // do not use EncodedBytes as Thunk::alignment (not 2^n).
-  uint32_t getThunkSectionSpacing() const override {
-    const unsigned Parcel = productParcelEncodedBytes().Value;
-    const uint32_t Spacing = 0x1000 - 0x400; // 3 KiB; ~1 KiB veneer headroom
-    assert(Parcel != 0 && Spacing % Parcel == 0 &&
-           "thunk island spacing must be a whole number of product parcels");
-    (void)Parcel;
-    return Spacing;
-  }
+  // D1.57: no Haydn veneer exists (ISA-70 ABI not approved), so
+  // getThunkSectionSpacing keeps the 0 default — no pre-created thunk
+  // islands. Restoring islands belongs with the ISA-70 template, not here.
 
 };
 
@@ -458,14 +467,84 @@ void HaydnELF::relocateAlloc(InputSection &sec, uint8_t *buf) const {
     return;
   const size_t Have = sec.content().size();
   const size_t Want = sec.getSize();
-  if (Want <= Have)
+  if (Want > Have) {
+    // Zero the tail. Idle-parcel fill here used to leave 111-indicator
+    // bytes that were not in the objdump record stream, so BundleSim
+    // treated them as uncovered non-fill (align-3.c). Zeros cannot be a
+    // Format-E record (indicator != 111) and are the documented
+    // accept_alignment_fill alphabet.
+    memset(buf + Have, 0, Want - Have);
+  }
+
+  // Cycle-neutral returning-call relax (RISC-V relaxCall peer; Haydn overlay).
+  // ISel emits LUI+ADDI32+JALR. When |target-pc| fits CallSImm20 AND the
+  // JALR is a matching returning call (rd=LR, rs=LUI.rd=ADDI.rd), rewrite
+  // only the JALR parcel to JAL. Leave LUI+ADDI in place so the address
+  // temp stays live for later jalr lr, temp. Long jumps (rd != LR) and
+  // coincidental JALR after a different LUI+ADDI stay JALR. Do not change
+  // section size or packet count. --no-relax keeps the general form.
+  if (!ctx.arg.relax)
     return;
-  // Zero the tail. Idle-parcel fill here used to leave 111-indicator
-  // bytes that were not in the objdump record stream, so BundleSim
-  // treated them as uncovered non-fill (align-3.c). Zeros cannot be a
-  // Format-E record (indicator != 111) and are the documented
-  // accept_alignment_fill alphabet.
-  memset(buf + Have, 0, Want - Have);
+  const unsigned Parcel = productParcelEncodedBytes().Value;
+  if (Parcel == 0 || Have < 3u * Parcel)
+    return;
+  ArrayRef<uint8_t> Idle = llvm::haydn::format::canonicalFullSlotIdleParcel();
+  if (Idle.size() != Parcel)
+    return;
+
+  for (const Relocation &Hi : sec.relocs()) {
+    if (Hi.type != R_HAYDN_HI12 || !Hi.sym)
+      continue;
+    const uint64_t LoOff = Hi.offset + Parcel;
+    const uint64_t JalOff = Hi.offset + 2u * Parcel;
+    if (JalOff + Parcel > Have)
+      continue;
+    const Relocation *Lo = nullptr;
+    for (const Relocation &R : sec.relocs()) {
+      if (R.type == R_HAYDN_LO20 && R.offset == LoOff && R.sym == Hi.sym &&
+          R.addend == Hi.addend) {
+        Lo = &R;
+        break;
+      }
+    }
+    if (!Lo)
+      continue;
+    uint8_t *LuiP = buf + Hi.offset;
+    uint8_t *AddiP = buf + LoOff;
+    uint8_t *JalrP = buf + JalOff;
+    if (!llvm::haydn::call_relax::isReturningCallRelaxTriple(LuiP, AddiP, JalrP,
+                                                            Parcel))
+      continue;
+    unsigned RtEnc = 0;
+    if (!llvm::haydn::call_relax::readE2E0DestEnc(JalrP, Parcel, RtEnc))
+      continue;
+    const uint64_t JalPC = sec.getVA(JalOff);
+    const uint64_t Dest = Hi.sym->getVA(ctx, Hi.addend);
+    if (!inBranchRange(R_HAYDN_WIDE_CallSImm20, JalPC, Dest))
+      continue;
+    uint8_t Jal[32];
+    if (Parcel > sizeof(Jal))
+      continue;
+    if (!llvm::haydn::call_relax::writeE2JalSingleton(Jal, Parcel, RtEnc))
+      continue;
+    const int64_t Disp = static_cast<int64_t>(Dest - JalPC);
+    HaydnReloc::RelocCompute Comp = HaydnReloc::computeRelocValue(
+        HaydnReloc::RelocKind::WIDE_CallSImm20,
+        static_cast<uint64_t>(Disp));
+    if (!Comp.OK)
+      continue;
+    unsigned FieldLsb = 0;
+    if (const char *SiteErr = HaydnReloc::tryResolveFieldLsb(
+            HaydnReloc::RelocKind::WIDE_CallSImm20, Jal, FieldLsb)) {
+      (void)SiteErr;
+      continue;
+    }
+    const HaydnReloc::RelocFieldInfo &FI =
+        HaydnReloc::getRelocFieldInfo(HaydnReloc::RelocKind::WIDE_CallSImm20);
+    HaydnReloc::patchField(Jal, Comp.FieldVal, FI.NBytes, FI.FieldSize,
+                           FieldLsb);
+    memcpy(JalrP, Jal, Parcel);
+  }
 }
 
 } // namespace

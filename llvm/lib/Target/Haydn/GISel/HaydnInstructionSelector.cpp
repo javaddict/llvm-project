@@ -109,6 +109,23 @@ static void cloneMemOperands(MachineInstr &Dst, const MachineInstr &Src) {
     Dst.addMemOperand(*MF, MMO);
 }
 
+
+// D1.54: target store intrinsics arrive from IRTranslator with NO MMO
+// (only anymem-class intrinsics get one). A mayStore member with no MMO is
+// refused at the freeze member-descriptor wall — a store is the aliasing
+// authority for same-cycle store/load pairing — so every CB/UA store
+// selector site stamps an MMO from the intrinsic's pointer argument (the
+// same MachinePointerInfo(arg) IRTranslator builds for anymem calls).
+static void addIntrinsicStoreMMO(MachineInstr *MI, uint64_t Size,
+                                 MachineFunction &MF) {
+  if (!MI->memoperands_empty())
+    return;
+  MI->addMemOperand(MF,
+                    MF.getMachineMemOperand(MachinePointerInfo(),
+                                            MachineMemOperand::MOStore,
+                                            Size, Align(4)));
+}
+
 // Per-half MMO for an 8-byte access split into two 4-byte ops at offsets 0/4.
 // Peer: AArch64InstructionSelector.cpp:1996-1998 / 2031-2033 (getWithOffset +
 // Size); MachineFunction::getMachineMemOperand(MMO, Offset, Size) as in
@@ -240,7 +257,8 @@ private:
   // non-allocatable ARRegClass. False only on a real constrain failure.
   bool constrainBankAware(Register VReg, MachineRegisterInfo &MRI);
 
-  // Select Haydn DSP intrinsics (G_INTRINSIC) to target instructions.
+  // Select Haydn DSP intrinsics (G_INTRINSIC / G_INTRINSIC_W_SIDE_EFFECTS).
+  // C++ ID switch first; unmatched IDs fall through to selectImpl (D1.80).
   bool selectIntrinsic(MachineInstr &I);
 
   // Lower scalar s32 wrap-mul to golden MULL (MAC GRR: low 32 of product).
@@ -420,26 +438,35 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return constrainSelectedInstRegOperands(I, TII, TRI, RBI);
   }
 
-  // Try TableGen-generated patterns first (HaydnGISel.td Pats).
-  if (selectImpl(I, *CoverageInfo))
+  unsigned Opcode = I.getOpcode();
+
+  // D1.80 / AIE2InstructionSelector.cpp:228-406: G_INTRINSIC* C++ owns IDs
+  // inside selectIntrinsic; unmatched IDs default to selectImpl. Owned-ID
+  // C++ failure does not Pat-fallback (ImmArg fail-closed). Generic 1:1
+  // stays Pat-first.
+  const bool IsIntrinsic =
+      Opcode == TargetOpcode::G_INTRINSIC ||
+      Opcode == TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS;
+  if (!IsIntrinsic && selectImpl(I, *CoverageInfo))
     return true;
 
-  // C++ residual allowlist. Classes:
+  // C++ residual allowlist (non-intrinsic). Classes:
   //   Pat-covered (return false here): s32/s64/v2i32/v4i16 binops, s32/s64
   //     minmax (signed), s32 shifts, s64 shifts, s32 mul, v2i32 mul, mulh,
   //     abs s32/s64, s32 select → MOVT32
   //   Permanent C++ (this switch):
-  //     G_ICMP (s32/s64 multi-instr), G_SELECT s64 (dual MOVT),
+  //     G_ICMP (s32/s64 multi-instr), G_SELECT 64-bit (DR64-native
+  //     MOVEGPR2SFR + tied MOVT64),
   //     G_SHL/LSHR/ASHR SIMD only,
   //     G_LOAD/STORE/Z/SEXTLOAD (MMO), G_HAYDN_* AGU, G_MULA64*,
   //     G_HAYDN_MUL64_WIDEN{,U},
   //     G_Z/S/ANYEXT G_TRUNC multi-width, MERGE/UNMERGE, VAARG/VASTART,
-  //     G_INTRINSIC*, BRJT/dyn stack/trap peeps, BUILD_VECTOR, constants
+  //     G_INTRINSIC* (C++ first, then selectImpl), BRJT/dyn stack/trap peeps,
+  //     BUILD_VECTOR, constants
   //   Delete candidates: none left for pure 1:1 after Pats (s32 G_SELECT
   //     dual home removed). G_MUL has no C++ arm: s32/v2i32 are Pats;
   //     leftover G_MUL fails closed (legalizer owns s64 widen/schoolbook).
   LLVM_DEBUG(dbgs() << "Falling through to custom selection for: " << I << "\n");
-  unsigned Opcode = I.getOpcode();
 
   switch (Opcode) {
   // CB-127: Haydn has no prefetch ISA; treat as compile-time nop.
@@ -1270,8 +1297,9 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
   case TargetOpcode::G_SELECT: {
     // s32 + Cond s32 → MOVT32 Pat (HaydnGISel.td). C++ residual when
     // selectImpl misses: (1) s32 dest with Cond typed s1 (common after
-    // IRTranslator — not the same type predicate as the Pat); (2) s64 dual
-    // MOVT multi-instr. Not a dual home for the Pat shape.
+    // IRTranslator — not the same type predicate as the Pat); (2) 64-bit
+    // dest (s64 scalar or v2i32/v4i16/v8i8 vector) → DR64-native
+    // MOVEGPR2SFR + tied MOVT64 arms. Not a dual home for the Pat shape.
     Register Dst = I.getOperand(0).getReg();
     Register Cond = I.getOperand(1).getReg();
     Register TrueVal = I.getOperand(2).getReg();
@@ -1306,62 +1334,49 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       return true;
     }
 
-    // 64-bit payload (s64 scalar or v2i32/v4i16 in DR64): dual MOVT32 on
-    // lo/hi halves. Vector types are also 64 bits — must not use isScalar-only.
+    // 64-bit payload (s64 scalar or v2i32/v4i16/v8i8 in DR64). Vector types
+    // are also 64 bits — must not use isScalar-only.
     if (DstBits != 64)
       return false;
 
-    // Dual MOVT multi-instr; not a single Pat.
-    Register TrueValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    Register TrueValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    Register FalseValLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    Register FalseValHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    Register DstLo = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-    Register DstHi = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
-
-    if (TrueVal.isVirtual())
-      RBI.constrainGenericRegister(TrueVal, Haydn::DR64RegClass, MRI);
-    if (FalseVal.isVirtual())
-      RBI.constrainGenericRegister(FalseVal, Haydn::DR64RegClass, MRI);
+    // DR64-native whole-register select. G_SELECT cond is a GPR 0/1 bool
+    // (the gpr-as-bool contract); the only SFR writer reading a GPR is
+    // MOVEGPR2SFR (SFR = rs[3:0]), so a 0/1 cond yields SFR = 4'b0001.
+    // MOVT64 moves when SFR == 4'b1111 only, so the bool must be splatted
+    // to the nibble: ANDI32 bit0 + NEG32 gives 0 or 4'b1111 (golden NEG32
+    // two's complement). Then one MOVT64 per value arm on DR64 — no
+    // MOV_DR64_TO_GPR unmerge / MOV_GPR_TO_DR64 remerge, no GPR-pair
+    // traffic per live complex (D1.62). Same SFR-epoch shape as the
+    // haydn_x2mux32 selector: MOVEGPR2SFR → tied-def MOVT64 (Uses=[SFR]).
     if (Cond.isVirtual())
       RBI.constrainGenericRegister(Cond, Haydn::GPR32RegClass, MRI);
-
-    MachineInstr *UnmergeTrue = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                     .addDef(TrueValLo)
-                                     .addDef(TrueValHi)
-                                     .addReg(TrueVal);
-    if (!constrainSelectedInstRegOperands(*UnmergeTrue, TII, TRI, RBI))
+    Register CondBit = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    Register CondSplat = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    if (!emitALUImm(MIB, Haydn::ANDI32, CondBit, Cond, 1, TII, TRI, RBI, MRI))
+      return false;
+    MachineInstr *NegMI = MIB.buildInstr(Haydn::NEG32)
+                              .addDef(CondSplat)
+                              .addReg(CondBit);
+    if (!constrainSelectedInstRegOperands(*NegMI, TII, TRI, RBI))
+      return false;
+    MachineInstr *SfrMI = MIB.buildInstr(Haydn::MOVEGPR2SFR).addReg(CondSplat);
+    if (!constrainSelectedInstRegOperands(*SfrMI, TII, TRI, RBI))
       return false;
 
-    MachineInstr *UnmergeFalse = MIB.buildInstr(Haydn::MOV_DR64_TO_GPR)
-                                      .addDef(FalseValLo)
-                                      .addDef(FalseValHi)
-                                      .addReg(FalseVal);
-    if (!constrainSelectedInstRegOperands(*UnmergeFalse, TII, TRI, RBI))
-      return false;
-
-    MachineInstr *MovtLo = MIB.buildInstr(Haydn::MOVT32)
-                               .addDef(DstLo)
-                               .addReg(FalseValLo)
-                               .addReg(TrueValLo)
-                               .addReg(Cond);
-    if (!constrainSelectedInstRegOperands(*MovtLo, TII, TRI, RBI))
-      return false;
-
-    MachineInstr *MovtHi = MIB.buildInstr(Haydn::MOVT32)
-                               .addDef(DstHi)
-                               .addReg(FalseValHi)
-                               .addReg(TrueValHi)
-                               .addReg(Cond);
-    if (!constrainSelectedInstRegOperands(*MovtHi, TII, TRI, RBI))
-      return false;
-
+    // Tied-def MOVT64: Dst = MOVT64 FalseVal(tied $rd_old), TrueVal —
+    // moves TrueVal into Dst when SFR == 4'b1111, keeps FalseVal otherwise.
+    // The $rd = $rd_old tie resolves via TwoAddressInstructionPass exactly
+    // like the s32 MOVT32 arm and selectAccMAC (golden MOVT64 reads rtd).
+    if (FalseVal.isVirtual())
+      RBI.constrainGenericRegister(FalseVal, Haydn::DR64RegClass, MRI);
+    if (TrueVal.isVirtual())
+      RBI.constrainGenericRegister(TrueVal, Haydn::DR64RegClass, MRI);
     RBI.constrainGenericRegister(Dst, Haydn::DR64RegClass, MRI);
-    MachineInstr *MergeMI = MIB.buildInstr(Haydn::MOV_GPR_TO_DR64)
-                                .addDef(Dst)
-                                .addReg(DstLo)
-                                .addReg(DstHi);
-    if (!constrainSelectedInstRegOperands(*MergeMI, TII, TRI, RBI))
+    MachineInstr *MovtTrue = MIB.buildInstr(Haydn::MOVT64)
+                                 .addDef(Dst)
+                                 .addReg(FalseVal)
+                                 .addReg(TrueVal);
+    if (!constrainSelectedInstRegOperands(*MovtTrue, TII, TRI, RBI))
       return false;
 
     I.eraseFromParent();
@@ -3096,17 +3111,21 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  case TargetOpcode::G_INTRINSIC: {
+  case TargetOpcode::G_INTRINSIC:
+    // AIE2: C++ ID switch, default selectImpl (inside selectIntrinsic).
     return selectIntrinsic(I);
-  }
 
   case TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS: {
-    // Handle varargs intrinsics that come as G_INTRINSIC_W_SIDE_EFFECTS.
+    // Non-haydn W_SIDE_EFFECTS (vaend/vacopy/hwloop). haydn_* IDs take the
+    // default: selectIntrinsic (C++ first, unmatched selectImpl).
     Intrinsic::ID IntrID =
         cast<GIntrinsic>(I).getIntrinsicID();
     switch (IntrID) {
     default:
-      return false;
+      // AIE2 order: C++ ID switch first (selectIntrinsic), unmatched IDs
+      // selectImpl. Do not selectImpl here — owned IDs missing from this
+      // switch would skip C++ (D1.80).
+      return selectIntrinsic(I);
     case Intrinsic::vaend:
       // va_end is a no-op for baremetal.
       I.eraseFromParent();
@@ -3123,172 +3142,8 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
       I.eraseFromParent();
       return true;
     }
-    // Circular Buffer and Bit-Reversed addressing intrinsics have memory
-    // side effects, so they arrive as G_INTRINSIC_W_SIDE_EFFECTS.
-    // Delegate to the main selectIntrinsic handler which has all the cases.
-    case Intrinsic::haydn_ldw_cb_imm:
-    case Intrinsic::haydn_ldw_cb_reg:
-    case Intrinsic::haydn_sdw_cb_imm:
-    case Intrinsic::haydn_sdw_cb_reg:
-    // WUA-CB (AR_CBR): unaligned AR window + hardware circular post step.
-    case Intrinsic::haydn_pltwwua_cb_post:
-    case Intrinsic::haydn_plqhwua_cb_post:
-    case Intrinsic::haydn_ltwua_cb_post:
-    case Intrinsic::haydn_lqhwua_cb_post:
-    case Intrinsic::haydn_stwua_cb_post:
-    case Intrinsic::haydn_sqhwua_cb_post:
-    case Intrinsic::haydn_wbarwua_cb:
-    // CBR-setup intrinsics (setcbr_begin/end) write CSRs — side-effecting
-    // so they arrive as G_INTRINSIC_W_SIDE_EFFECTS.
-    case Intrinsic::haydn_setcbr_begin:
-    case Intrinsic::haydn_setcbr_end:
-    case Intrinsic::haydn_ldw_brev_imm:
-    case Intrinsic::haydn_ldw_brev_reg:
-    case Intrinsic::haydn_lw_brev_imm:
-    case Intrinsic::haydn_lw_brev_reg:
-    case Intrinsic::haydn_sdw_brev_imm:
-    case Intrinsic::haydn_sdw_brev_reg:
-    case Intrinsic::haydn_sw_brev_imm:
-    case Intrinsic::haydn_sw_brev_reg:
-    // POST/PRE AGU writeback loads: multi-result {data, new_ptr}.
-    case Intrinsic::haydn_d_ldw_post_imm:
-    case Intrinsic::haydn_d_ldw_post_reg:
-    case Intrinsic::haydn_d_ldw_pre_imm:
-    case Intrinsic::haydn_d_ldw_pre_reg:
-    case Intrinsic::haydn_d_lw_post_imm:
-    case Intrinsic::haydn_d_lw_post_reg:
-    case Intrinsic::haydn_d_lw_pre_imm:
-    case Intrinsic::haydn_d_lw_pre_reg:
-    case Intrinsic::haydn_d_lhw_post_imm:
-    case Intrinsic::haydn_d_lhw_post_reg:
-    case Intrinsic::haydn_d_lhw_pre_imm:
-    case Intrinsic::haydn_d_lhw_pre_reg:
-    case Intrinsic::haydn_s_lw_post_imm:
-    case Intrinsic::haydn_s_lw_post_reg:
-    case Intrinsic::haydn_s_lw_pre_imm:
-    case Intrinsic::haydn_s_lw_pre_reg:
-    case Intrinsic::haydn_s_lhws_post_imm:
-    case Intrinsic::haydn_s_lhws_post_reg:
-    case Intrinsic::haydn_s_lhws_pre_imm:
-    case Intrinsic::haydn_s_lhws_pre_reg:
-    case Intrinsic::haydn_s_lhwu_post_imm:
-    case Intrinsic::haydn_s_lhwu_post_reg:
-    case Intrinsic::haydn_s_lhwu_pre_imm:
-    case Intrinsic::haydn_s_lhwu_pre_reg:
-    case Intrinsic::haydn_s_lbs_post_imm:
-    case Intrinsic::haydn_s_lbs_post_reg:
-    case Intrinsic::haydn_s_lbs_pre_imm:
-    case Intrinsic::haydn_s_lbs_pre_reg:
-    case Intrinsic::haydn_s_lbu_post_imm:
-    case Intrinsic::haydn_s_lbu_post_reg:
-    case Intrinsic::haydn_s_lbu_pre_imm:
-    case Intrinsic::haydn_s_lbu_pre_reg:
-    // Golden LS POST/PRE stores: single-ret writeback (new_ptr), side-effecting
-    // memory write → G_INTRINSIC_W_SIDE_EFFECTS. Bodies lower like sdw_cb to
-    // (outs wb),(ins data,base,off). Without this allowlist they cannot-select.
-    case Intrinsic::haydn_d_sdw_post_imm:
-    case Intrinsic::haydn_d_sdw_post_reg:
-    case Intrinsic::haydn_d_sdw_pre_imm:
-    case Intrinsic::haydn_d_sdw_pre_reg:
-    case Intrinsic::haydn_d_shw_post_imm:
-    case Intrinsic::haydn_d_shw_post_reg:
-    case Intrinsic::haydn_d_shw_pre_imm:
-    case Intrinsic::haydn_d_shw_pre_reg:
-    case Intrinsic::haydn_d_sw_h_post_imm:
-    case Intrinsic::haydn_d_sw_h_post_reg:
-    case Intrinsic::haydn_d_sw_h_pre_imm:
-    case Intrinsic::haydn_d_sw_h_pre_reg:
-    case Intrinsic::haydn_d_sw_l_post_imm:
-    case Intrinsic::haydn_d_sw_l_post_reg:
-    case Intrinsic::haydn_d_sw_l_pre_imm:
-    case Intrinsic::haydn_d_sw_l_pre_reg:
-    // ISA-65 fused round-sat-store POST: single-ret writeback store, same
-    // routing class as the Golden LS POST/PRE stores above.
-    case Intrinsic::haydn_d_sw_f64rs_post_imm:
-    case Intrinsic::haydn_d_sw_f64rs_post_reg:
-    case Intrinsic::haydn_s_sb_post_imm:
-    case Intrinsic::haydn_s_sb_post_reg:
-    case Intrinsic::haydn_s_sb_pre_imm:
-    case Intrinsic::haydn_s_sb_pre_reg:
-    case Intrinsic::haydn_s_shw_post_imm:
-    case Intrinsic::haydn_s_shw_post_reg:
-    case Intrinsic::haydn_s_shw_pre_imm:
-    case Intrinsic::haydn_s_shw_pre_reg:
-    case Intrinsic::haydn_s_sw_post_imm:
-    case Intrinsic::haydn_s_sw_post_reg:
-    case Intrinsic::haydn_s_sw_pre_imm:
-    case Intrinsic::haydn_s_sw_pre_reg:
-    // Golden LS WITH_* (no AGU writeback): IntrHasSideEffects → arrive as
- // G_INTRINSIC_W_SIDE_EFFECTS. Bodies live in selectIntrinsic (~5454).
-    // Without this allowlist, e.g. d_lw_with_imm fails "cannot select".
-    case Intrinsic::haydn_d_ldw_with_imm:
-    case Intrinsic::haydn_d_ldw_with_reg:
-    case Intrinsic::haydn_d_lhw_with_imm:
-    case Intrinsic::haydn_d_lhw_with_reg:
-    case Intrinsic::haydn_d_lw_with_imm:
-    case Intrinsic::haydn_d_lw_with_reg:
-    case Intrinsic::haydn_s_lbs_with_imm:
-    case Intrinsic::haydn_s_lbs_with_reg:
-    case Intrinsic::haydn_s_lbu_with_imm:
-    case Intrinsic::haydn_s_lbu_with_reg:
-    case Intrinsic::haydn_s_lhws_with_imm:
-    case Intrinsic::haydn_s_lhws_with_reg:
-    case Intrinsic::haydn_s_lhwu_with_imm:
-    case Intrinsic::haydn_s_lhwu_with_reg:
-    case Intrinsic::haydn_s_lw_with_imm:
-    case Intrinsic::haydn_s_lw_with_reg:
-    case Intrinsic::haydn_d_sdw_with_imm:
-    case Intrinsic::haydn_d_sdw_with_reg:
-    case Intrinsic::haydn_d_shw_with_imm:
-    case Intrinsic::haydn_d_shw_with_reg:
-    case Intrinsic::haydn_d_sw_h_with_imm:
-    case Intrinsic::haydn_d_sw_h_with_reg:
-    case Intrinsic::haydn_d_sw_l_with_imm:
-    case Intrinsic::haydn_d_sw_l_with_reg:
-    // ISA-65 fused round-sat-store WITH: void base+offset store, same
-    // routing class as the Golden LS WITH_* stores above.
-    case Intrinsic::haydn_d_sw_f64rs_with_imm:
-    case Intrinsic::haydn_d_sw_f64rs_with_reg:
-    case Intrinsic::haydn_s_sb_with_imm:
-    case Intrinsic::haydn_s_sb_with_reg:
-    case Intrinsic::haydn_s_shw_with_imm:
-    case Intrinsic::haydn_s_shw_with_reg:
-    case Intrinsic::haydn_s_sw_with_imm:
-    case Intrinsic::haydn_s_sw_with_reg:
-    // AR unaligned stream (PLDWWUA / D_*UA_POST / FLAR / WBARWUA) — AR state
-    // + memory; arrive as G_INTRINSIC_W_SIDE_EFFECTS.
-    case Intrinsic::haydn_pldwwua:
-    case Intrinsic::haydn_d_lqhwua_post:
-    case Intrinsic::haydn_d_ltwua_post:
-    case Intrinsic::haydn_flar:
-    case Intrinsic::haydn_wbarwua:
-    case Intrinsic::haydn_d_sqhwua_post:
-    case Intrinsic::haydn_d_stwua_post:
-    // SFR-modifying intrinsics read/write the Status Flag Register
-    // which is a side effect invisible to LLVM's memory model.
-    // X2/X4 SIMD compares use IntrHasSideEffects so they arrive here as
-    // G_INTRINSIC_W_SIDE_EFFECTS (not G_INTRINSIC). They were previously
-    // selected only via tablegen Pats; those Pats are removed now that the
-    // instructions use Defs/Uses=[SFR] + hasSideEffects=0 (SMS barrier fix).
-    case Intrinsic::haydn_slt64:
-    case Intrinsic::haydn_sle64:
-    case Intrinsic::haydn_seq64:
-    case Intrinsic::haydn_movt64:
-    case Intrinsic::haydn_movf64:
-    case Intrinsic::haydn_x2seq32:
-    case Intrinsic::haydn_x2slt32:
-    case Intrinsic::haydn_x2sle32:
-    case Intrinsic::haydn_x2movf32:
-    case Intrinsic::haydn_x2movt32:
-    case Intrinsic::haydn_x4seq16:
-    case Intrinsic::haydn_x4slt16:
-    case Intrinsic::haydn_x4sle16:
-    case Intrinsic::haydn_x4movf16:
-    case Intrinsic::haydn_x4movt16:
-    case Intrinsic::haydn_movesfr2gpr:
-    case Intrinsic::haydn_movegpr2sfr:
-    case Intrinsic::haydn_zero_sfr:
-      return selectIntrinsic(I);
+    // haydn_* W_SIDE_EFFECTS IDs (SFR/CB/BREV/UA/Golden LS) are not listed
+    // here: default -> selectIntrinsic is C++-first for every ID (D1.80).
     // IR-level hardware-loop intrinsics. The upstream HardwareLoops
     // pass (llvm/lib/CodeGen/HardwareLoops.cpp) inserts these; we select
     // them to the SMS-safe LoopStart/PseudoLoopEnd pseudos here. Mirrors
@@ -3408,23 +3263,40 @@ bool HaydnInstructionSelector::select(MachineInstr &I) {
     return true;
   }
 
-  // trap → noreturn call to abort (A.5). Never lower to RET (return into
-  // following code). Do not create new MBBs here — InstructionSelect iterates
-  // MBBs and CFG surgery crashes. Empty unreachable dead-ends still get soft
-  // RET from HaydnEnsureTerminators (separate contract).
+  // trap → one noreturn call to abort (A.5). Never lower to RET (return
+  // into following code). Do not create new MBBs here — InstructionSelect
+  // iterates MBBs and CFG surgery crashes. Empty unreachable dead-ends still
+  // get soft RET from HaydnEnsureTerminators (separate contract).
+  // D1.130 honest gMIR: emit JALR_CALL here (isCall, not terminator). Do not
+  // emit PseudoCALLIndirect (ExpandPseudos leftover path, HaydnInstrInfo.cpp
+  // expandRepresentationPseudo). One call: abort is noreturn; the second
+  // JALR_CALL was unexplained after D1.63 dropped the "if abort returns"
+  // comment. Peer: AIE getCallOpcode JAL vs JAL_IND (AIE1InstrInfo.cpp:688);
+  // Haydn overlay is LOAD_ADDR + JALR_CALL (HaydnCallLowering.cpp). RISC-V
+  // trap→UNIMP is a different ISA; Haydn has no golden trap encoding.
   case TargetOpcode::G_TRAP:
   case TargetOpcode::G_DEBUGTRAP:
   case TargetOpcode::G_UBSANTRAP: {
     MachineIRBuilder MIB(I);
-    // Direct WIDE JAL to abort (same path as CallLowering external symbols).
-    // If abort returns, call again (fail closed, no fallthrough RET).
-    for (unsigned N = 0; N < 2; ++N) {
-      MachineInstr *Call = MIB.buildInstr(Haydn::JAL_W)
-                               .addDef(Haydn::R15)
+    // Same general call as CallLowering (LOAD_ADDR + JALR_CALL). A later
+    // CallSImm20 JAL rewrite is encoding-only and must keep the committed
+    // cycle grid (NOP the vacated address members); not a second ISel path.
+    Register AbortAddr = MRI.createVirtualRegister(&Haydn::GPR32RegClass);
+    RBI.constrainGenericRegister(AbortAddr, Haydn::GPR32RegClass, MRI);
+    MachineInstr *AddrMI = MIB.buildInstr(Haydn::LOAD_ADDR)
+                               .addDef(AbortAddr)
                                .addExternalSymbol("abort");
-      if (!constrainSelectedInstRegOperands(*Call, TII, TRI, RBI))
-        return false;
-    }
+    if (!constrainSelectedInstRegOperands(*AddrMI, TII, TRI, RBI))
+      return false;
+    const uint32_t *Mask = TRI.getCallPreservedMask(MF, CallingConv::C);
+    assert(Mask && "Missing call preserved mask for abort");
+    MachineInstr *Call = MIB.buildInstr(Haydn::JALR_CALL)
+                             .addDef(Haydn::R15)
+                             .addReg(AbortAddr)
+                             .addImm(0)
+                             .addRegMask(Mask);
+    if (!constrainSelectedInstRegOperands(*Call, TII, TRI, RBI))
+      return false;
     I.eraseFromParent();
     return true;
   }
@@ -5419,13 +5291,14 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   case haydn_x4cmul16s_f2: return selectUnary(X4CMUL16S_F2, DR64RegClass);
   case haydn_x4cmul16_f2:  return selectUnary(X4CMUL16_F2,  DR64RegClass);
 
-  // X2/X4 binary (DR64 binary)
+  // X2/X4 binary (DR64 binary). Clamp is tied-ternary: IR (v, lo, hi),
+  // golden (outs rd1), (ins rd1_in, rd2, rd3), $rd1 = $rd1_in (4 MC ops).
   case haydn_x2max32:   return selectBinary(X2MAX32,   DR64RegClass);
   case haydn_x2min32:   return selectBinary(X2MIN32,   DR64RegClass);
-  case haydn_x2clamp32: return selectBinary(X2CLAMP32, DR64RegClass);
+  case haydn_x2clamp32: return selectTernary(X2CLAMP32, DR64RegClass);
   case haydn_x4max16:   return selectBinary(X4MAX16,   DR64RegClass);
   case haydn_x4min16:   return selectBinary(X4MIN16,   DR64RegClass);
-  case haydn_x4clamp16: return selectBinary(X4CLAMP16, DR64RegClass);
+  case haydn_x4clamp16: return selectTernary(X4CLAMP16, DR64RegClass);
 
   //===---------------------------------------------------------------===
   // Wave 4 Tier 2: Shuffle/Pack ops
@@ -5956,6 +5829,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                              .addImm(StrideImm);
       if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
         return false;
+      addIntrinsicStoreMMO(MI, 8, *MI->getMF());
       addCircularBufferUse(MI, CbrSel);
       I.eraseFromParent();
       return true;
@@ -6126,6 +6000,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                                    RegState::Implicit | RegState::Undef);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
+    addIntrinsicStoreMMO(MI, 8, *MI->getMF());
     addCircularBufferUse(MI, CbrSel);
     I.eraseFromParent();
     return true;
@@ -6157,6 +6032,7 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
                                    RegState::Implicit | RegState::Undef);
     if (!constrainSelectedMemInst(MI, I, TII, TRI, RBI))
       return false;
+    addIntrinsicStoreMMO(MI, 4, *MI->getMF());
     addCircularBufferUse(MI, CbrSel);
     // rs is architecturally unchanged by WBARWUA_CB: materialize the
     // intrinsic's ptr result as a copy of the input cursor.
@@ -7310,7 +7186,8 @@ bool HaydnInstructionSelector::selectIntrinsic(MachineInstr &I) {
   }
 
   LLVM_DEBUG(dbgs() << "Unhandled G_INTRINSIC: " << IntrID << "\n");
-  return false;
+  // AIE2 G_INTRINSIC* default: unmatched IDs fall through to selectImpl.
+  return selectImpl(I, *CoverageInfo);
 }
 
 namespace llvm {
